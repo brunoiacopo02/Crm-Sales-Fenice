@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { leads } from "@/db/schema"
 import { and, eq, or, like, desc } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { leadDelMondoDiAccount } from "@/lib/prova/sql"
 
 export type SearchResult = {
     id: string
@@ -26,6 +27,9 @@ export async function searchLeads(query: string): Promise<SearchResult[]> {
             .where(
                 and(
                     eq(leads.companyId, ctx.companyId),
+                    // Prova (migr. 0050): l'account di prova trova solo i lead di
+                    // prova, tutti gli altri solo quelli veri.
+                    leadDelMondoDiAccount(ctx.userId),
                     or(
                         like(leads.name, searchTerm),
                         like(leads.phone, searchTerm),

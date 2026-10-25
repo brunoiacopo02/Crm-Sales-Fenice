@@ -135,14 +135,14 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
     const purchaseId = typeof requestId === 'string' && UUID_RE.test(requestId) ? requestId : randomUUID()
 
     type Esito =
-        | { ok: true; status: PurchaseStatus; scintille: number; piume: number; persona: string; articolo: string; prezzo: string; nuovo: boolean }
+        | { ok: true; status: PurchaseStatus; scintille: number; piume: number; persona: string; articolo: string; prezzo: string; nuovo: boolean; diProva: boolean }
         | { ok: false; error: BuyError | 'diretta' | 'errore' }
 
     let esito: Esito
     try {
         esito = await db.transaction(async (tx): Promise<Esito> => {
             const [user] = await tx.select({
-                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot,
+                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
                 scintille: users.scintille, piume: users.piume,
                 firstName: users.firstName, displayName: users.displayName, name: users.name,
             }).from(users).where(eq(users.id, ctx.userId)).for('update')
@@ -153,7 +153,7 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
                 .from(rewardPurchases).where(eq(rewardPurchases.id, purchaseId)).limit(1)
             if (esistente) {
                 if (esistente.userId !== user.id) return { ok: false, error: 'errore' }
-                return { ok: true, status: asStatus(esistente.status), scintille: user.scintille, piume: user.piume, persona: '', articolo: '', prezzo: '', nuovo: false }
+                return { ok: true, status: asStatus(esistente.status), scintille: user.scintille, piume: user.piume, persona: '', articolo: '', prezzo: '', nuovo: false, diProva: user.isTest }
             }
 
             // Il ruolo si legge dal database, non dai metadati della sessione.
@@ -212,6 +212,7 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
                 articolo: check.giftTo ? `${item.name} da regalare a ${check.giftTo}` : item.name,
                 prezzo: prezzo(item.currency, item.price),
                 nuovo: true,
+                diProva: user.isTest,
             }
         })
     } catch (e) {
@@ -221,7 +222,9 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
 
     if (!esito.ok) return { ok: false, error: messaggioErrore(esito.error) }
 
-    if (esito.nuovo && esito.status === 'richiesto') {
+    // Gli acquisti dell'account di prova (migr. 0050) non avvisano gli admin:
+    // la richiesta resta comunque in /admin/premi, col nome "Prova".
+    if (esito.nuovo && esito.status === 'richiesto' && !esito.diProva) {
         await avvisaAdmin(esito.persona, esito.articolo, esito.prezzo, purchaseId)
     }
     if (esito.nuovo && esito.status === 'consegnato') updateTag(TAG_SQUADRA)

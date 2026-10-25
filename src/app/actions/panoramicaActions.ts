@@ -14,6 +14,7 @@ import {
 } from "@/lib/workingDaysUtils";
 import { stageHits } from "@/lib/kpi/funnelStages";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
+import { leadVero } from "@/lib/prova/sql";
 import { LANCIO_BUCKET } from "@/lib/lancio/intake";
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel";
 import crypto from "crypto";
@@ -568,22 +569,26 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
         const [appToday, confToday, presToday, closeToday, valoreTodayRows] = await Promise.all([
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 gte(leads.appointmentCreatedAt, todayStart),
                 lt(leads.appointmentCreatedAt, todayEnd),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 gte(leads.appointmentDate, todayStart),
                 lt(leads.appointmentDate, todayEnd),
                 eq(leads.confirmationsOutcome, 'confermato'),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 gte(leads.presentedAt, todayStart),
                 lt(leads.presentedAt, todayEnd),
             )),
             db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 gte(leads.salespersonOutcomeAt, todayStart),
                 lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
@@ -592,6 +597,7 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
             }).from(leads).where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 gte(leads.salespersonOutcomeAt, todayStart),
                 lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
@@ -624,6 +630,7 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(
             eq(leads.companyId, ctx.companyId),
+            leadVero(),
             gte(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month - 1, 1))),
             lt(leads.salespersonOutcomeAt, new Date(Date.UTC(year, month, 1))),
             eq(leads.salespersonOutcome, 'Chiuso'),
@@ -920,6 +927,8 @@ async function getCrmFunnelCounts(
 
     const rows = await db.select().from(leads).where(and(
         eq(leads.companyId, companyId),
+        // Lead di prova (migr. 0050): fuori da ogni stadio del funnel.
+        leadVero(),
         sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
         or(
             and(gte(leads.appointmentCreatedAt, monthStart), lt(leads.appointmentCreatedAt, monthEnd)),
@@ -1201,6 +1210,7 @@ async function funnelOverviewForCompany(ctx: TenantContext, ym: string, persistA
                 .from(leads)
                 .where(and(
                     eq(leads.companyId, ctx.companyId),
+                    leadVero(),
                     sql`UPPER(COALESCE(${leads.funnel}, '')) = ${b.funnelName}`,
                     sql`${leads.createdAt} > ${b.baselineSetAt}`,
                 ));

@@ -15,7 +15,7 @@
 // lead sale si accredita solo la differenza, quando scende si storna.
 
 import { dayBoundsRome } from '@/lib/dateUtils'
-import { stepReached, isTeamMember, type GamificationTargets } from '@/lib/diretta/config'
+import { stepReached, guadagnaPremiPersonali, type GamificationTargets } from '@/lib/diretta/config'
 
 export const ECONOMY_RULES_KEY = 'economy_rules'
 
@@ -579,6 +579,8 @@ export interface PersonaEconomia {
     role: string
     isActive: boolean
     isBot?: boolean | null
+    /** Account di prova (migr. 0050): obbligatorio, così nessuna lettura lo dimentica. */
+    isTest: boolean | null
     firstName: string | null
 }
 
@@ -589,9 +591,13 @@ export function isPersonaleUmano(u: PersonaEconomia | undefined | null): boolean
     return !!u && !u.isBot && RUOLI_STAFF.has(u.role)
 }
 
-/** Le Piume entrano solo se a scrivere l'esito è lo staff e a riceverle è un GDO della squadra (mai sé stesso). */
+/**
+ * Le Piume entrano solo se a scrivere l'esito è lo staff e a riceverle è un GDO
+ * della squadra, o il GDO di prova sul suo registro (mai sé stesso). Che lead e
+ * destinatario stiano dalla stessa parte lo controlla chi chiama (syncLeadPiume).
+ */
 export function puoAccreditarePiume(autore: PersonaEconomia | undefined | null, destinatario: PersonaEconomia | undefined | null): boolean {
-    return !!autore && !!destinatario && isPersonaleUmano(autore) && isTeamMember(destinatario) && autore.id !== destinatario.id
+    return !!autore && !!destinatario && isPersonaleUmano(autore) && guadagnaPremiPersonali(destinatario) && autore.id !== destinatario.id
 }
 
 // ── Conferme: Scintille per lead ────────────────────────────────────────

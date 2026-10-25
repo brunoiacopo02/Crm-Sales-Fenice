@@ -8,7 +8,8 @@
 //   Ridati   (`botReturnIntake`) riceve i ridati dal bot con chat interrotta,
 //                                fino a `dailyReturnCap` al giorno se c'è
 // In più vale sempre la squadra (`isTeamMember`): nome vero, GDO umano, attivo.
-// 108 e il bot non hanno nome, quindi non ricevono nemmeno con un flag acceso.
+// 108 e il bot non hanno nome, quindi non ricevono nemmeno con un flag acceso;
+// l'account di prova (isTest) non riceve mai lead veri.
 
 import { isTeamMember } from './config'
 import { LANCIO_BUCKET, LANCIO_FUNNEL } from '@/lib/lancio/intake'
@@ -19,6 +20,7 @@ export interface GdoInstradabile {
     role: string
     isActive: boolean
     isBot: boolean
+    isTest: boolean
     firstName: string | null
     acAutoIntake: boolean
     botReturnIntake: boolean
@@ -97,12 +99,13 @@ export interface RigaPiano {
 /**
  * I flag da scrivere al go-live, solo per chi cambia. Guarda la squadra per
  * nome e non per `isActive`, così 107 e 116 sono pronti anche se lo script
- * gira prima della riattivazione. Bot e account senza nome restano come sono.
+ * gira prima della riattivazione. Bot, account senza nome e account di prova
+ * restano come sono.
  */
 export function pianoInstradamento(gdos: readonly GdoInstradabile[], scelte: ScelteInstradamento): RigaPiano[] {
     const righe: RigaPiano[] = []
     for (const g of gdos) {
-        if (g.role !== 'GDO' || g.isBot || !g.firstName?.trim() || g.gdoCode == null) continue
+        if (g.role !== 'GDO' || g.isBot || g.isTest || !g.firstName?.trim() || g.gdoCode == null) continue
         const vergini = !scelte.verginiEsclusi.includes(g.gdoCode)
         const dopo: Flag = {
             botReturnIntake: !scelte.ridatiEsclusi.includes(g.gdoCode),

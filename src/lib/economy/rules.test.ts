@@ -387,11 +387,11 @@ test('stadi: altri lead e le Scintille delle Conferme non si mescolano con le Pi
 })
 
 test('chi può far guadagnare Piume: solo Conferme, venditori e staff, mai il GDO stesso', () => {
-    const gdo = { id: 'g', role: 'GDO', isActive: true, isBot: false, firstName: 'Zora' }
-    const conferme = { id: 'c', role: 'CONFERME', isActive: true, isBot: false, firstName: null }
-    const venditore = { id: 'v', role: 'VENDITORE', isActive: true, isBot: false, firstName: null }
-    const bot = { id: 'b', role: 'GDO', isActive: true, isBot: true, firstName: null }
-    const ia = { id: 'i', role: 'GDO', isActive: true, isBot: false, firstName: null }
+    const gdo = { id: 'g', role: 'GDO', isActive: true, isBot: false, isTest: false, firstName: 'Zora' }
+    const conferme = { id: 'c', role: 'CONFERME', isActive: true, isBot: false, isTest: false, firstName: null }
+    const venditore = { id: 'v', role: 'VENDITORE', isActive: true, isBot: false, isTest: false, firstName: null }
+    const bot = { id: 'b', role: 'GDO', isActive: true, isBot: true, isTest: false, firstName: null }
+    const ia = { id: 'i', role: 'GDO', isActive: true, isBot: false, isTest: false, firstName: null }
     assert.equal(isPersonaleUmano(conferme), true)
     assert.equal(isPersonaleUmano(venditore), true)
     assert.equal(isPersonaleUmano(gdo), false)
@@ -402,6 +402,14 @@ test('chi può far guadagnare Piume: solo Conferme, venditori e staff, mai il GD
     assert.equal(puoAccreditarePiume(conferme, ia), false)    // 108: niente nome, fuori squadra
     assert.equal(puoAccreditarePiume(conferme, bot), false)   // 201
     assert.equal(puoAccreditarePiume(undefined, gdo), false)
+})
+
+test('account di prova: Piume sul suo registro, scritte dalla Conferma di prova', () => {
+    const gdoProva = { id: 'gp', role: 'GDO', isActive: true, isBot: false, isTest: true, firstName: 'Prova GDO' }
+    const confermeProva = { id: 'cp', role: 'CONFERME', isActive: true, isBot: false, isTest: true, firstName: 'Prova Conferme' }
+    assert.equal(isPersonaleUmano(confermeProva), true)
+    assert.equal(puoAccreditarePiume(confermeProva, gdoProva), true)
+    assert.equal(puoAccreditarePiume(gdoProva, gdoProva), false)
 })
 
 // ── Conferme: Scintille per lead ────────────────────────────────────────
@@ -589,9 +597,10 @@ test('fissato: niente Scintille a bot, IA vocale, ruoli non GDO o userId passato
     assert.equal(fissatoPremiabile({ ...gdo, effectiveUserId: 'u2' }), false)         // userId forzato dal client
     assert.equal(fissatoPremiabile({ ...gdo, sessionUserId: undefined }), false)
     // E il DB deve confermare la squadra: 108 e 201 non hanno un nome, chi è disattivato è fuori.
-    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, firstName: null }), false)
-    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: true, firstName: null }), false)
-    assert.equal(isTeamMember({ role: 'GDO', isActive: false, isBot: false, firstName: 'Noemi' }), false)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, isTest: false, firstName: null }), false)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: true, isTest: false, firstName: null }), false)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: false, isBot: false, isTest: false, firstName: 'Noemi' }), false)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, isTest: true, firstName: 'Prova GDO' }), false)
 })
 
 test('doppio click e gara: lo stesso fissato ha sempre la stessa chiave, quindi un solo accredito', () => {

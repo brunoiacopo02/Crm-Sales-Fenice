@@ -11,6 +11,7 @@ import {
     buildDealClosedLost,
 } from '@/lib/marketing-webhooks/payload-builders';
 import type { MarketingWebhookEnvelope } from '@/lib/marketing-webhooks/types';
+import { leadVero } from '@/lib/prova/sql';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -58,13 +59,14 @@ export async function POST(req: Request) {
     const dryRun = body.dryRun === true;
 
     // Pull tutti i lead che hanno almeno UN timestamp rilevante nella finestra.
-    // Un singolo SELECT è più efficiente di 5 separate.
-    const rows = await db.select().from(leads).where(or(
+    // Un singolo SELECT è più efficiente di 5 separate. I lead di prova
+    // (migr. 0050) non arrivano mai al CRM marketing.
+    const rows = await db.select().from(leads).where(and(leadVero(), or(
         and(isNotNull(leads.appointmentDate), gte(leads.appointmentDate, from), lt(leads.appointmentDate, to)),
         and(isNotNull(leads.confirmationsTimestamp), gte(leads.confirmationsTimestamp, from), lt(leads.confirmationsTimestamp, to)),
         and(isNotNull(leads.salespersonAssignedAt), gte(leads.salespersonAssignedAt, from), lt(leads.salespersonAssignedAt, to)),
         and(isNotNull(leads.salespersonOutcomeAt), gte(leads.salespersonOutcomeAt, from), lt(leads.salespersonOutcomeAt, to)),
-    ));
+    )));
 
     const envelopes: MarketingWebhookEnvelope[] = [];
     const counts = {

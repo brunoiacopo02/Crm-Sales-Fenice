@@ -7,6 +7,7 @@ import crypto from "crypto"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { assegnatarioPerGdo, eventoTimelinePerGdo } from "@/lib/diretta/vistaGdo"
+import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 
 export async function getLeadProfile(leadId: string) {
     const ctx = await currentTenant()
@@ -37,7 +38,9 @@ export async function getLeadProfile(leadId: string) {
         })
             .from(leads)
             .leftJoin(users, eq(leads.assignedToId, users.id))
-            .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId))))
+            // Prova (migr. 0050): un account di prova apre solo i lead di prova,
+            // nessun altro apre un lead di prova.
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId), leadDelMondoDiAccount(ctx.userId))))
         [0]
 
     if (!leadRow) return null
@@ -118,6 +121,11 @@ export async function updateLeadContactInfo(
 
         if (!name) return { success: false, error: "Il nome è obbligatorio." }
         if (phone.length < 5) return { success: false, error: "Il telefono deve avere almeno 5 cifre." }
+
+        const [corrente] = await db.select({ isTest: leads.isTest }).from(leads)
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId))).limit(1)
+        const rifiuto = corrente ? await rifiutoMondoDiverso(corrente, ctx.userId) : null
+        if (rifiuto) return { success: false, error: rifiuto }
 
         const updated = await db.update(leads).set({
             name,

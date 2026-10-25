@@ -6,6 +6,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
+import { accountVero } from "@/lib/prova/sql";
 
 export type GdoNoteCategory = 'formazione' | 'positivo' | 'negativo' | 'disciplinare';
 
@@ -40,7 +41,8 @@ export async function getGdoUsersForNotes(): Promise<GdoUserForNotes[]> {
         isActive: users.isActive,
     })
         .from(users)
-        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)));
+        // L'account di prova (migr. 0050) non è un GDO da seguire.
+        .where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId), accountVero()));
 
     return allGdos
         .filter(u => u.isActive === true)

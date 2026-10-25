@@ -14,6 +14,7 @@ import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import crypto from "crypto";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isConfermeTl } from "@/lib/confermeTl";
+import { nonDaAccountDiProva } from "@/lib/prova/sql";
 // Le costanti di monete e XP di @/lib/surveys/rewards non si usano più: dal
 // restyle "Diretta" (PO 25/10/2026) i sondaggi non pagano e non penalizzano.
 import {
@@ -503,7 +504,8 @@ export async function listSuspiciousSurveys(): Promise<{
     })
         .from(gdoLeadSurveys)
         .leftJoin(users, eq(gdoLeadSurveys.gdoUserId, users.id))
-        .where(and(eq(gdoLeadSurveys.suspicious, true), eq(gdoLeadSurveys.companyId, ctx.companyId)))
+        // Fuori i sondaggi degli account di prova (migr. 0050).
+        .where(and(eq(gdoLeadSurveys.suspicious, true), eq(gdoLeadSurveys.companyId, ctx.companyId), nonDaAccountDiProva(gdoLeadSurveys.gdoUserId)))
         .orderBy(desc(gdoLeadSurveys.createdAt))
         .limit(100);
 
@@ -518,7 +520,7 @@ export async function listSuspiciousSurveys(): Promise<{
     })
         .from(confermeLeadSurveys)
         .leftJoin(users, eq(confermeLeadSurveys.confermeUserId, users.id))
-        .where(and(eq(confermeLeadSurveys.suspicious, true), eq(confermeLeadSurveys.companyId, ctx.companyId)))
+        .where(and(eq(confermeLeadSurveys.suspicious, true), eq(confermeLeadSurveys.companyId, ctx.companyId), nonDaAccountDiProva(confermeLeadSurveys.confermeUserId)))
         .orderBy(desc(confermeLeadSurveys.createdAt))
         .limit(100);
 

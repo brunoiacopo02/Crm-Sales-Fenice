@@ -12,6 +12,7 @@ import {
 } from '@/lib/marketing-webhooks/payload-builders';
 import type { MarketingEventType, MarketingWebhookEnvelope } from '@/lib/marketing-webhooks/types';
 import { SELF_BOOKED_OUTCOME } from '@/lib/salesPipeline/sentinel';
+import { leadVero } from '@/lib/prova/sql';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -55,7 +56,8 @@ export async function GET(req: Request) {
         }, { status: 400 });
     }
 
-    const conditions: SQL[] = [];
+    // I lead di prova (migr. 0050) non arrivano al marketing, né in push né qui.
+    const conditions: SQL[] = [leadVero()];
 
     let dateField: AnyPgColumn = leads.updatedAt;
     if (eventType === 'appointment.set') {

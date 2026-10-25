@@ -13,6 +13,7 @@ import { countPresences } from '@/lib/presenceCounting'
 import { isTeamMember, personName } from '@/lib/diretta/config'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati } from '@/lib/diretta/fissatiDb'
+import { accountVero, leadVero } from '@/lib/prova/sql'
 import { isConfermePersona } from './rules'
 import type { NumeriSettimana, SettimanaLunSab } from './premiSettimana'
 
@@ -21,14 +22,16 @@ const nomeConferme = (u: { firstName: string | null; name: string | null; displa
     u.firstName?.trim() || u.name || u.displayName || u.id
 
 export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab): Promise<NumeriSettimana> {
-    // GDO umani con un nome (fuori 108 e 201). Anche chi è stato disattivato
-    // dopo: se ha lavorato quella settimana, il suo bonus va pagato.
+    // GDO umani con un nome (fuori 108 e 201) e veri (fuori la prova, migr.
+    // 0050). Anche chi è stato disattivato dopo: se ha lavorato quella
+    // settimana, il suo bonus va pagato.
     const roster = await db.select({
-        id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot,
+        id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
         firstName: users.firstName, displayName: users.displayName, name: users.name,
     }).from(users).where(and(
         eq(users.role, 'GDO'),
         eq(users.isBot, false),
+        accountVero(),
         isNotNull(users.firstName),
         or(eq(users.companyId, companyId), sql`${companyId} = ANY(${users.allowedCompanies})`),
     ))
@@ -44,11 +47,13 @@ export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab
         .filter(r => isTeamMember(r.u) || r.presenze > 0 || r.fissati > 0)
         .map(r => ({ userId: r.userId, nome: r.nome, presenze: r.presenze, fissati: r.fissati }))
 
-    // Conferme: lead confermati da un account CONFERME, come nella colonna
-    // arancione (chiusure per salespersonOutcomeAt, presenze per presentedAt).
-    const accountConferme = db.select({ id: users.id }).from(users).where(eq(users.role, 'CONFERME'))
+    // Conferme: lead veri confermati da un account CONFERME vero, come nella
+    // colonna arancione (chiusure per salespersonOutcomeAt, presenze per
+    // presentedAt). La prova (migr. 0050) non entra nel bonus di squadra.
+    const accountConferme = db.select({ id: users.id }).from(users).where(and(eq(users.role, 'CONFERME'), accountVero()))
     const confermatiDalleConferme = and(
         eq(leads.companyId, companyId),
+        leadVero(),
         eq(leads.confirmationsOutcome, 'confermato'),
         inArray(leads.confirmationsUserId, accountConferme),
     )
@@ -77,7 +82,7 @@ export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab
         ? await db.select({
             id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot,
             firstName: users.firstName, name: users.name, displayName: users.displayName,
-        }).from(users).where(inArray(users.id, idsConferme))
+        }).from(users).where(and(inArray(users.id, idsConferme), accountVero()))
         : []
 
     return {

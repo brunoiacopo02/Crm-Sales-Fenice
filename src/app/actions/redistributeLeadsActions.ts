@@ -2,7 +2,7 @@
 
 import { db } from "@/db"
 import { leads, leadEvents, users, notifications } from "@/db/schema"
-import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { contaNeiKpiSql } from "@/lib/intakeBatch"
@@ -213,6 +213,10 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
     if (!input.sourceGdoId) return { success: false, error: 'GDO sorgente mancante.' }
     if (!input.targetGdoIds || input.targetGdoIds.length === 0) return { success: false, error: 'Seleziona almeno un GDO destinatario.' }
     if (input.targetGdoIds.includes(input.sourceGdoId)) return { success: false, error: 'Il GDO sorgente non può essere anche destinatario.' }
+    // Prova (migr. 0050): i lead veri non vanno all'account di prova.
+    const destinatariDiProva = await db.select({ id: users.id }).from(users)
+        .where(and(inArray(users.id, input.targetGdoIds), eq(users.isTest, true)))
+    if (destinatariDiProva.length > 0) return { success: false, error: "L'account di prova non riceve lead veri." }
 
     const sectionConds = buildSectionConditions(input.section)
     const baseConds = [eq(leads.companyId, ctx.companyId), sourceMatch(input.sourceGdoId), ...sectionConds]
@@ -378,6 +382,8 @@ export async function getActiveGdosForRedistribution(): Promise<{ id: string; na
         .from(users)
         .where(and(
             eq(users.role, 'GDO'),
+            // L'account di prova (migr. 0050) non è né sorgente né destinatario.
+            eq(users.isTest, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(

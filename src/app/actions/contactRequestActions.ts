@@ -191,7 +191,8 @@ export async function getContactRequests(): Promise<ContactRequestsView | null> 
 
     const gdoRows = await db.select({ id: users.id, name: users.name, displayName: users.displayName, gdoCode: users.gdoCode })
         .from(users)
-        .where(and(eq(users.companyId, COMPANY), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.isBot, false)));
+        // L'account di prova (migr. 0050) non riceve richieste di lead veri.
+        .where(and(eq(users.companyId, COMPANY), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.isBot, false), eq(users.isTest, false)));
 
     // Le Conferme vedono solo la loro corsia; l'admin vede tutta la coda.
     const inLane = (r: ContactRequestRow) => viewer.lane === 'admin' || r.lane === 'conferme';
@@ -238,9 +239,9 @@ export async function assignContactRequest(requestId: string, gdoId: string): Pr
     if (!row) return { ok: false, error: 'Richiesta non trovata.' };
     if (row.r.status !== 'pending') return { ok: false, error: 'Richiesta già gestita.' };
 
-    const [gdo] = await db.select({ id: users.id, role: users.role, isActive: users.isActive, companyId: users.companyId })
+    const [gdo] = await db.select({ id: users.id, role: users.role, isActive: users.isActive, isTest: users.isTest, companyId: users.companyId })
         .from(users).where(eq(users.id, gdoId)).limit(1);
-    if (!gdo || gdo.role !== 'GDO' || !gdo.isActive || gdo.companyId !== COMPANY) {
+    if (!gdo || gdo.role !== 'GDO' || !gdo.isActive || gdo.isTest || gdo.companyId !== COMPANY) {
         return { ok: false, error: 'GDO non valido o non attivo.' };
     }
 

@@ -20,6 +20,7 @@ import { db } from "@/db"
 import { leads } from "@/db/schema"
 import { and, asc, eq, gte, inArray, isNull, isNotNull, lt, lte, or, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { leadDelMondoDiAccount } from "@/lib/prova/sql"
 import {
     selectBlockingAlert,
     SNOOZE_MS,
@@ -79,6 +80,9 @@ export async function getConfermeBlockingAlert(): Promise<BlockingAlertPayload> 
         .from(leads)
         .where(and(
             inArray(leads.companyId, ctx.allowedCompanies),
+            // Prova (migr. 0050): i richiami di prova bloccano solo l'account di
+            // prova, mai Andrea e Alberto (e viceversa).
+            leadDelMondoDiAccount(ctx.userId),
             isNull(leads.confirmationsOutcome),
             or(
                 // "Risentire dopo": richiamo in giornata.
@@ -165,6 +169,7 @@ export async function snoozeConfermeAlert(leadId: string): Promise<{ ok: boolean
         .where(and(
             eq(leads.id, leadId),
             inArray(leads.companyId, ctx.allowedCompanies),
+            leadDelMondoDiAccount(ctx.userId),
         ))
 
     return { ok: true }
@@ -184,6 +189,7 @@ export async function claimConfermeAlert(leadId: string): Promise<{ ok: boolean 
         .where(and(
             eq(leads.id, leadId),
             inArray(leads.companyId, ctx.allowedCompanies),
+            leadDelMondoDiAccount(ctx.userId),
         ))
 
     return { ok: true }
@@ -208,6 +214,7 @@ export async function markConfermeAlertHandled(leadId: string): Promise<{ ok: bo
         .where(and(
             eq(leads.id, leadId),
             inArray(leads.companyId, ctx.allowedCompanies),
+            leadDelMondoDiAccount(ctx.userId),
             or(
                 and(
                     isNotNull(leads.confSnoozeAt),

@@ -76,6 +76,7 @@ async function main() {
         role: users.role,
         isActive: users.isActive,
         isBot: users.isBot,
+        isTest: users.isTest,
         firstName: users.firstName,
         acAutoIntake: users.acAutoIntake,
         botReturnIntake: users.botReturnIntake,

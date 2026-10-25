@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     DEFAULT_TARGETS, parseTargets, peakWindow, shiftWindow, euroFromPresences,
-    stepReached, isTeamMember, personName, isSaturdayRome,
+    stepReached, isTeamMember, guadagnaPremiPersonali, personName, isSaturdayRome,
 } from './config'
 
 test('parseTargets: default se vuoto o rotto, merge se parziale', () => {
@@ -59,9 +59,22 @@ test('scalini', () => {
 })
 
 test('squadra e nomi', () => {
-    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, firstName: 'Zora' }), true)
-    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: true, firstName: 'Bot' }), false)
-    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, firstName: null }), false)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, isTest: false, firstName: 'Zora' }), true)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: true, isTest: false, firstName: 'Bot' }), false)
+    assert.equal(isTeamMember({ role: 'GDO', isActive: true, isBot: false, isTest: false, firstName: null }), false)
     assert.equal(personName({ firstName: 'Zora', displayName: 'GDO 106' }), 'Zora')
     assert.equal(personName({ firstName: null, displayName: 'GDO 108' }), 'GDO 108')
+})
+
+test('account di prova: fuori dalla squadra, ma con Scintille e Piume personali', () => {
+    const prova = { role: 'GDO', isActive: true, isBot: false, isTest: true, firstName: 'Prova GDO' }
+    assert.equal(isTeamMember(prova), false)
+    assert.equal(guadagnaPremiPersonali(prova), true)
+    // Per tutti gli altri le due regole coincidono.
+    const zora = { role: 'GDO', isActive: true, isBot: false, isTest: false, firstName: 'Zora' }
+    assert.equal(guadagnaPremiPersonali(zora), true)
+    assert.equal(guadagnaPremiPersonali({ ...zora, firstName: null }), false)                 // 108
+    assert.equal(guadagnaPremiPersonali({ ...prova, isBot: true }), false)
+    assert.equal(guadagnaPremiPersonali({ ...prova, isActive: false }), false)
+    assert.equal(guadagnaPremiPersonali({ ...prova, role: 'CONFERME' }), false)
 })

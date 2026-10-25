@@ -9,6 +9,7 @@ import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { isRealGdo, apptSetAt, isAnsweredLog } from '@/lib/kpi/canon';
+import { leadVero } from '@/lib/prova/sql';
 export type KpiPeriod = 'oggi' | 'ieri' | 'settimana' | 'mese'
 
 /** Verifica se un timestamp cade nell'orario lavorativo GDO 13:30-20:00 Europe/Rome */
@@ -126,6 +127,8 @@ export async function getTeamKpiDashboard(period: KpiPeriod, funnelFilter?: stri
         .from(leads)
         .where(and(
             eq(leads.companyId, ctx.companyId),
+            // I lead di prova (migr. 0050) non sono appuntamenti del team.
+            leadVero(),
             isNotNull(leads.appointmentDate),
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,

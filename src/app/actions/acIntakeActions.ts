@@ -46,7 +46,8 @@ export async function listGdosForAcIntake(): Promise<GdoAcIntakeRow[]> {
         isActive: users.isActive,
         acAutoIntake: users.acAutoIntake,
         acLastAssignedAt: users.acLastAssignedAt,
-    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
+        // L'account di prova (migr. 0050) non riceve lead dal webhook.
+    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isTest, false)));
     return rows.sort((a, b) => (a.gdoCode ?? 9999) - (b.gdoCode ?? 9999));
 }
 

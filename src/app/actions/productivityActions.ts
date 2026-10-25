@@ -56,6 +56,7 @@ import { shiftBoundsFor, lateAndEarly, trainingAllowanceSec, isCollectiveTrainin
 import { apptSetAt, isFunnelClosure } from "@/lib/kpi/canon"
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
+import { accountVero, leadVero } from "@/lib/prova/sql"
 
 /** Sotto questa soglia la giornata non è rappresentativa (mezze giornate, assenze). */
 const MIN_CALLS_PER_DAY = 40
@@ -254,6 +255,8 @@ export async function getPhoneProductivity(
             // chiama a freddo (con un interno, se gliene danno uno) comparirebbe
             // come una riga "gdo" su /monitor-pause, dentro le medie di squadra.
             eq(users.role, 'GDO'),
+            // L'account di prova (migr. 0050) non ha turno da misurare.
+            accountVero(),
             gte(pbxCalls.dateLocal, fromDateLocal),
             lte(pbxCalls.dateLocal, toDateLocal),
         ))
@@ -269,6 +272,7 @@ export async function getPhoneProductivity(
             eq(users.role, 'GDO'),
             eq(users.isActive, true),
             eq(users.isBot, false),
+            accountVero(),
             eq(users.phoneTimeTracked, false),
         ))
     const excludedMixedDuties = excludedRows.map(r => r.displayName || r.name || '').filter(Boolean)
@@ -695,6 +699,9 @@ export async function getApptQuality(
             companyScope(ctx, leads.companyId),
             eq(users.role, 'GDO'),
             eq(users.isBot, false),
+            // Prova (migr. 0050): né l'account di prova né i suoi lead.
+            accountVero(),
+            leadVero(),
             or(
                 and(gte(leads.appointmentCreatedAt, from), lt(leads.appointmentCreatedAt, to)),
                 and(gte(leads.appointmentDate, from), lt(leads.appointmentDate, to)),

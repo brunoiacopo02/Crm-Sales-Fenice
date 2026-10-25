@@ -174,6 +174,8 @@ export async function reassignBotLeadToHumanPool(
                 eq(users.isActive, true),
                 eq(users.botReturnIntake, true),
                 eq(users.isBot, false),
+                // L'account di prova (migr. 0050) non riceve mai ridati veri.
+                eq(users.isTest, false),
                 sql`btrim(coalesce(${users.firstName}, '')) <> ''`,
                 or(
                     isNull(users.dailyReturnCap),

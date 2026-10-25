@@ -23,6 +23,7 @@ import { and, count, eq, inArray, notInArray, or, ne, sql, sum } from 'drizzle-o
 import { db } from '../../src/db'
 import { currencyLedger, shopItems, users } from '../../src/db/schema'
 import { creditOnce } from '../../src/lib/economy/ledger'
+import { nonDaAccountDiProva } from '../../src/lib/prova/sql'
 
 const APPLY = process.argv.includes('--apply')
 const FORZA = process.argv.includes('--forza')
@@ -60,14 +61,17 @@ async function main() {
     console.log(`\nRegistro Scintille/Piume: ${registro.length ? '' : 'vuoto'}`)
     for (const r of registro) console.log(`  ${r.currency} ${r.reason.padEnd(28)} righe ${r.righe}  totale ${r.totale}`)
 
+    // Gli account di prova (users.isTest, migr. 0050) non si azzerano e il loro
+    // registro non conta come premi veri: hanno un saldo di prova per il
+    // negozio, che prova-setup.ts rimette a posto da solo.
     const [{ premiVeri }] = await db.select({ premiVeri: count() }).from(currencyLedger)
-        .where(notInArray(currencyLedger.reason, CAUSALI_GO_LIVE))
+        .where(and(notInArray(currencyLedger.reason, CAUSALI_GO_LIVE), nonDaAccountDiProva(currencyLedger.userId)))
 
     // ── 1. Saldi a zero ─────────────────────────────────────────────────
     const conSaldo = await db.select({
         id: users.id, gdoCode: users.gdoCode, displayName: users.displayName, firstName: users.firstName,
         scintille: users.scintille, piume: users.piume,
-    }).from(users).where(or(ne(users.scintille, 0), ne(users.piume, 0)))
+    }).from(users).where(and(eq(users.isTest, false), or(ne(users.scintille, 0), ne(users.piume, 0))))
 
     console.log(`\n1. Saldi diversi da zero: ${conSaldo.length}`)
     const giaAzzerati = await chiaviEsistenti(conSaldo.flatMap(u => [chiaveAzzeramento('S', u.id), chiaveAzzeramento('P', u.id)]))

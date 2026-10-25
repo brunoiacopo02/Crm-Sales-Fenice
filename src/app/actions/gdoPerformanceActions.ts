@@ -10,6 +10,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 import { getMinCallsPerDay } from "@/app/actions/managerAdvancedActions";
+import { accountVero, leadVero } from "@/lib/prova/sql";
 
 export interface GamificationTargetInput {
     month: string;
@@ -99,7 +100,9 @@ export async function getManagerGdoTables(monthString: string) {
     const allUsers = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
     // Il Bot Fissatore ha una pagina dedicata (/statistiche-fissatore) con metriche
     // event-based: qui la formula umana lo falserebbe, quindi niente card per lui.
-    const activeGdos = allUsers.filter(u => u.isActive && !u.isBot);
+    // Niente card nemmeno per l'account di prova (migr. 0050): ogni numero qui
+    // sotto si attribuisce solo a chi ha una card.
+    const activeGdos = allUsers.filter(u => u.isActive && !u.isBot && !u.isTest);
 
     // Tutti gli appuntamenti fissati questo mese. Base canonica PO 2026-07-05
     // (src/lib/kpi/canon.ts): attribuzione per data di FISSAGGIO
@@ -462,6 +465,8 @@ async function getConfermeWeeklyState(
     const confermeLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, companyId),
+            // Le chiusure dei lead di prova (migr. 0050) non sono della squadra.
+            leadVero(),
             isNotNull(leads.confirmationsUserId),
             eq(leads.confirmationsOutcome, 'confermato'),
             eq(leads.salespersonOutcome, 'Chiuso'),
@@ -482,6 +487,7 @@ async function getConfermeWeeklyState(
                     eq(users.companyId, companyId),
                     eq(manualAdjustments.companyId, companyId),
                     eq(users.role, 'CONFERME'),
+                    accountVero(),
                     eq(manualAdjustments.type, 'chiusure'),
                     gte(manualAdjustments.createdAt, currentWeekStart),
                     lte(manualAdjustments.createdAt, currentWeekEnd)
@@ -718,7 +724,7 @@ export async function getAllGdoScriptRates(): Promise<Record<string, { completio
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     // Esclude il bot fissatore dalle statistiche di completamento script (decisione PO 2026-07-05)
-    const activeGdosRaw = await db.select({ id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+    const activeGdosRaw = await db.select({ id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
     const activeGdos = activeGdosRaw.filter(isRealGdo);
 
     if (activeGdos.length === 0) return {};

@@ -163,9 +163,11 @@ export async function getSprintLeaderboard(sprintId?: string) {
     if (!sprintWindow) return []
 
     // Get all gdos
+    // Prova (migr. 0050): né l'account di prova né i suoi lead nella gara.
     const allGdos = await db.select().from(users).where(and(
         eq(users.companyId, ctx.companyId),
         eq(users.role, 'GDO'),
+        eq(users.isTest, false),
     ))
 
     // Get all appointments created within this sprint explicitly
@@ -174,6 +176,7 @@ export async function getSprintLeaderboard(sprintId?: string) {
             .where(
                 and(
                     eq(leads.companyId, ctx.companyId),
+                    eq(leads.isTest, false),
                     eq(leads.status, 'APPOINTMENT'),
                     gte(leads.appointmentCreatedAt, sprintWindow.startTime),
                     // We use now() if active, or actualEndTime/endTime if closed

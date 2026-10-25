@@ -8,6 +8,7 @@ import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr, previous
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
 import { isFunnelClosure } from '@/lib/kpi/canon'
+import { leadDelMondoDiAccount, leadVero } from '@/lib/prova/sql'
 
 /** Default Conferme bonus: T1=30 chiusure (€145), T2=38 chiusure (€290).
  *  Module-private (i file con "use server" possono esportare solo funzioni
@@ -29,8 +30,12 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // Qui 'confermati' = conferme AVVENUTE nel range (confirmationsTimestamp).
     // Serve al tracking del target settimanale del team Conferme (quante
     // pratiche chiude a settimana).
+    // Prova (migr. 0050): l'account Conferme di prova vede solo i suoi lead di
+    // prova, tutti gli altri solo quelli veri. Vale per ogni query qui sotto.
+    const delMondo = leadDelMondoDiAccount(ctx.userId)
     const conditionsConfirmations = [
         companyScope(ctx, leads.companyId),
+        delMondo,
         gte(leads.confirmationsTimestamp, calendarStart),
         lt(leads.confirmationsTimestamp, calendarEnd)
     ]
@@ -50,6 +55,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // scarto è stata registrata). Filtro su appointmentDate.
     const conditionsCalendar = [
         companyScope(ctx, leads.companyId),
+        delMondo,
         gte(leads.appointmentDate, calendarStart),
         lt(leads.appointmentDate, calendarEnd)
     ]
@@ -167,6 +173,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     // Esclude vendite dirette o import storici che non sono passati di qui.
     const closedWeekConditions = [
         companyScope(ctx, leads.companyId),
+        delMondo,
         eq(leads.salespersonOutcome, 'Chiuso'),
         eq(leads.confirmationsOutcome, 'confermato'),
         isNotNull(leads.confirmationsUserId),
@@ -200,6 +207,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         const pw = weekBoundsRome(past)
         const conds = [
             companyScope(ctx, leads.companyId),
+            delMondo,
             eq(leads.salespersonOutcome, 'Chiuso'),
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
@@ -288,6 +296,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         amount: leads.closeAmountEur,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
+        delMondo,
         or(
             and(isNotNull(leads.presentedAt), gte(leads.presentedAt, start), lt(leads.presentedAt, end)),
             and(isNotNull(leads.salespersonOutcomeAt), gte(leads.salespersonOutcomeAt, start), lt(leads.salespersonOutcomeAt, end)),
@@ -551,6 +560,8 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             amount: leads.closeAmountEur,
         }).from(leads).where(and(
             companyScope(ctx, leads.companyId),
+            // Lead di prova (migr. 0050) fuori dalla panoramica del TL.
+            leadVero(),
             sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', 'BLT', '')`,
             or(
                 and(isNotNull(leads.appointmentDate),
@@ -722,11 +733,13 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             displayName: users.displayName,
             role: users.role,
             isActive: users.isActive,
+            isTest: users.isTest,
         }).from(users).where(companyScope(ctx, users.companyId))
         const userMap = new Map(companyUsers.map(u => [u.id, u]))
 
+        // L'account Conferme di prova non ha una riga: i suoi lead sono già fuori.
         const opIds = new Set<string>(
-            companyUsers.filter(u => u.role === 'CONFERME' && u.isActive).map(u => u.id),
+            companyUsers.filter(u => u.role === 'CONFERME' && u.isActive && !u.isTest).map(u => u.id),
         )
         for (const r of rows) {
             if (!r.confirmationsUserId) continue
@@ -848,6 +861,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         amount: leads.closeAmountEur,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
+        leadVero(),
         isNotNull(leads.salespersonUserId),
         or(
             and(
@@ -931,6 +945,7 @@ export async function getConfermeDailyObjectives(confermeUserId: string) {
         .from(leads)
         .where(and(
             companyScope(ctx, leads.companyId),
+            leadDelMondoDiAccount(ctx.userId),
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
             gte(leads.confirmationsTimestamp, todayStart),

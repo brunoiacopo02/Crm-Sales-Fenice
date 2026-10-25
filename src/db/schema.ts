@@ -139,6 +139,12 @@ export const users = pgTable('users', {
     // + push + badge report nelle Conferme.
     isBot: boolean('isBot').default(false).notNull(),
 
+    // Account di prova (migr. 0050, PO 25/10/2026): lavora come un GDO o una
+    // Conferma veri ma resta fuori da squadra, classifica, cronaca, forzieri,
+    // bonus, KPI e instradamento automatico. Vede e tocca solo i lead di prova
+    // (src/lib/prova). Lo scrive solo scripts/diretta/prova-setup.ts.
+    isTest: boolean('isTest').default(false).notNull(),
+
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
 
@@ -181,6 +187,11 @@ export const leads = pgTable('leads', {
     // 'LANCIO_UMANI_20261007', 400 lead del lancio tolti al bot e dati ai GDO
     // 106 e 119. Resta anche se il lead cambia assegnatario. Null altrimenti.
     humanTestCohort: text('humanTestCohort'),
+    // Lead di prova (migr. 0050, PO 25/10/2026): dato solo agli account di
+    // prova e fuori da KPI, pool, bot, ActiveCampaign e webhook marketing
+    // (src/lib/prova). Lo scrive solo scripts/diretta/prova-setup.ts, e
+    // prova-pulizia.ts cancella soltanto i lead che lo hanno.
+    isTest: boolean('isTest').default(false).notNull(),
     // Pool del lancio in cui sta il lead finché non è assegnato (migr. 0042,
     // PO 07/10/2026): 'VERGINI' = lead del lancio mai contattati dal bot dopo
     // la live, tolti al bot. Si azzera quando il TL lo assegna (GDO o bot).

@@ -89,11 +89,13 @@ export function isFunnelClosure(lead: { salespersonOutcome: string | null; prese
     return (lead.salespersonOutcome ?? '').toLowerCase() === 'chiuso' && lead.presentedAt !== null
 }
 
-// Filtro standard per GDO "veri" nelle classifiche/medie (esclude il bot fissatore).
-export function isRealGdo(u: { role: string; isActive: boolean; isBot: boolean }): boolean {
-    return u.role === 'GDO' && u.isActive && !u.isBot
+// Filtro standard per GDO "veri" nelle classifiche/medie (esclude il bot
+// fissatore e l'account di prova, migr. 0050). `isTest` è obbligatorio: una
+// lettura che dimentica la colonna non deve poter far entrare la prova.
+export function isRealGdo(u: { role: string; isActive: boolean; isBot: boolean; isTest: boolean }): boolean {
+    return u.role === 'GDO' && u.isActive && !u.isBot && !u.isTest
 }
 // Divisore delle medie per-GDO: solo GDO reali con statsActive.
-export function isStatsGdo(u: { role: string; isActive: boolean; isBot: boolean; statsActive: boolean }): boolean {
+export function isStatsGdo(u: { role: string; isActive: boolean; isBot: boolean; isTest: boolean; statsActive: boolean }): boolean {
     return isRealGdo(u) && u.statsActive
 }

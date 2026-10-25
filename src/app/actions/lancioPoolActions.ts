@@ -579,6 +579,8 @@ export async function assignFromLancioPool(input: { count: number; gdoIds: strin
         eq(users.isActive, true),
         // Mai il bot: dal pool si distribuisce agli umani.
         eq(users.isBot, false),
+        // Mai l'account di prova (migr. 0050).
+        eq(users.isTest, false),
     )))
     if (selectedGdos.length === 0) {
         report.errors.push("Nessuno dei GDO selezionati è attivo.")

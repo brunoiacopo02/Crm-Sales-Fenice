@@ -279,7 +279,8 @@ export async function fetchAllGdoRpgProfiles() {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     const allUsers = await db.select().from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO')));
-    const activeUsers = allUsers.filter(u => u.isActive);
+    // L'account di prova (migr. 0050) non entra nei profili della squadra.
+    const activeUsers = allUsers.filter(u => u.isActive && !u.isTest);
     return batchComputeRpgProfiles(activeUsers, false, ctx.companyId);
 }
 
@@ -294,7 +295,7 @@ export async function fetchAllTeamRpgProfiles() {
         inArray(users.role, ['GDO', 'CONFERME']),
     ));
     // Esclude il bot fissatore dai profili RPG (decisione PO 2026-07-05)
-    const activeUsers = allUsers.filter(u => u.isActive && !u.isBot);
+    const activeUsers = allUsers.filter(u => u.isActive && !u.isBot && !u.isTest);
     return batchComputeRpgProfiles(activeUsers, true, ctx.companyId);
 }
 
@@ -319,7 +320,8 @@ export async function getTeamGamificationOverview() {
             eq(users.companyId, ctx.companyId),
             inArray(users.role, ['GDO', 'CONFERME']),
             eq(users.isActive, true),
-            eq(users.isBot, false)
+            eq(users.isBot, false),
+            eq(users.isTest, false),
         )
     );
 

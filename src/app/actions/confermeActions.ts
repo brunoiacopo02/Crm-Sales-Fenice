@@ -26,6 +26,7 @@ import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDe
 import { lancioFirst } from "@/lib/lancio/conferme"
 import { appointmentMoveStamp, confermeBoardColumn } from "@/lib/conferme/boardWindow"
 import { SELF_BOOKED_OUTCOME } from "@/lib/salesPipeline/sentinel"
+import { leadDelMondoDiAccount, leadVero, rifiutoMondoDiverso } from "@/lib/prova/sql"
 // Legacy team-adventure imports removed: Conferme gamification is now individual.
 
 export async function getConfermeAppointments(filters: {
@@ -57,7 +58,11 @@ export async function getConfermeAppointments(filters: {
 
     const conditions = [
         eq(leads.companyId, ctx.companyId),
-        eq(leads.status, 'APPOINTMENT')
+        eq(leads.status, 'APPOINTMENT'),
+        // Prova (migr. 0050): l'account Conferme di prova vede solo gli
+        // appuntamenti di prova, tutti gli altri (Conferme, manager, admin)
+        // solo quelli veri.
+        leadDelMondoDiAccount(session.user.id),
     ]
 
     if (filters.leadId) {
@@ -447,6 +452,8 @@ export async function updateLeadDataConferme(leadId: string, currentVersion: num
             eq(leads.id, leadId),
         )))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id)
+        if (rifiuto) return { success: false, error: rifiuto }
 
         // Concurrency Check
         if (oldLead.version !== currentVersion) {
@@ -658,6 +665,11 @@ export async function addConfermeNote(leadId: string, text: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
 
+    const [lead] = await db.select({ isTest: leads.isTest }).from(leads)
+        .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId))).limit(1)
+    const rifiuto = lead ? await rifiutoMondoDiverso(lead, session.user.id) : null
+    if (rifiuto) throw new Error(rifiuto)
+
     const newNote = {
         id: crypto.randomUUID(),
         leadId,
@@ -701,10 +713,16 @@ export async function setConfermeOutcome(leadId: string, currentVersion: number,
             eq(leads.id, leadId),
         )))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id)
+        if (rifiuto) return { success: false, error: rifiuto }
         if (oldLead.version !== currentVersion) {
             console.error(`Version mismatch - DB: ${oldLead.version}, client: ${currentVersion}`);
             return { success: false, error: `CONCURRENCY_ERROR: DB è alla versione ${oldLead.version} ma il client ha inviato la versione ${currentVersion}` }
         }
+
+        // Lead di prova (migr. 0050): si conferma senza un venditore vero, così
+        // niente agenda dei venditori, Google Calendar, notifiche né multe.
+        if (oldLead.isTest) salespersonAssigned = undefined
 
         // GUARDIA SCHEDA TRATTATIVA: niente esito senza sondaggio completo.
         // MANAGER/ADMIN sono esentati da ogni blocco (operano senza limiti).
@@ -1022,6 +1040,8 @@ export async function setSalespersonOutcome(
             eq(leads.id, leadId),
         )))[0]
         if (!oldLead) return { success: false, error: "Lead not found" }
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id)
+        if (rifiuto) return { success: false, error: rifiuto }
         if (oldLead.version !== currentVersion) return { success: false, error: `CONCURRENCY_ERROR` }
 
         // Nessun premio della vecchia gamification (XP, monete, forzieri, boss,
@@ -1152,6 +1172,8 @@ export async function recordConfermeNoAnswer(leadId: string, currentVersion: num
             eq(leads.id, leadId),
         )))[0];
         if (!oldLead) return { success: false, error: "Lead not found" };
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id);
+        if (rifiuto) return { success: false, error: rifiuto };
         if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
 
         // Calcolato PRIMA dell'update: dopo, le date sono già scritte e non si
@@ -1299,6 +1321,8 @@ export async function undoConfermeNoAnswer(leadId: string, currentVersion: numbe
         eq(leads.id, leadId),
     )))[0];
     if (!oldLead) throw new Error("Lead not found");
+    const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id);
+    if (rifiuto) throw new Error(rifiuto);
     if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
     let toUpdate: any = { version: oldLead.version + 1, updatedAt: new Date() };
@@ -1400,6 +1424,8 @@ export async function scheduleConfermeRecall(leadId: string, currentVersion: num
             eq(leads.id, leadId),
         )))[0];
         if (!oldLead) throw new Error("Lead not found");
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id);
+        if (rifiuto) throw new Error(rifiuto);
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
         // Il muro del fissaggio (decisione PO 2026-09-12): si applica solo
@@ -1583,6 +1609,8 @@ export async function setConfermeSnooze(leadId: string, currentVersion: number, 
             eq(leads.id, leadId),
         )))[0];
         if (!oldLead) throw new Error("Lead not found");
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id);
+        if (rifiuto) throw new Error(rifiuto);
         if (oldLead.version !== currentVersion) throw new Error("CONCURRENCY_ERROR");
 
         let toUpdate: any = {
@@ -1657,6 +1685,8 @@ export async function cancelConfermeRecall(
             eq(leads.id, leadId),
         )))[0];
         if (!oldLead) return { success: false, error: "Lead not found" };
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id);
+        if (rifiuto) return { success: false, error: rifiuto };
         if (oldLead.version !== currentVersion) return { success: false, error: "CONCURRENCY_ERROR" };
 
         let toUpdate: any = {
@@ -1755,6 +1785,8 @@ export async function getConfermeRecallAlerts(): Promise<Array<{
         .from(leads)
         .where(and(
             inArray(leads.companyId, ctx.allowedCompanies),
+            // Prova (migr. 0050): i richiami di prova suonano solo all'account di prova.
+            leadDelMondoDiAccount(ctx.userId),
             isNull(leads.confirmationsOutcome),
             isNotNull(leads.confSnoozeAt),
             gte(leads.confSnoozeAt, fromNow),
@@ -1868,6 +1900,9 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date, opts?: 
         salespersonUserId: leads.salespersonUserId,
     }).from(leads).where(and(
         eq(leads.companyId, ctx.companyId),
+        // Agende dei venditori veri: i lead di prova non hanno mai un venditore,
+        // e qui non devono comparire nemmeno per sbaglio (migr. 0050).
+        leadVero(),
         isNotNull(leads.salespersonUserId),
         isNotNull(leads.appointmentDate),
         gte(leads.appointmentDate, startDate),
@@ -2015,6 +2050,8 @@ export async function undoConfermeScarto(leadId: string, currentVersion: number)
             eq(leads.id, leadId),
         )))[0];
         if (!oldLead) return { success: false, error: "Lead not found" };
+        const rifiuto = await rifiutoMondoDiverso(oldLead, session.user.id);
+        if (rifiuto) return { success: false, error: rifiuto };
         if (oldLead.version !== currentVersion) {
             return { success: false, error: "CONCURRENCY_ERROR" };
         }

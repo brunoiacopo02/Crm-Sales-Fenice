@@ -23,6 +23,7 @@ import { callLogs, leads, users } from "@/db/schema";
 import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
+import { accountVero } from "@/lib/prova/sql";
 import {
     computeRow, matchesScope,
     type CallFact, type ApptFact, type FunnelScope, type QualityRow,
@@ -105,7 +106,8 @@ export async function getGdoQualityReport(
         if (!gdo) return { success: false, error: 'GDO non trovato' };
         if (gdo.isBot) return { success: false, error: 'Report non disponibile per il bot fissatore' };
 
-        // Team per la media: GDO attivi nelle statistiche, bot escluso (canone).
+        // Team per la media: GDO attivi nelle statistiche, bot e account di
+        // prova esclusi (canone, migr. 0050).
         const team = await db.select({ id: users.id })
             .from(users)
             .where(and(
@@ -114,6 +116,7 @@ export async function getGdoQualityReport(
                 eq(users.isActive, true),
                 eq(users.statsActive, true),
                 eq(users.isBot, false),
+                accountVero(),
             ));
         const teamIds = team.map(t => t.id);
         const allIds = [...new Set([...teamIds, gdo.id])];

@@ -75,7 +75,8 @@ function periodToBounds(period: MetricPeriod): { start: Date; end: Date } {
 
 /** Predicato stato + scope per ogni metrica. Ritorna gli SQL conditions. */
 function buildConditions(metric: MetricId, scope: MetricScope | undefined, start: Date, end: Date) {
-    const conds: any[] = [];
+    // I lead di prova (migr. 0050) non entrano in nessuna metrica.
+    const conds: any[] = [eq(leads.isTest, false)];
 
     // Funnel filter (default: esclude TEST/BLT/empty).
     if (scope?.funnel === undefined) {

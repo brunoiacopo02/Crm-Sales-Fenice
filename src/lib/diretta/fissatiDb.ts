@@ -57,19 +57,21 @@ export interface MembroLetto {
     role: string
     isActive: boolean
     isBot: boolean | null
+    isTest: boolean
     firstName: string | null
     displayName: string | null
     name: string | null
     profileImageUrl: string | null
 }
 
-/** La squadra dell'azienda: GDO umani attivi con un nome vero (108 e 201 restano fuori). */
+/** La squadra dell'azienda: GDO umani attivi con un nome vero (108, 201 e l'account di prova restano fuori). */
 export async function leggiMembriSquadra(companyId: string, lettore: Lettore = db): Promise<MembroLetto[]> {
     const roster = await lettore.select({
         id: users.id,
         role: users.role,
         isActive: users.isActive,
         isBot: users.isBot,
+        isTest: users.isTest,
         firstName: users.firstName,
         displayName: users.displayName,
         name: users.name,
@@ -80,6 +82,7 @@ export async function leggiMembriSquadra(companyId: string, lettore: Lettore = d
             eq(users.role, 'GDO'),
             eq(users.isActive, true),
             eq(users.isBot, false),
+            eq(users.isTest, false),
             isNotNull(users.firstName),
             or(
                 eq(users.companyId, companyId),

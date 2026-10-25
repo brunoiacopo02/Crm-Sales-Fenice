@@ -6,6 +6,7 @@ import { and, eq, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { leadIntakeAt } from '@/lib/kpi/canon';
 import { contaNeiKpi } from '@/lib/intakeBatch';
+import { leadVero } from '@/lib/prova/sql';
 import { PINNED_FUNNELS, byVolumeThenName, funnelKey, orderFunnels } from '@/lib/kpi/marketingFunnels';
 
 /**
@@ -80,6 +81,8 @@ export async function getMarketingStats(monthString: string) {
     const allLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
+            // Lead di prova (migr. 0050): fuori da tutte le metriche, nel WHERE.
+            leadVero(),
             funnelNonDiServizio(),
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
@@ -279,6 +282,8 @@ export async function getMarketingStatsByGdo(monthString: string) {
     const allLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
+            // Lead di prova (migr. 0050): fuori da tutte le metriche, nel WHERE.
+            leadVero(),
             funnelNonDiServizio(),
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).

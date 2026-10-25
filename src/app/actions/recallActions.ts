@@ -5,6 +5,7 @@ import { db } from "@/db"
 import { leads } from "@/db/schema"
 import { eq, and, ne, isNotNull, asc, lte, or, inArray } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 export async function getRecallLeads() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
@@ -24,6 +25,8 @@ export async function getRecallLeads() {
 
     const conditions = [
         eq(leads.companyId, ctx.companyId),
+        // Prova (migr. 0050): ognuno vede i richiami della sua parte.
+        leadDelMondoDiAccount(userId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNotNull(leads.recallDate)
@@ -56,6 +59,7 @@ export async function updateRecallDetails(leadId: string, recallDate: Date, note
 
     const [lead] = await db.select({
         id: leads.id,
+        isTest: leads.isTest,
         assignedToId: leads.assignedToId,
         recallDate: leads.recallDate,
         version: leads.version,
@@ -64,6 +68,8 @@ export async function updateRecallDetails(leadId: string, recallDate: Date, note
         .where(and(eq(leads.companyId, ctx.companyId), eq(leads.id, leadId)))
         .limit(1)
     if (!lead) return { success: false as const, error: 'Lead non trovato' }
+    const rifiuto = await rifiutoMondoDiverso(lead, ctx.userId)
+    if (rifiuto) return { success: false as const, error: rifiuto }
     if (ctx.role === 'GDO' && lead.assignedToId !== ctx.userId) {
         return { success: false as const, error: 'Lead non assegnato a te' }
     }

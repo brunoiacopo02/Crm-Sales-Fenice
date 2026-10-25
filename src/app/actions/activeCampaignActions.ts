@@ -8,6 +8,8 @@ import { logLeadEvent } from "@/lib/eventLogger"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 import { sendSerenamenteTemplate, SERENAMENTE_TEMPLATE_NR, SERENAMENTE_TEMPLATE_AUTOCONFERMA } from "@/lib/serenamenteMessaging"
 import { sendAgendaViaBot, type AgendaEsito } from "@/lib/agendaBot"
+import { accountDiProva } from "@/lib/prova/sql"
+import { erroreMondoDiverso, stessoMondo } from "@/lib/prova/regole"
 
 // ActiveCampaign configuration
 const AC_URL = process.env.ACTIVECAMPAIGN_URL || 'https://feniceacademy0089903.api-us1.com'
@@ -148,6 +150,18 @@ export async function sendAgendaToLead(
     // (AgendaButton usa già sendAgendaSerenamente); questo blocca chiamate errate.
     if (ctx.companyId !== 'fenice') {
         return { success: false, error: `Lead ${ctx.companyId}: l'agenda va inviata col flusso dedicato (Twilio), non con questo canale.` }
+    }
+
+    // Prova (migr. 0050): un account di prova non scrive a un lead vero, e a un
+    // lead di prova non parte niente né dal bot né da ActiveCampaign. L'invio
+    // si simula, così il pulsante si comporta come con un lead vero.
+    const attore = { isTest: await accountDiProva(supabaseUser.id) }
+    if (!stessoMondo(lead, attore)) return { success: false, error: erroreMondoDiverso(attore) }
+    if (lead.isTest) {
+        await db.update(leads)
+            .set({ agendaSentAt: new Date(), agendaStatus: 'consegnato' })
+            .where(and(eq(leads.id, lead.id), eq(leads.companyId, ctx.companyId)))
+        return { success: true, alreadySent: lead.agendaSentAt !== null, esito: 'consegnato' }
     }
 
     if (process.env.AGENDA_CHANNEL === 'bot') {
@@ -355,6 +369,12 @@ export async function sendConfermeNotifyToLead(
     // Fetch lead
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
     if (!lead) return { success: false, error: 'Lead non trovato' }
+
+    // Prova (migr. 0050): un account di prova non scrive a un lead vero, e a un
+    // lead di prova non parte niente (né ActiveCampaign né Twilio).
+    const attore = { isTest: await accountDiProva(supabaseUser.id) }
+    if (!stessoMondo(lead, attore)) return { success: false, error: erroreMondoDiverso(attore) }
+    if (lead.isTest) return { success: true }
 
     // Serenamente: NON usa ActiveCampaign/Spoki di Fenice. Invia il template via Twilio.
     // call1 → template "nr"; 3nr → template "autoconferma". Serve solo il telefono.

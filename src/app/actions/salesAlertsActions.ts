@@ -19,6 +19,7 @@ import { leads, monthlyLeadTargets, marketingTargets, metaAccountDaily, users, c
 import { and, eq, gte, lt, lte, inArray, isNull, isNotNull, or } from "drizzle-orm";
 import { currentTenant, assertSalesArea, type TenantContext } from '@/lib/tenancy';
 import { isConfermeTl } from "@/lib/confermeTl";
+import { accountVero, leadVero } from "@/lib/prova/sql";
 import {
     countWorkingDaysInMonth,
     countWorkingDaysElapsed,
@@ -206,6 +207,8 @@ async function cardsForCompany(
         .from(leads)
         .where(and(
             eq(leads.companyId, ctx.companyId),
+            // Lead di prova (migr. 0050): fuori da tutte le card.
+            leadVero(),
             isNotNull(leads.appointmentDate),
             or(
                 and(isNotNull(leads.appointmentCreatedAt), gte(leads.appointmentCreatedAt, monthStartUtc), lt(leads.appointmentCreatedAt, monthEndUtc)),
@@ -221,6 +224,7 @@ async function cardsForCompany(
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 isNotNull(leads.presentedAt),
                 gte(leads.presentedAt, monthStartUtc),
                 lt(leads.presentedAt, monthEndUtc),
@@ -232,6 +236,7 @@ async function cardsForCompany(
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 eq(leads.salespersonOutcome, 'Chiuso'),
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, monthStartUtc),
@@ -290,7 +295,7 @@ async function cardsForCompany(
     const gdoRows = await db
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false)));
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false), accountVero()));
     const nGdo = gdoRows.length;
 
     const workingDaysTotal = targetRow?.workingDays || countWorkingDaysInMonth(year, month);

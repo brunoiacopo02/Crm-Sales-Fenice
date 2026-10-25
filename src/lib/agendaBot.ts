@@ -7,6 +7,7 @@
 
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import { formatRomeAppointmentLabel, toRomeIso } from '@/lib/dateUtils'
+import { leadDiProva } from '@/lib/prova/sql'
 
 const AGENDA_BOT_URL = process.env.AGENDA_BOT_URL
     ?? 'https://web-app-messaggistica.vercel.app/api/send-agenda'
@@ -199,6 +200,11 @@ export async function notifyAppointmentToBot(input: NotifyAppointmentInput): Pro
         console.error('[agenda-bot] BOT_WEBHOOK_SECRET non impostato — appuntamento non notificato')
         return
     }
+    // Lead di prova (migr. 0050): il bot non ne sa niente e non deve saperne.
+    // Una lettura per chiave primaria. Se fallisce si manda come prima: per un
+    // lead vero la data giusta al bot conta più del controllo, e un lead che
+    // il bot non conosce lo scarta lui ("lead non suo").
+    if (await leadDiProva(lead.id).catch(() => false)) return
 
     const rawBody = JSON.stringify({
         leadId: lead.id,
@@ -287,6 +293,12 @@ export async function notifyCallAttemptToBot(input: NotifyCallAttemptInput): Pro
     if (!secret) {
         console.error('[call-attempt] BOT_WEBHOOK_SECRET non impostato')
         return { inviato: false, motivo: 'missing_secret' }
+    }
+    // Lead di prova (migr. 0050): nessuna chat del bot da avvisare. Se il
+    // controllo fallisce si manda come prima: il fornitore scarta da sé i lead
+    // che non conosce.
+    if (await leadDiProva(input.leadId).catch(() => false)) {
+        return { inviato: false, motivo: 'lead_di_prova' }
     }
 
     const rawBody = JSON.stringify({

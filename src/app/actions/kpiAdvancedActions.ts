@@ -8,6 +8,7 @@ import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isRealGdo, apptSetAt, isNeverAnsweredLog, isAnsweredLog } from '@/lib/kpi/canon'
 import { contaNeiKpiSql } from '@/lib/intakeBatch'
+import { leadVero } from '@/lib/prova/sql'
 
 import { cache } from "react"
 
@@ -547,6 +548,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
         role: users.role,
         isActive: users.isActive,
         isBot: users.isBot,
+        isTest: users.isTest,
     })
         .from(users)
         .where(and(
@@ -807,6 +809,8 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
         .from(ranked)
         .innerJoin(leads, eq(leads.id, ranked.leadId))
         .where(and(
+            // Le chiamate sui lead di prova (migr. 0050) non sono resa vera.
+            leadVero(),
             gte(ranked.createdAt, start),
             lte(ranked.createdAt, end), // end = bound esclusivo (dayBoundsRome/monthBoundsRome), ma getAdvancedKpi usa lte sullo stesso valore: manteniamo lte per coerenza dei totali (off-by-1ms teorico condiviso).
             ...(filters.funnel ? [eq(leads.funnel, filters.funnel)] : []),

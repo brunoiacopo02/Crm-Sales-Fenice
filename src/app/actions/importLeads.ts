@@ -43,6 +43,8 @@ export async function getActiveGdosForImport() {
             // Il bot fissatore (GDO 201) riceve lead solo dal round-robin del
             // webhook AC: mai assegnabile a mano da /import.
             eq(users.isBot, false),
+            // Nemmeno l'account di prova (migr. 0050): niente lead veri.
+            eq(users.isTest, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(
@@ -131,6 +133,8 @@ export async function processCsvImport(
             // Il bot fissatore (GDO 201) riceve lead solo dal round-robin del
             // webhook AC: mai assegnabile a mano da /import.
             eq(users.isBot, false),
+            // Nemmeno l'account di prova (migr. 0050): niente lead veri.
+            eq(users.isTest, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(
@@ -370,6 +374,8 @@ export async function createManualLead(input: ManualLeadInput): Promise<{ succes
             // Il bot fissatore (GDO 201) riceve lead solo dal round-robin del
             // webhook AC: mai assegnabile a mano da /import.
             eq(users.isBot, false),
+            // Nemmeno l'account di prova (migr. 0050): niente lead veri.
+            eq(users.isTest, false),
             // operatore assegnabile se l'azienda attiva è tra le sue allowedCompanies,
             // con fallback al companyId per gli utenti legacy (allowed_companies NULL).
             or(

@@ -63,6 +63,9 @@ export async function enqueueMarketingWebhook(input: EnqueueInput): Promise<Enqu
         console.warn(`[marketing-webhooks] lead ${input.leadId} not found, skipping ${input.eventType}`);
         return { enqueued: false, reason: 'lead_not_found' };
     }
+    // Lead di prova (migr. 0050): al CRM marketing non parte niente, e
+    // nell'outbox non resta nessuna riga.
+    if (lead.isTest) return { enqueued: false, reason: 'lead_di_prova' };
 
     let actor: { id: string; name: string | null; displayName: string | null; role: string } | null = null;
     if (input.actorUserId) {

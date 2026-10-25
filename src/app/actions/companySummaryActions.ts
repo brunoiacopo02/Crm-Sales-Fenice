@@ -13,6 +13,7 @@ import { db } from "@/db"
 import { leads } from "@/db/schema"
 import { eq, and, ne, gte, lte, isNull, isNotNull, sql } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { leadDelMondoDiAccount } from "@/lib/prova/sql"
 
 export type CompanySwitchSummary = {
     companyId: string
@@ -31,12 +32,15 @@ export async function getCompanySwitchSummary(): Promise<CompanySwitchSummary[]>
     const todayEnd = new Date(y, m - 1, d, 23, 59, 59, 999)
     const soon = new Date(Date.now() + 30 * 60 * 1000)
 
+    // Prova (migr. 0050): ognuno conta solo i lead della sua parte.
+    const delMondo = leadDelMondoDiAccount(ctx.userId)
     const results: CompanySwitchSummary[] = []
     for (const companyId of ctx.allowedCompanies) {
         const [apptRow] = await db.select({ c: sql<number>`count(*)::int` })
             .from(leads)
             .where(and(
                 eq(leads.companyId, companyId),
+                delMondo,
                 eq(leads.status, 'APPOINTMENT'),
                 isNotNull(leads.appointmentDate),
                 gte(leads.appointmentDate, todayStart),
@@ -48,6 +52,7 @@ export async function getCompanySwitchSummary(): Promise<CompanySwitchSummary[]>
         // (es. "99 rich" — verificato in prod il 2026-06-12).
         const snoozeCond = and(
             eq(leads.companyId, companyId),
+            delMondo,
             isNull(leads.confirmationsOutcome),
             isNotNull(leads.confSnoozeAt),
             gte(leads.confSnoozeAt, todayStart),
@@ -55,6 +60,7 @@ export async function getCompanySwitchSummary(): Promise<CompanySwitchSummary[]>
         )
         const gdoRecallConds = [
             eq(leads.companyId, companyId),
+            delMondo,
             ne(leads.status, 'REJECTED'),
             ne(leads.status, 'APPOINTMENT'),
             isNotNull(leads.recallDate),

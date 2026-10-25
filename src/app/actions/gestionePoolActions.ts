@@ -123,7 +123,8 @@ export async function listGdoPools(): Promise<GdoPoolRow[]> {
         freschiOggi: contaLead(
             sql`${leads.createdAt} >= (to_char(now() AT TIME ZONE 'Europe/Rome', 'YYYY-MM-DD') || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'`,
         ),
-    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, "GDO")));
+        // L'account di prova (migr. 0050) non sta nei pool: non riceve lead veri.
+    }).from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.role, "GDO"), eq(users.isTest, false)));
 
     return rows.sort((a, b) => (a.gdoCode ?? 9999) - (b.gdoCode ?? 9999));
 }
@@ -283,6 +284,8 @@ export async function spostaLeadAperti(
                 eq(users.companyId, ctx.companyId),
                 eq(users.id, aGdoId),
                 eq(users.role, "GDO"),
+                // I lead veri non vanno all'account di prova (migr. 0050).
+                eq(users.isTest, false),
             )).limit(1);
         if (!dest) return { success: false, error: "GDO di destinazione non trovato." };
         if (!dest.isActive) return { success: false, error: "Il GDO di destinazione è spento: i lead resterebbero fermi." };

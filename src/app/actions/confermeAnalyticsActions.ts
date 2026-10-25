@@ -5,6 +5,7 @@ import { leads, leadEvents, users } from "@/db/schema"
 import { eq, and, gte, lte, isNotNull, inArray } from "drizzle-orm"
 import crypto from "crypto"
 import { currentTenant, assertSalesArea, assertSingleCompany, companyScope } from '@/lib/tenancy';
+import { accountVero, leadVero, nonDaAccountDiProva, rifiutoMondoDiverso } from '@/lib/prova/sql';
 
 /**
  * Persiste la durata di una chiamata Conferme.
@@ -37,6 +38,8 @@ export async function logConfermeCallDuration(
 
         const lead = (await db.select().from(leads).where(and(eq(leads.id, leadId), companyScope(ctx, leads.companyId))))[0];
         if (!lead) return { success: false, error: "Lead not found" };
+        const rifiuto = await rifiutoMondoDiverso(lead, session.user.id);
+        if (rifiuto) return { success: false, error: rifiuto };
 
         const callsMade =
             (lead.confCall3At ? 3 : lead.confCall2At ? 2 : lead.confCall1At ? 1 : 0);
@@ -174,8 +177,10 @@ export async function getConfermeAnalytics(opts: {
     // Operatori attivi in DB (per capacità del team). Eventuale override esplicito
     // della UI vince — utile quando alcuni account CONFERME esistono ma non sono
     // davvero in turno (es. account manager con role=CONFERME).
+    // Prova (migr. 0050): l'account Conferme di prova, i suoi lead e le sue
+    // chiamate restano fuori da tutto il calcolo.
     const activeConferme = await db.select({ id: users.id }).from(users)
-        .where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true), companyScope(ctx, users.companyId)));
+        .where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true), companyScope(ctx, users.companyId), accountVero()));
     const nOperatoriAttivi = activeConferme.length;
     const nOperatoriEffettivi = (typeof opts.nOperatoriOverride === 'number'
         && opts.nOperatoriOverride >= 1 && opts.nOperatoriOverride <= 4)
@@ -188,6 +193,7 @@ export async function getConfermeAnalytics(opts: {
         appointmentDate: leads.appointmentDate,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
+        leadVero(),
         isNotNull(leads.appointmentDate),
         gte(leads.appointmentDate, periodStart),
         lte(leads.appointmentDate, now),
@@ -216,6 +222,7 @@ export async function getConfermeAnalytics(opts: {
     // 2. Tempo medio chiamata (da leadEvents.conferme_call_logged)
     const callEventConditions = [
         companyScope(ctx, leadEvents.companyId),
+        nonDaAccountDiProva(leadEvents.userId),
         eq(leadEvents.eventType, 'conferme_call_logged'),
         gte(leadEvents.timestamp, periodStart),
         lte(leadEvents.timestamp, now),
@@ -242,6 +249,7 @@ export async function getConfermeAnalytics(opts: {
     // 3. % risposta per tentativo (lead con confirmationsTimestamp ∈ P)
     const outcomeConditions = [
         companyScope(ctx, leads.companyId),
+        leadVero(),
         isNotNull(leads.confirmationsTimestamp),
         gte(leads.confirmationsTimestamp, periodStart),
         lte(leads.confirmationsTimestamp, now),
@@ -274,6 +282,7 @@ export async function getConfermeAnalytics(opts: {
     // 4. Recall: % snooze giornata + % parcheggiati altri giorni
     const recallEventConditions = [
         companyScope(ctx, leadEvents.companyId),
+        nonDaAccountDiProva(leadEvents.userId),
         gte(leadEvents.timestamp, periodStart),
         lte(leadEvents.timestamp, now),
         inArray(leadEvents.eventType, ['conferme_snooze_set', 'conferme_recall_scheduled', 'conferme_no_answer', 'conferme_outcome_set', 'conferme_call_logged']),
@@ -365,7 +374,7 @@ export async function listActiveConfermeUsers(): Promise<Array<{ id: string; nam
         id: users.id,
         name: users.name,
         displayName: users.displayName,
-    }).from(users).where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true), companyScope(ctx, users.companyId)));
+    }).from(users).where(and(eq(users.role, 'CONFERME'), eq(users.isActive, true), companyScope(ctx, users.companyId), accountVero()));
     return rows.map(r => ({ id: r.id, name: r.displayName || r.name || 'Conferme' }))
         .sort((a, b) => a.name.localeCompare(b.name, 'it'));
 }

@@ -483,6 +483,8 @@ export async function POST(req: NextRequest) {
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
                 eq(users.acAutoIntake, true),
+                // Mai all'account di prova (migr. 0050).
+                eq(users.isTest, false),
             )).orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id));
 
             if (eligible.length === 0) {

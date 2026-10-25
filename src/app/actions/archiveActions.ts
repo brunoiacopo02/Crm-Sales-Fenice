@@ -5,6 +5,7 @@ import { leads, users } from "@/db/schema";
 import { and, desc, eq, gte, lte, or, sql, getTableColumns } from "drizzle-orm";
 import { aliasedTable } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { leadDelMondoDiAccount } from "@/lib/prova/sql";
 
 export type ArchiveFilters = {
     fromDate?: string;
@@ -70,7 +71,8 @@ export async function getArchiveLeads({
     try {
         const ctx = await currentTenant();
         assertSalesArea(ctx);
-        const conditions = [eq(leads.companyId, ctx.companyId)];
+        // Prova (migr. 0050): l'archivio mostra solo i lead della parte di chi guarda.
+        const conditions = [eq(leads.companyId, ctx.companyId), leadDelMondoDiAccount(ctx.userId)];
 
         // 1. Date Range Filter — convert user dates from Rome timezone to UTC
         if (fromDate) {

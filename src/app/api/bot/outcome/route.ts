@@ -330,6 +330,8 @@ export async function POST(req: NextRequest) {
             eq(users.companyId, 'fenice'),
             eq(users.role, 'CONFERME'),
             eq(users.isActive, true),
+            // L'account Conferme di prova (migr. 0050) non riceve avvisi sui lead veri.
+            eq(users.isTest, false),
         ));
         if (confermeUsers.length > 0) {
             const now = new Date();
@@ -440,6 +442,7 @@ export async function POST(req: NextRequest) {
                 eq(users.companyId, 'fenice'),
                 eq(users.role, 'CONFERME'),
                 eq(users.isActive, true),
+                eq(users.isTest, false),
             ));
             if (confermeUsers.length > 0) {
                 const now = new Date();
@@ -566,6 +569,7 @@ export async function POST(req: NextRequest) {
                     eq(users.companyId, 'fenice'),
                     eq(users.role, 'CONFERME'),
                     eq(users.isActive, true),
+                    eq(users.isTest, false),
                 ))
                 : [];
             const recipients = [...admins, ...confermeUsers];

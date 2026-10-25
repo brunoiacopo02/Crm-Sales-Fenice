@@ -6,6 +6,7 @@ import { leads, leadEvents, users } from '@/db/schema';
 import { buildAppointmentSet } from '@/lib/marketing-webhooks/payload-builders';
 import { signPayload } from '@/lib/marketing-webhooks/signing';
 import type { MarketingWebhookEnvelope } from '@/lib/marketing-webhooks/types';
+import { leadVero } from '@/lib/prova/sql';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -64,10 +65,13 @@ export async function POST(req: Request) {
             lt(leadEvents.timestamp, cutoff),
         ));
 
-    // 2) Carica tutti i lead con appointmentDate < cutoff (per legacy senza evento)
+    // 2) Carica tutti i lead con appointmentDate < cutoff (per legacy senza evento).
+    //    Mai i lead di prova (migr. 0050): fuori da qui restano fuori anche dagli
+    //    eventi del punto 4, che passano da leadById.
     const allAppointmentLeads = await db.select()
         .from(leads)
         .where(and(
+            leadVero(),
             isNotNull(leads.appointmentDate),
             lt(leads.appointmentDate, cutoff),
         ));

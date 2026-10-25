@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { isStatsGdo, apptSetAt as canonApptSetAt } from '@/lib/kpi/canon';
 import { contaNeiKpi } from '@/lib/intakeBatch';
+import { leadVero } from '@/lib/prova/sql';
 import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils';
 import { countWorkingDaysInMonth, countWorkingDaysElapsed } from '@/lib/workingDaysUtils';
 
@@ -317,6 +318,9 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
     const monthLeads = await db.select().from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
+            // I lead di prova (migr. 0050) non contano in nessuna metrica:
+            // qui il filtro sta nel WHERE, a differenza delle infornate anomale.
+            leadVero(),
             or(sql`${leads.funnel} IS NULL`, sql`${leads.funnel} != 'BLT'`),
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).

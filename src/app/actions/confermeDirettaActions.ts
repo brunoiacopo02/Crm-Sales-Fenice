@@ -17,6 +17,7 @@ import { appSettings, leads, users } from "@/db/schema"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { conRuoloDb, haRuoloDb } from "@/lib/auth/ruoloDb"
 import { writeSetting } from "@/lib/diretta/settings"
+import { accountVero, leadDelMondoDi, leadVero } from "@/lib/prova/sql"
 import {
     CONFERME_BONUS_KEY, parseConfermeBonus, validateConfermeBonus,
     type BonusPeriodo, type BonusUnita, type ConfermeBonusConfig,
@@ -44,37 +45,47 @@ async function readConfermeBonusConfig(): Promise<ConfermeBonusConfig> {
  * (conferma, presenza, chiusura) dal `sinceMs` in poi. Restano fuori le
  * conferme del bot del lancio e quelle fatte da admin e manager: il bonus è
  * delle Conferme ("contano le chiusure di lead che avete confermato voi").
+ * Fuori anche la prova (migr. 0050): lead e account di prova non toccano i
+ * numeri di squadra né il bonus.
  * Date in millisecondi perché unstable_cache serializza in JSON.
  */
-const loadConfermeRows = unstable_cache(
-    async (companyIds: string[], sinceMs: number): Promise<ConfermeLeadRow[]> => {
-        const since = new Date(sinceMs)
-        const rows = await db.select({
-            id: leads.id,
-            userId: leads.confirmationsUserId,
-            confirmedAt: leads.confirmationsTimestamp,
-            presentedAt: leads.presentedAt,
-            outcome: leads.salespersonOutcome,
-            outcomeAt: leads.salespersonOutcomeAt,
-        }).from(leads).where(and(
-            inArray(leads.companyId, companyIds),
-            eq(leads.confirmationsOutcome, 'confermato'),
-            inArray(leads.confirmationsUserId, db.select({ id: users.id }).from(users).where(eq(users.role, 'CONFERME'))),
-            or(
-                gte(leads.confirmationsTimestamp, since),
-                gte(leads.presentedAt, since),
-                gte(leads.salespersonOutcomeAt, since),
+async function leggiConfermeRows(companyIds: string[], since: Date, prova: { userId: string } | null): Promise<ConfermeLeadRow[]> {
+    const rows = await db.select({
+        id: leads.id,
+        userId: leads.confirmationsUserId,
+        confirmedAt: leads.confirmationsTimestamp,
+        presentedAt: leads.presentedAt,
+        outcome: leads.salespersonOutcome,
+        outcomeAt: leads.salespersonOutcomeAt,
+    }).from(leads).where(and(
+        inArray(leads.companyId, companyIds),
+        eq(leads.confirmationsOutcome, 'confermato'),
+        prova
+            ? and(leadDelMondoDi(true), eq(leads.confirmationsUserId, prova.userId))
+            : and(
+                leadVero(),
+                inArray(leads.confirmationsUserId, db.select({ id: users.id }).from(users)
+                    .where(and(eq(users.role, 'CONFERME'), accountVero()))),
             ),
-        ))
-        return rows.map(r => ({
-            id: r.id,
-            userId: r.userId,
-            confirmedAt: r.confirmedAt ? r.confirmedAt.getTime() : null,
-            presentedAt: r.presentedAt ? r.presentedAt.getTime() : null,
-            chiusoAt: r.outcome === 'Chiuso' && r.outcomeAt ? r.outcomeAt.getTime() : null,
-        }))
-    },
-    ['conferme-diretta-righe'],
+        or(
+            gte(leads.confirmationsTimestamp, since),
+            gte(leads.presentedAt, since),
+            gte(leads.salespersonOutcomeAt, since),
+        ),
+    ))
+    return rows.map(r => ({
+        id: r.id,
+        userId: r.userId,
+        confirmedAt: r.confirmedAt ? r.confirmedAt.getTime() : null,
+        presentedAt: r.presentedAt ? r.presentedAt.getTime() : null,
+        chiusoAt: r.outcome === 'Chiuso' && r.outcomeAt ? r.outcomeAt.getTime() : null,
+    }))
+}
+
+const loadConfermeRows = unstable_cache(
+    async (companyIds: string[], sinceMs: number): Promise<ConfermeLeadRow[]> =>
+        leggiConfermeRows(companyIds, new Date(sinceMs), null),
+    ['conferme-diretta-righe-v2'],
     { revalidate: CACHE_SECONDI },
 )
 
@@ -98,9 +109,18 @@ export async function getConfermeDirettaStats(): Promise<ConfermeDirettaStats> {
 
     const [rows, saldoRows] = await Promise.all([
         loadConfermeRows(companyIds, bounds.since),
-        db.select({ scintille: users.scintille, piume: users.piume, role: users.role })
+        db.select({ scintille: users.scintille, piume: users.piume, role: users.role, isTest: users.isTest })
             .from(users).where(eq(users.id, ctx.userId)).limit(1),
     ])
+    const numeri = aggregateConfermeDiretta(rows, { userId: ctx.userId, bounds, cfg })
+
+    // Account di prova: la squadra resta quella vera, i numeri personali sono
+    // quelli dei suoi lead di prova (una lettura piccola, fuori cache).
+    if (saldoRows[0]?.isTest) {
+        const mie = await leggiConfermeRows(companyIds, new Date(bounds.since), { userId: ctx.userId })
+        numeri.personali = aggregateConfermeDiretta(mie, { userId: ctx.userId, bounds, cfg }).personali
+    }
+
     // Obiettivi della settimana: gli stessi conteggi che decidono le Piume
     // (src/lib/economy/awards.ts). Un errore non toglie il resto della colonna.
     const obiettiviSettimana = saldoRows[0]?.role === 'CONFERME'
@@ -111,7 +131,7 @@ export async function getConfermeDirettaStats(): Promise<ConfermeDirettaStats> {
         : null
 
     return {
-        ...aggregateConfermeDiretta(rows, { userId: ctx.userId, bounds, cfg }),
+        ...numeri,
         saldo: { scintille: saldoRows[0]?.scintille ?? 0, piume: saldoRows[0]?.piume ?? 0 },
         obiettiviSettimana,
     }
@@ -126,7 +146,7 @@ async function listConfermeAccounts(): Promise<ConfermeAccount[]> {
         displayName: users.displayName,
         firstName: users.firstName,
         isActive: users.isActive,
-    }).from(users).where(eq(users.role, 'CONFERME')).orderBy(asc(users.name))
+    }).from(users).where(and(eq(users.role, 'CONFERME'), accountVero())).orderBy(asc(users.name))
     return rows.map(r => ({
         id: r.id,
         nome: r.firstName?.trim() || r.name || r.displayName || r.id,

@@ -14,12 +14,17 @@
 // La pagina si ridisegna da sola al massimo una volta al minuto, a scheda visibile.
 //
 // L'economia della Diretta è di Fenice: Serenamente per GDO e Conferme non esiste.
+//
+// La prova (migr. 0050) resta fuori da registro, saldi, storni e persone: qui
+// si guarda l'economia vera. Le richieste del negozio dell'account di prova
+// restano in conto, come in /admin/premi, dove si annullano.
 
 import { unstable_cache } from "next/cache"
 import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { callLogs, currencyLedger, leads, rewardItems, rewardPurchases, teamChestAwards, teamChests, users } from "@/db/schema"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
+import { accountVero, nonDaAccountDiProva } from "@/lib/prova/sql"
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from "@/lib/dateUtils"
 import { personName } from "@/lib/diretta/config"
 import { leggiSquadra, type DirettaSquadra } from "@/lib/diretta/live"
@@ -141,7 +146,7 @@ async function movimenti(filtro: ReturnType<typeof and> | undefined, limite: num
     })
         .from(currencyLedger)
         .innerJoin(users, eq(users.id, currencyLedger.userId))
-        .where(and(eq(currencyLedger.companyId, FENICE), filtro))
+        .where(and(eq(currencyLedger.companyId, FENICE), accountVero(), filtro))
         .orderBy(desc(currencyLedger.createdAt), desc(currencyLedger.id))
         .limit(limite)
     return righe.map(r => ({
@@ -162,7 +167,7 @@ async function saldiPiuAlti(valuta: Valuta): Promise<SaldoCentro[]> {
         role: users.role, valore: col,
     })
         .from(users)
-        .where(gt(col, 0))
+        .where(and(gt(col, 0), accountVero()))
         .orderBy(desc(col), asc(users.name))
         .limit(5)
     return righe.map(r => ({ id: r.id, persona: personName(r), ruolo: r.role, valore: r.valore }))
@@ -179,7 +184,7 @@ const registroInCache = unstable_cache(async (inizioSettimana: string): Promise<
             negativi: sql<number>`coalesce(sum(${currencyLedger.amount}) filter (where ${currencyLedger.amount} < 0), 0)::int`,
         })
             .from(currencyLedger)
-            .where(and(eq(currencyLedger.companyId, FENICE), gte(currencyLedger.createdAt, da)))
+            .where(and(eq(currencyLedger.companyId, FENICE), gte(currencyLedger.createdAt, da), nonDaAccountDiProva(currencyLedger.userId)))
             .groupBy(currencyLedger.currency, currencyLedger.reason, STORNO),
         movimenti(undefined, 10),
         saldiPiuAlti('S'),
@@ -229,7 +234,7 @@ const controlliInCache = unstable_cache(async (inizioGiorno: string, fineGiorno:
             totale: sql<number>`coalesce(sum(${currencyLedger.amount}), 0)::int`,
         })
             .from(currencyLedger)
-            .where(and(eq(currencyLedger.companyId, FENICE), gte(currencyLedger.createdAt, settimana), STORNO))
+            .where(and(eq(currencyLedger.companyId, FENICE), gte(currencyLedger.createdAt, settimana), STORNO, nonDaAccountDiProva(currencyLedger.userId)))
             .groupBy(currencyLedger.currency),
         movimenti(and(gte(currencyLedger.createdAt, settimana), STORNO), 6),
     ])
@@ -366,7 +371,7 @@ export async function getRegistroDettaglio(filtri: { persona?: string | null; va
             role: users.role, isActive: users.isActive, scintille: users.scintille, piume: users.piume,
         })
             .from(users)
-            .where(and(inArray(users.role, ['GDO', 'CONFERME']), eq(users.isBot, false))),
+            .where(and(inArray(users.role, ['GDO', 'CONFERME']), eq(users.isBot, false), accountVero())),
     ])
     const persone = utenti
         .map(u => ({ id: u.id, persona: personName(u), ruolo: u.role, isActive: u.isActive, scintille: u.scintille, piume: u.piume }))

@@ -201,6 +201,8 @@ export async function getGdoUsersForTrading(currentUserId: string) {
                 eq(users.companyId, ctx.companyId),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
+                // L'account di prova (migr. 0050) non scambia con i colleghi.
+                eq(users.isTest, false),
                 ne(users.id, currentUserId),
             ));
     } catch (error) {

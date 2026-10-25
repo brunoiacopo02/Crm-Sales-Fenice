@@ -1084,6 +1084,9 @@ export async function POST(req: NextRequest) {
                 eq(users.companyId, FENICE_COMPANY),
                 eq(users.role, 'GDO'),
                 eq(users.isActive, true),
+                // L'account di prova (migr. 0050) non riceve mai lead veri,
+                // nemmeno con un flag acceso per sbaglio da /gestione.
+                eq(users.isTest, false),
             );
 
             /**

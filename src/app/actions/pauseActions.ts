@@ -7,6 +7,7 @@ import crypto from "crypto"
 import { BREAK_RULES, getLocalDateRome } from "@/lib/pauseUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { nomeVeroOppure } from '@/lib/diretta/nomeSql';
+import { nonDaAccountDiProva } from '@/lib/prova/sql';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -233,7 +234,9 @@ export async function getManagerPauseReport(dateLocal?: string) {
         .leftJoin(users, eq(breakSessions.gdoUserId, users.id))
         .where(and(
             eq(breakSessions.companyId, ctx.companyId),
-            eq(breakSessions.dateLocal, targetDate)
+            eq(breakSessions.dateLocal, targetDate),
+            // Le pause dell'account di prova (migr. 0050) non sono del turno vero.
+            nonDaAccountDiProva(breakSessions.gdoUserId),
         ))
         .orderBy(desc(breakSessions.startTime))
 
@@ -350,6 +353,7 @@ async function getAggregateReport(dateFrom: string, dateTo: string, companyId: s
             eq(breakSessions.companyId, companyId),
             gte(breakSessions.dateLocal, dateFrom),
             lte(breakSessions.dateLocal, dateTo),
+            nonDaAccountDiProva(breakSessions.gdoUserId),
         ))
 
     const now = new Date()

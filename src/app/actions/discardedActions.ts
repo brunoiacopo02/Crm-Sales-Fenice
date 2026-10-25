@@ -4,6 +4,7 @@ import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
 import { eq, isNotNull, and, inArray } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { leadVero } from "@/lib/prova/sql"
 
 export type DiscardedLeadPayload = {
     id: string
@@ -22,6 +23,8 @@ export async function getDiscardedLeadsForMarketing() {
     const rejectedLeads = await db.select().from(leads).where(
             and(
                 eq(leads.companyId, ctx.companyId),
+                // I lead di prova (migr. 0050) non vanno al marketing.
+                leadVero(),
                 eq(leads.status, 'REJECTED'),
                 isNotNull(leads.email)
             )

@@ -141,7 +141,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     const [gdosRaw, logsRaw, appointments, closedLeads, assignedLeadsRaw, cplEur] = await Promise.all([
         db.select({
             id: users.id, name: users.name, displayName: users.displayName, firstName: users.firstName,
-            role: users.role, isActive: users.isActive, isBot: users.isBot,
+            role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
         }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId))),
         db.select({
             id: callLogs.id,
@@ -199,8 +199,9 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         db.select({
             assignedToId: leads.assignedToId,
             funnel: leads.funnel,
-            // Serve a contaNeiKpi() nel ciclo di conteggio qui sotto.
+            // Servono a contaNeiKpi() nel ciclo di conteggio qui sotto.
             intakeBatch: leads.intakeBatch,
+            isTest: leads.isTest,
         }).from(leads)
             // Lead dei pool /import (launchBucket) non ancora assegnati =
             // magazzino: contano solo dall'assegnazione (PO 2026-07-20).
@@ -217,8 +218,9 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     ])
 
     // Roster canonico (src/lib/kpi/canon.ts): niente bot fissatore — le sue
-    // ore lavorate sono finte e falsavano costo/contratto — e niente GDO
-    // disattivati, che comparivano come righe tutte a zero.
+    // ore lavorate sono finte e falsavano costo/contratto — niente GDO
+    // disattivati, che comparivano come righe tutte a zero, e niente account
+    // di prova. Ogni numero qui sotto si attribuisce solo a chi è nel roster.
     const gdos = gdosRaw.filter(isRealGdo)
 
     const gdoDataMap = new Map<string, any>()

@@ -8,7 +8,7 @@ import {
 
 function gdo(gdoCode: number | null, p: Partial<GdoInstradabile> = {}): GdoInstradabile {
     return {
-        id: `id-${gdoCode ?? 'x'}`, gdoCode, role: 'GDO', isActive: true, isBot: false,
+        id: `id-${gdoCode ?? 'x'}`, gdoCode, role: 'GDO', isActive: true, isBot: false, isTest: false,
         firstName: gdoCode ? `Nome${gdoCode}` : null,
         acAutoIntake: false, botReturnIntake: false, dailyFreshCap: null,
         ...p,
@@ -33,6 +33,14 @@ test('vergini: li riceve il GDO della squadra coi freschi accesi, mai il bot', (
     assert.equal(riceveVergini(gdo(119, { acAutoIntake: true })), true)
     assert.equal(riceveVergini(gdo(201, { isBot: true, firstName: null, acAutoIntake: true })), false)
     assert.equal(riceveVergini(gdo(108, { firstName: null, acAutoIntake: true })), false)
+})
+
+test('account di prova: mai lead veri, nemmeno con tutti i flag accesi, e il piano del go-live non lo tocca', () => {
+    const prova = gdo(990, { isTest: true, firstName: 'Prova GDO', acAutoIntake: true, botReturnIntake: true })
+    assert.equal(riceveVergini(prova), false)
+    assert.equal(riceveRidati(prova), false)
+    const piano = pianoInstradamento([gdo(990, { isTest: true, firstName: 'Prova GDO' })], SCELTE_PO_25_10)
+    assert.deepEqual(piano, [])
 })
 
 // ------------------------------------------------------------- ripiego a tetto pieno

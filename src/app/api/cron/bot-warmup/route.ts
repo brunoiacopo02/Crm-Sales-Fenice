@@ -120,6 +120,8 @@ export async function eseguiRiscaldamento(opzioni: {
         )`,
     }).from(leads).where(and(
         eq(leads.companyId, FENICE),
+        // Un lead di prova (migr. 0050) non passa mai al bot.
+        eq(leads.isTest, false),
         eq(leads.assignedToId, sorgente.id),
         eq(leads.status, 'NEW'),
         eq(leads.callCount, 0),

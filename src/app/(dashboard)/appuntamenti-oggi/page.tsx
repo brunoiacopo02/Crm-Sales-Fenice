@@ -5,6 +5,7 @@ import { leads, users } from "@/db/schema"
 import { eq, gte, lt, and, isNotNull, asc } from "drizzle-orm"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
+import { leadVero } from "@/lib/prova/sql"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
 import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
 import { getLaunchPipelineStats } from "@/lib/launchPipelineStats"
@@ -53,6 +54,8 @@ export default async function AppuntamentiOggiPage() {
         .leftJoin(users, eq(leads.assignedToId, users.id))
         .where(
             and(
+                // Gli appuntamenti di prova (migr. 0050) non sono della giornata vera.
+                leadVero(),
                 isNotNull(leads.appointmentCreatedAt),
                 gte(leads.appointmentCreatedAt, todayStart),
                 lt(leads.appointmentCreatedAt, todayEnd)

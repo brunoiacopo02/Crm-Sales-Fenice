@@ -108,6 +108,8 @@ export async function GET(req: Request) {
         // Il bot fissatore è un account GDO a tutti gli effetti, ma i suoi lead
         // li gestisce il suo flusso: non è né una sorgente né un destinatario.
         eq(users.isBot, false),
+        // Nemmeno l'account di prova (migr. 0050).
+        eq(users.isTest, false),
     ));
 
     const sorgenti = idSorgenti(gdos);
@@ -123,6 +125,7 @@ export async function GET(req: Request) {
         presentedAt: leads.presentedAt,
     }).from(leads).where(and(
         eq(leads.companyId, FENICE),
+        eq(leads.isTest, false),
         inArray(leads.status, ['NEW', 'IN_PROGRESS']),
         // Doppia guardia con `bloccato()` nel modulo puro: un appuntamento
         // fissato o una presenza registrata non si spostano mai, e non basta

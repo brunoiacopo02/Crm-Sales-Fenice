@@ -12,6 +12,7 @@ import { createClient } from "@/utils/supabase/server";
 import { isConfermeTl } from "@/lib/confermeTl";
 import { currentTenant, companyScope, type TenantContext } from "@/lib/tenancy";
 import { dayBoundsRome } from "@/lib/dateUtils";
+import { leadVero } from "@/lib/prova/sql";
 // Funnel da escludere dalla dashboard: sono artifici tecnici non veri
 // funnel business. Il confronto è sempre case-insensitive via UPPER().
 const UI_EXCLUDED_FUNNELS = new Set(['DATABASE', 'TEST', 'SCONOSCIUTO']);
@@ -51,7 +52,7 @@ export async function getAvailableFunnels(): Promise<string[]> {
     const { ctx } = await requireManager();
     const rows = await db.selectDistinct({
         funnel: sql<string>`UPPER(${leads.funnel})`.as('funnel'),
-    }).from(leads).where(and(isNotNull(leads.funnel), companyScope(ctx, leads.companyId)));
+    }).from(leads).where(and(isNotNull(leads.funnel), companyScope(ctx, leads.companyId), leadVero()));
     const unique = new Set<string>();
     for (const r of rows) {
         const f = (r.funnel || '').trim();
@@ -102,6 +103,8 @@ async function aggregateSingle(
 
     const conds = [...baseConds];
     conds.push(companyScope(ctx, leads.companyId));
+    // I sondaggi dei lead di prova (migr. 0050) non sono qualità vera.
+    conds.push(leadVero());
     // Always exclude lead with funnel='database'
     conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
@@ -139,6 +142,8 @@ async function aggregateArray(
 
     const conds = [...baseConds];
     conds.push(companyScope(ctx, leads.companyId));
+    // I sondaggi dei lead di prova (migr. 0050) non sono qualità vera.
+    conds.push(leadVero());
     conds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -197,6 +202,7 @@ export async function getGdoAggregate(filters: QualitaLeadFilters): Promise<GdoA
     const baseConds = buildCommonConditions(filters, gdoLeadSurveys.createdAt);
     baseConds.push(sql`${gdoLeadSurveys.invalidatedBy} IS NULL`);
     baseConds.push(companyScope(ctx, leads.companyId));
+    baseConds.push(leadVero());
     baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -232,6 +238,7 @@ export async function getConfermeAggregate(filters: QualitaLeadFilters): Promise
     const baseConds = buildCommonConditions(filters, confermeLeadSurveys.createdAt);
     baseConds.push(sql`${confermeLeadSurveys.invalidatedBy} IS NULL`);
     baseConds.push(companyScope(ctx, leads.companyId));
+    baseConds.push(leadVero());
     baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());
@@ -276,6 +283,7 @@ export async function getSalesAggregate(filters: QualitaLeadFilters): Promise<Sa
     const baseConds = buildCommonConditions(filters, salesLeadSurveys.createdAt);
     baseConds.push(sql`${salesLeadSurveys.invalidatedBy} IS NULL`);
     baseConds.push(companyScope(ctx, leads.companyId));
+    baseConds.push(leadVero());
     baseConds.push(sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('DATABASE', 'TEST', 'SCONOSCIUTO')`);
     if (filters.funnels.length > 0) {
         const upper = filters.funnels.map((f) => f.toUpperCase());

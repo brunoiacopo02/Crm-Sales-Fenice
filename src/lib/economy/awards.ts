@@ -15,7 +15,9 @@ import { and, desc, eq, gte, inArray, isNotNull, like, lt, or } from 'drizzle-or
 import { db } from '@/db'
 import { appSettings, callLogs, currencyLedger, leadEvents, leads, teamChestAwards, teamChests, users } from '@/db/schema'
 import { dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils'
-import { isTeamMember, peakWindow, stepReached, type GamificationTargets } from '@/lib/diretta/config'
+import { guadagnaPremiPersonali, peakWindow, stepReached, type GamificationTargets } from '@/lib/diretta/config'
+import { stessoMondo } from '@/lib/prova/regole'
+import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import { readGamificationTargets } from '@/lib/diretta/settings'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati, leggiMembriSquadra } from '@/lib/diretta/fissatiDb'
@@ -76,9 +78,10 @@ export async function readEconomyRules(): Promise<EconomyRules> {
  * tetto del giorno, più i bonus degli scalini personali (8 e 10 fissati).
  *
  * Restituisce null se `userId` non è un GDO della squadra (bot, 108, admin,
- * manager): per loro niente premio e niente forzieri. Il callLog dell'esito e
- * lo stato APPOINTMENT del lead devono essere già scritti, perché i fissati del
- * giorno si contano da lì (fissati validi, src/lib/diretta/fissati.ts).
+ * manager): per loro niente premio e niente forzieri. Il GDO di prova guadagna
+ * le sue Scintille, solo sui lead di prova. Il callLog dell'esito e lo stato
+ * APPOINTMENT del lead devono essere già scritti, perché i fissati del giorno
+ * si contano da lì (fissati validi, src/lib/diretta/fissati.ts).
  */
 export async function awardFissato(input: { userId: string; leadId: string; companyId: string; at: Date }): Promise<FissatoReward | null> {
     const { userId, leadId, companyId, at } = input
@@ -91,10 +94,14 @@ export async function awardFissato(input: { userId: string; leadId: string; comp
         // persona passano uno alla volta, così il tetto del giorno non si sfora.
         // 'no key update' non blocca le chiavi esterne del registro.
         const [u] = await tx.select({
-            id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot,
+            id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
             firstName: users.firstName, scintille: users.scintille,
         }).from(users).where(eq(users.id, userId)).for('no key update')
-        if (!u || !isTeamMember(u)) return null
+        if (!u || !guadagnaPremiPersonali(u)) return null
+        // Prova con prova, vero con vero (src/lib/prova): un lead di prova non
+        // paga un GDO vero, e un lead vero non paga l'account di prova.
+        const [lead] = await tx.select({ isTest: leads.isTest }).from(leads).where(eq(leads.id, leadId)).limit(1)
+        if (!lead || !stessoMondo(lead, u)) return null
 
         const righeLead = await tx.select({
             idemKey: currencyLedger.idemKey, amount: currencyLedger.amount, createdAt: currencyLedger.createdAt,
@@ -191,9 +198,9 @@ export async function riallineaScaliniDopoUscita(leadId: string, companyId: stri
             // Stesso lock di awardFissato: un fissato e un'uscita simultanei
             // della stessa persona non si incrociano sugli scalini.
             const [u] = await tx.select({
-                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, firstName: users.firstName,
+                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest, firstName: users.firstName,
             }).from(users).where(eq(users.id, userId)).for('no key update')
-            if (!u || !isTeamMember(u)) return
+            if (!u || !guadagnaPremiPersonali(u)) return
             const righe = await tx.select({ idemKey: currencyLedger.idemKey, amount: currencyLedger.amount })
                 .from(currencyLedger).where(and(
                     eq(currencyLedger.userId, userId),
@@ -286,6 +293,10 @@ const coppia = (userId: string, lunedi: string) => `${userId}|${lunedi}`
  *    Le conferme pagate al giorno hanno un tetto; la presenza scritta da chi ha
  *    confermato non paga.
  *
+ * Prova con prova (src/lib/prova): gli accrediti di 1. e 2. richiedono che
+ * lead e destinatario stiano dalla stessa parte, e per le Piume del GDO anche
+ * chi scrive l'esito; gli storni valgono comunque.
+ *
  * Restituisce le settimane degli obiettivi delle Conferme da riallineare.
  */
 async function sincronizzaLead(leadId: string, actorUserId: string | null, rules: EconomyRules): Promise<DaRiallineare> {
@@ -298,6 +309,7 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
         const [lead] = await tx.select({
             id: leads.id,
             companyId: leads.companyId,
+            isTest: leads.isTest,
             assignedToId: leads.assignedToId,
             confirmationsOutcome: leads.confirmationsOutcome,
             confirmationsUserId: leads.confirmationsUserId,
@@ -318,7 +330,7 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
         const ids = [...new Set([lead.confirmationsUserId, lead.assignedToId, actorUserId, titolare].filter((x): x is string => !!x))]
         const persone = ids.length
             ? await tx.select({
-                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, firstName: users.firstName,
+                id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest, firstName: users.firstName,
             }).from(users).where(inArray(users.id, ids))
             : []
         const persona = (id: string | null) => (id ? persone.find(p => p.id === id) : undefined)
@@ -333,7 +345,9 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             salespersonOutcome: lead.salespersonOutcome,
         }, inizio)
         const destinatario = persona(lead.assignedToId)
-        const accreditabile = puoAccreditarePiume(persona(actorUserId), destinatario)
+        const autore = persona(actorUserId)
+        const accreditabile = puoAccreditarePiume(autore, destinatario)
+            && !!autore && !!destinatario && stessoMondo(lead, autore) && stessoMondo(lead, destinatario)
         const pianoGdo = pianoStadi(righe, PREFISSO_STADI.gdo, leadId, stadio, importiGdo(rules))
         for (const k of pianoGdo.storna) await reverseOnce(k, `storno ${causaleGradinoGdo(Number(k.split(':')[3]))}: il lead è sceso di stadio`, tx)
         if (accreditabile && destinatario) {
@@ -368,7 +382,7 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
         }, rules.conferme.scintille.inTempoMinuti)
         const pianoConf = pianoStadi(righe, PREFISSO_STADI.conferme, leadId, stadioConf, importiConferme(rules, inTempo))
         for (const k of pianoConf.storna) await reverseOnce(k, 'storno Scintille conferma: il lead è sceso di stadio', tx)
-        if (titolare && isConfermePersona(chiConferma)) {
+        if (titolare && chiConferma && isConfermePersona(chiConferma) && stessoMondo(lead, chiConferma)) {
             for (const a of pianoConf.accredita) {
                 if (a.gradino === 1) {
                     // Tetto delle conferme pagate al giorno: lock sulla persona,
@@ -510,8 +524,10 @@ export async function riallineaObiettiviConferme(userId: string, lunedi: string,
 /**
  * Lead confermati che possono contare per gli obiettivi della persona nella
  * settimana: confermati da lei o tenuti da lei sul registro, con presenza o
- * chiusura nella settimana. Il filtro vero (titolare, conferma prima
- * dell'appuntamento, esito scritto da altri) lo fa contaObiettivi.
+ * chiusura nella settimana, e della sua stessa parte (l'account di prova
+ * conta solo i lead di prova, gli altri solo quelli veri). Il filtro vero
+ * (titolare, conferma prima dell'appuntamento, esito scritto da altri) lo fa
+ * contaObiettivi.
  */
 async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end: Date): Promise<LeadObiettivo[]> {
     const tenutiDaLei = tx.select({ id: currencyLedger.leadId }).from(currencyLedger).where(and(
@@ -530,6 +546,7 @@ async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end:
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
     }).from(leads).where(and(
         eq(leads.confirmationsOutcome, 'confermato'),
+        leadDelMondoDiAccount(userId),
         or(eq(leads.confirmationsUserId, userId), inArray(leads.id, tenutiDaLei)),
         or(
             and(gte(leads.presentedAt, start), lt(leads.presentedAt, end)),

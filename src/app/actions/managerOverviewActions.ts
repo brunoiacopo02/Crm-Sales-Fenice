@@ -17,6 +17,7 @@ import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils";
 import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
+import { accountVero, leadVero } from "@/lib/prova/sql";
 
 // Target espliciti richiesti dal management (Correzioni CRM 2026-06-11).
 // TARGET_APP_PER_GDO_DAY (soglia giudizio manager = 10) ora importata da canon.
@@ -80,7 +81,7 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         // isBot=false: il bot fissatore non è un GDO reale (decisione PO 2026-07-05).
         const gdos = await db.select({ id: users.id, name: users.name, displayName: users.displayName, firstName: users.firstName })
             .from(users)
-            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false)));
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), eq(users.statsActive, true), eq(users.isBot, false), accountVero()));
         const nGdo = gdos.length;
         // Nome vero (firstName) prima del codice "GDO 1xx" (PO 25/10/2026).
         const gdoName = new Map(gdos.map(g => [g.id, g.firstName?.trim() || g.name || g.displayName || g.id]));
@@ -96,6 +97,8 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                // Lead di prova (migr. 0050) fuori da ogni numero di questa pagina.
+                leadVero(),
                 isNotNull(leads.appointmentDate),
                 or(
                     and(isNotNull(leads.appointmentCreatedAt), gte(leads.appointmentCreatedAt, queryStart), lt(leads.appointmentCreatedAt, monthEnd)),
@@ -131,6 +134,7 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 eq(leads.salespersonOutcome, 'Chiuso'),
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, queryStart),
@@ -199,6 +203,7 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadVero(),
                 isNull(leads.assignedToId),
                 inArray(leads.status, ['NEW', 'IN_PROGRESS']),
             ));
@@ -328,7 +333,8 @@ export async function getGdoStatsRoster(): Promise<GdoStatsRosterResult> {
             statsActive: users.statsActive,
         })
             .from(users)
-            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true)));
+            // L'account di prova (migr. 0050) non entra mai nelle statistiche.
+            .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'), eq(users.isActive, true), accountVero()));
         const roster = rows
             .map(r => ({ id: r.id, gdoCode: r.gdoCode, name: r.firstName?.trim() || r.name || r.displayName || r.id, statsActive: r.statsActive }))
             .sort((a, b) => (a.gdoCode ?? 9999) - (b.gdoCode ?? 9999));

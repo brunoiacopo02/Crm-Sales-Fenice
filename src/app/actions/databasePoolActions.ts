@@ -465,7 +465,8 @@ export async function assignFromDatabasePool(input: { bucket: string; count: num
         eq(users.companyId, ctx.companyId),
         inArray(users.id, input.gdoIds),
     )))
-        .filter((u: any) => u.role === 'GDO' && u.isActive === true)
+        // L'account di prova (migr. 0050) non riceve lead veri.
+        .filter((u: any) => u.role === 'GDO' && u.isActive === true && u.isTest !== true)
     if (selectedGdos.length === 0) {
         report.errors.push("Nessuno dei GDO selezionati è attivo.")
         return report

@@ -98,8 +98,9 @@ function whenLabel(at: Date): string {
  */
 export async function notifyConfermeLancio(lead: { id: string; name: string }, at: Date, titolo: string): Promise<void> {
     try {
+        // L'account Conferme di prova (migr. 0050) non riceve avvisi sui lead veri.
         const conferme = await db.select({ id: users.id }).from(users).where(and(
-            eq(users.companyId, FENICE), eq(users.role, 'CONFERME'), eq(users.isActive, true),
+            eq(users.companyId, FENICE), eq(users.role, 'CONFERME'), eq(users.isActive, true), eq(users.isTest, false),
         ))
         if (conferme.length === 0) return
         const now = new Date()

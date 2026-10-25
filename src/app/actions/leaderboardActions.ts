@@ -8,6 +8,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isRealGdo } from "@/lib/kpi/canon"
 import { leaderboardPeriodBounds } from "@/lib/kpi/periodBounds"
 import { dayBoundsRome } from "@/lib/dateUtils"
+import { accountVero } from "@/lib/prova/sql"
 
 export type LeaderboardPeriod = 'today' | 'week' | 'month'
 export type LeaderboardMetric = 'appointments' | 'calls' | 'xp' | 'streak'
@@ -322,8 +323,9 @@ export async function getConfermeLeaderboard(period: LeaderboardPeriod) {
     // I GDO vedono solo la classifica GDO.
     if (ctx.role === 'GDO') throw new Error('Forbidden: classifica conferme non visibile ai GDO')
 
+    // L'account Conferme di prova (migr. 0050) non entra in classifica.
     const allConferme = await db.select().from(users)
-        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'CONFERME')))
+        .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'CONFERME'), accountVero()))
     const allSkins = await db.select().from(shopItems)
         .where(eq(shopItems.companyId, ctx.companyId))
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))

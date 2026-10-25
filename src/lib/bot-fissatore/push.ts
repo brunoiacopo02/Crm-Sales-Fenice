@@ -17,10 +17,13 @@ import {
     TIMEOUT_RETRY_WAIT_MS,
 } from './retryAfter';
 import { prossimoInvio } from './pacing';
+import { leadDiProva } from '@/lib/prova/sql';
 
 /** Esito del tentativo di push, persistito su leadEvents.metadata per audit dal DB. */
 type PushResult =
     | { result: 'skipped_disabled' }
+    /** Lead di prova (migr. 0050): al bot non si manda mai. */
+    | { result: 'skipped_prova' }
     | { result: 'missing_env' }
     | { result: 'sent'; status: number; urlHost?: string; tentativi?: number }
     /** Il fornitore lo aveva gia': risposta a un nostro ritento. Ne' nuovo ne' scarto. */
@@ -192,6 +195,15 @@ export async function pushLeadsToBotPaced(
 export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResult> {
     if (process.env.BOT_INTAKE_ENABLED !== 'true') {
         const meta: PushResult = { result: 'skipped_disabled' };
+        await auditPush(payload, meta);
+        return meta;
+    }
+
+    // Un lead di prova non arriva mai al bot, da qualunque percorso passi
+    // (webhook, lotti, admin, riscaldamento). Una lettura per chiave primaria;
+    // se fallisce si prosegue come prima.
+    if (await leadDiProva(payload.leadId).catch(() => false)) {
+        const meta: PushResult = { result: 'skipped_prova' };
         await auditPush(payload, meta);
         return meta;
     }

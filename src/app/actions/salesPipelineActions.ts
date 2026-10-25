@@ -505,6 +505,9 @@ export async function assignBotReturnsToSalesPipeline(
             eq(users.role, 'GDO'),
             eq(users.isActive, true),
             eq(users.isBot, false),
+            // Prova (migr. 0050): né l'account di prova né i suoi lead.
+            eq(users.isTest, false),
+            eq(leads.isTest, false),
             eq(leads.callCount, 0),
             ne(leads.status, 'REJECTED'),
             ne(leads.status, 'APPOINTMENT'),

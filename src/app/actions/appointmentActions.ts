@@ -15,6 +15,7 @@ import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
 import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 import { reverseFissato, riallineaScaliniDopoUscita, syncLeadPiume } from "@/lib/economy/awards";
+import { leadDelMondoDiAccount } from "@/lib/prova/sql";
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -29,7 +30,9 @@ export async function getAppointments() {
 
     const conditions = [
         eq(leads.companyId, ctx.companyId),
-        eq(leads.status, 'APPOINTMENT')
+        eq(leads.status, 'APPOINTMENT'),
+        // Prova (migr. 0050): ognuno vede gli appuntamenti della sua parte.
+        leadDelMondoDiAccount(userId),
     ]
     if (isGdo) conditions.push(eq(leads.assignedToId, userId))
 

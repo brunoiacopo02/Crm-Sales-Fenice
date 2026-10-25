@@ -107,9 +107,23 @@ export function stepReached(value: number, steps: [number, number]): 0 | 1 | 2 {
     return 0
 }
 
-/** Membro della squadra: GDO umano attivo con un nome vero. 108 (IA vocale) e 201 (bot) non hanno firstName. */
-export function isTeamMember(u: { role: string; isActive: boolean; isBot?: boolean | null; firstName: string | null }): boolean {
-    return u.role === 'GDO' && u.isActive && !u.isBot && !!u.firstName?.trim()
+/**
+ * Membro della squadra: GDO umano attivo con un nome vero. 108 (IA vocale) e
+ * 201 (bot) non hanno firstName; l'account di prova (isTest, migr. 0050) ha
+ * un nome ma resta fuori. `isTest` è obbligatorio di proposito: chi legge la
+ * riga senza la colonna non deve poter far entrare la prova in squadra.
+ */
+export function isTeamMember(u: { role: string; isActive: boolean; isBot?: boolean | null; isTest: boolean | null; firstName: string | null }): boolean {
+    return u.role === 'GDO' && u.isActive && !u.isBot && !u.isTest && !!u.firstName?.trim()
+}
+
+/**
+ * Chi accumula Scintille e Piume personali: la squadra e il GDO di prova, che
+ * ha un registro suo (fissati, scalini, Piume dei suoi lead di prova) ma resta
+ * fuori da squadra, classifica, cronaca e forzieri.
+ */
+export function guadagnaPremiPersonali(u: { role: string; isActive: boolean; isBot?: boolean | null; isTest: boolean | null; firstName: string | null }): boolean {
+    return isTeamMember(u) || (u.role === 'GDO' && u.isActive && !u.isBot && u.isTest === true)
 }
 
 /** Nome da mostrare: il nome vero se c'è, altrimenti quello storico. */

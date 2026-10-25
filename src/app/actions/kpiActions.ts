@@ -7,6 +7,7 @@ import { eq, gte, lt, and, sql, isNotNull } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { dayBoundsRome } from '@/lib/dateUtils';
 import { isAnsweredLog } from '@/lib/kpi/canon';
+import { leadVero, nonDaAccountDiProva } from '@/lib/prova/sql';
 export type KpiData = {
     totalCalls: number
     totalAnswers: number
@@ -40,6 +41,8 @@ export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
     ]
 
     if (isGdo) conditions.push(eq(callLogs.userId, userId))
+    // Vista di squadra: fuori le chiamate degli account di prova (migr. 0050).
+    else conditions.push(nonDaAccountDiProva(callLogs.userId))
 
     // Fetch all logs for the given day
     const logs = await db.select()
@@ -67,6 +70,7 @@ export async function getDailyKpi(dateStr?: string): Promise<KpiData> {
         sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endOfDay}`,
     ]
     if (isGdo) appointmentConditions.push(eq(leads.assignedToId, userId))
+    else appointmentConditions.push(leadVero())
     const appointmentLeads = await db.select({ id: leads.id })
         .from(leads)
         .where(and(...appointmentConditions))

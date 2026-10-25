@@ -21,6 +21,7 @@ import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { LANCIO_BUCKET } from "@/lib/lancio/intake"
+import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 
 // Controlla se il GDO ha un tasso di fissaggio < 14% negli ultimi 7 giorni
 async function checkFourthCallEligibility(gdoId: string, companyId: string): Promise<boolean> {
@@ -106,6 +107,9 @@ export async function getPipelineLeads() {
     // 1. Pipeline Calls (1, 2, 3) — tenant-scoped
     const pipelineBaseConditions = [
         eq(leads.companyId, ctx.companyId),
+        // Prova (migr. 0050): l'account di prova vede solo i suoi lead di
+        // prova, tutti gli altri (anche admin e manager) solo quelli veri.
+        leadDelMondoDiAccount(userId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNull(leads.recallDate),
@@ -150,6 +154,7 @@ export async function getPipelineLeads() {
     // 2. Recalls (In arrivo & Scaduti) — tenant-scoped
     const recallBaseConditions = [
         eq(leads.companyId, ctx.companyId),
+        leadDelMondoDiAccount(userId),
         ne(leads.status, 'REJECTED'),
         ne(leads.status, 'APPOINTMENT'),
         isNotNull(leads.recallDate)
@@ -579,6 +584,12 @@ export async function updateLeadOutcome(
         eq(leads.id, leadId),
     )))[0]
     if (!lead) throw new Error("Lead non trovato")
+
+    // Prova (migr. 0050): un account di prova esita solo lead di prova, e
+    // nessun altro (GDO, bot, admin) esita un lead di prova. Conta chi è in
+    // sessione, non lo `userId` passato dal client.
+    const rifiuto = await rifiutoMondoDiverso(lead, serviceCtx ? serviceCtx.actorUserId : sessionUserId)
+    if (rifiuto) return { success: false, error: rifiuto }
 
     // Optimistic locking check
     if (currentVersion !== undefined && lead.version !== currentVersion) {
