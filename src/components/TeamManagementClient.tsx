@@ -251,9 +251,15 @@ export function TeamManagementClient() {
                                             ) : (
                                                 <div className="flex items-center gap-2 font-medium text-ash-900">
                                                     <div className="h-6 w-6 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs font-bold">
-                                                        {user.displayName?.charAt(0) || 'U'}
+                                                        {(user.firstName || user.displayName)?.charAt(0) || 'U'}
                                                     </div>
-                                                    {user.displayName || user.name}
+                                                    {/* Nome vero prima del codice (PO 25/10/2026): il codice resta per il login. */}
+                                                    {user.firstName?.trim() ? (
+                                                        <div className="flex flex-col leading-tight">
+                                                            <div>{user.firstName}</div>
+                                                            <div className="text-xs font-normal text-ash-500">{user.displayName || user.name}</div>
+                                                        </div>
+                                                    ) : (user.displayName || user.name)}
                                                 </div>
                                             )}
                                         </td>

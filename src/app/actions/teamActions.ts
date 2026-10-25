@@ -18,6 +18,8 @@ export async function getTeamAccounts() {
         email: users.email,
         gdoCode: users.gdoCode,
         displayName: users.displayName,
+        // Nome vero, mostrato a manager e admin accanto al codice (PO 25/10/2026).
+        firstName: users.firstName,
         avatarUrl: users.avatarUrl,
         isActive: users.isActive,
         dailyApptTarget: users.dailyApptTarget,

@@ -7,6 +7,7 @@ import { SafeWrapper } from "@/components/SafeWrapper"
 import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import dynamic from "next/dynamic"
 import { getGdoUsersForTrading } from "@/app/actions/tradingActions"
+import { readDirettaFlags } from "@/lib/diretta/settings"
 
 const DuelCreateModal = dynamic(() => import("@/components/DuelCreateModal").then(m => ({ default: m.DuelCreateModal })))
 const TeamDuelsMonitor = dynamic(() => import("@/components/TeamDuelsMonitor").then(m => ({ default: m.TeamDuelsMonitor })))
@@ -25,7 +26,12 @@ export default async function TeamPage() {
         redirect("/marketing-analytics")
     }
 
-    const gdoUsers = await getGdoUsersForTrading(session.user.id);
+    // Con la Diretta accesa per i GDO la vecchia gamification non c'è più
+    // (duelli, sprint, obiettivi comunitari in Fenice Coin): i loro pannelli
+    // non si mostrano. Spenta, la pagina resta quella di sempre. Si legge
+    // l'interruttore dei GDO, non la veste di questa pagina (che è dell'admin).
+    const vecchiaGamification = !(await readDirettaFlags()).GDO
+    const gdoUsers = vecchiaGamification ? await getGdoUsersForTrading(session.user.id) : [];
 
     return (
         <div className="space-y-6">
@@ -38,9 +44,11 @@ export default async function TeamPage() {
                         Amministrazione account operatori e modifica profili (Display Name, Avatar, Status).
                     </p>
                 </div>
-                <SafeWrapper>
-                    <DuelCreateModal gdoUsers={gdoUsers} creatorRole={session.user.role} />
-                </SafeWrapper>
+                {vecchiaGamification && (
+                    <SafeWrapper>
+                        <DuelCreateModal gdoUsers={gdoUsers} creatorRole={session.user.role} />
+                    </SafeWrapper>
+                )}
             </div>
 
             {/* Citazione del giorno e consiglio di vendita (PO 25/10/2026), con il link alle approvazioni */}
@@ -58,11 +66,15 @@ export default async function TeamPage() {
                 </a>
             </div>
 
-            <ManagerSprintCard managerId={session.user.id} />
+            {vecchiaGamification && (
+                <>
+                    <ManagerSprintCard managerId={session.user.id} />
 
-            <TeamDuelsMonitor />
+                    <TeamDuelsMonitor />
 
-            <TeamGoalAdminClient />
+                    <TeamGoalAdminClient />
+                </>
+            )}
 
             <TeamManagementClient />
         </div>

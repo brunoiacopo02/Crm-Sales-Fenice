@@ -16,8 +16,9 @@ export default async function KpiGdoPage() {
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between max-w-7xl mx-auto">
+                {/* Per il GDO è "I miei risultati", come nel menu (collaudo del 25/10/2026). */}
                 <h1 className="text-2xl font-bold tracking-tight text-ash-800">
-                    KPI GDO
+                    {session?.user.role === 'GDO' ? 'I miei risultati' : 'KPI GDO'}
                 </h1>
             </div>
 

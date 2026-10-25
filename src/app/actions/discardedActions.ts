@@ -19,39 +19,59 @@ export type DiscardedLeadPayload = {
 export async function getDiscardedLeadsForMarketing() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+
     // We only care about leads that are REJECTED and have an email
-    const rejectedLeads = await db.select().from(leads).where(
-            and(
-                eq(leads.companyId, ctx.companyId),
-                // I lead di prova (migr. 0050) non vanno al marketing.
-                leadVero(),
-                eq(leads.status, 'REJECTED'),
-                isNotNull(leads.email)
-            )
-        )
+    const condizioniLead = and(
+        eq(leads.companyId, ctx.companyId),
+        // I lead di prova (migr. 0050) non vanno al marketing.
+        leadVero(),
+        eq(leads.status, 'REJECTED'),
+        isNotNull(leads.email)
+    )
+    // Solo le colonne che servono: sono decine di migliaia di righe.
+    const rejectedLeads = await db.select({
+        id: leads.id,
+        email: leads.email,
+        funnel: leads.funnel,
+        discardReason: leads.discardReason,
+        updatedAt: leads.updatedAt,
+    }).from(leads).where(condizioniLead)
 
     if (rejectedLeads.length === 0) return []
 
-    const rejectedLeadIds = rejectedLeads.map(l => l.id)
-
-    // Find the latest callLog for each of these leads that resulted in 'DA_SCARTARE'
-    const logs = await db.select().from(callLogs).where(
+    // Find the latest callLog for each of these leads that resulted in 'DA_SCARTARE'.
+    // Gli id dei lead arrivano da una sottoquery, non da una lista di parametri:
+    // con 75.242 scartati (collaudo del 25/10/2026) la lista superava il limite
+    // di 65.535 parametri di Postgres e /scartati rispondeva 500.
+    const logs = await db.select({
+        leadId: callLogs.leadId,
+        userId: callLogs.userId,
+        discardReason: callLogs.discardReason,
+        note: callLogs.note,
+        createdAt: callLogs.createdAt,
+    }).from(callLogs).where(
             and(
                 eq(callLogs.companyId, ctx.companyId),
                 eq(callLogs.outcome, 'DA_SCARTARE'),
-                inArray(callLogs.leadId, rejectedLeadIds)
+                inArray(callLogs.leadId, db.select({ id: leads.id }).from(leads).where(condizioniLead))
             )
         )
 
     // Map logs to users for the 'discardedBy'
-    const allUsers = await db.select().from(users).where(eq(users.companyId, ctx.companyId))
+    const allUsers = await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.companyId, ctx.companyId))
     const userMap = new Map(allUsers.map(u => [u.id, u.name || u.email]))
+
+    // L'ultimo scarto di ogni lead, in un solo giro (prima un filter per lead: quadratico).
+    const ultimoLog = new Map<string, (typeof logs)[number]>()
+    for (const l of logs) {
+        const prima = ultimoLog.get(l.leadId)
+        if (!prima || l.createdAt.getTime() > prima.createdAt.getTime()) ultimoLog.set(l.leadId, l)
+    }
 
     // Assemble payload
     const results: DiscardedLeadPayload[] = rejectedLeads.map(lead => {
         // Find the most recent discard log for this lead
-        const leadLogs = logs.filter(l => l.leadId === lead.id).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        const latestLog = leadLogs[0]
+        const latestLog = ultimoLog.get(lead.id)
 
         // Reason logic fallback
         const reason = latestLog?.discardReason || lead.discardReason || "Sconosciuto"

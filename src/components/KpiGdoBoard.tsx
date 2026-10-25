@@ -298,7 +298,7 @@ export function KpiGdoBoard() {
                         className={`px-3 py-1.5 text-sm border rounded-lg font-semibold transition-all ${workingHoursOnly ? 'bg-brand-orange/10 border-brand-orange/40 text-brand-orange-700' : 'bg-ash-50/50 border-ash-200/60 text-ash-500'}`}
                         title="Filtra le chiamate al solo orario lavorativo standard 13:30-20:00"
                     >
-                        {workingHoursOnly ? '🟢 13:30-20:00' : '⚪ Tutto il giorno'}
+                        {workingHoursOnly ? 'Solo il turno, 13:30-20:00' : 'Tutto il giorno'}
                     </button>
                 </div>
             </div>
@@ -370,7 +370,7 @@ export function KpiGdoBoard() {
                                 Chiusure settimana
                             </h3>
                             <div className="text-3xl font-black text-blue-700 mt-1">{targetsData.weeklyClosedCount ?? 0}</div>
-                            <div className="text-[10px] text-ash-400 mt-0.5">contratti firmati lun-dom</div>
+                            <div className="text-[10px] text-ash-400 mt-0.5">contratti firmati in settimana</div>
                         </div>
                     </div>
 
