@@ -18,6 +18,7 @@ import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, finestraRientro, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
+import { ordineRipiegoFreschi, type LivelloFreschi } from "@/lib/diretta/instradamento";
 
 /**
  * Quanti lead sono gia' andati a bot 2 oggi (giorno civile di Roma).
@@ -1084,6 +1085,13 @@ export async function POST(req: NextRequest) {
                 eq(users.isActive, true),
             );
 
+            /**
+             * I GDO umani ricevono solo se sono della squadra, cioè hanno un nome
+             * vero (PO 25/10/2026): 108 e gli account senza nome restano fuori
+             * anche con un flag acceso. Stessa regola di `riceveVergini`.
+             */
+            const inSquadra = sql`btrim(coalesce(${users.firstName}, '')) <> ''`;
+
             const selectPool = (where: ReturnType<typeof and>) => tx.select({
                 id: users.id,
                 isBot: users.isBot,
@@ -1093,7 +1101,7 @@ export async function POST(req: NextRequest) {
             const selectLegacyPool = () => selectPool(and(
                 gdoBase,
                 eq(users.acAutoIntake, true),
-                sql`(${users.isBot} = false OR ${underDailyMin})`,
+                sql`((${users.isBot} = false AND ${inSquadra}) OR (${users.isBot} = true AND ${underDailyMin}))`,
             ));
 
             /**
@@ -1113,11 +1121,16 @@ export async function POST(req: NextRequest) {
                 ) < ${users.dailyFreshCap}
             )`;
 
-            /** Solo i GDO umani abilitati all'intake automatico e sotto il loro tetto. */
+            /**
+             * Solo i GDO della squadra abilitati ai freschi e sotto il loro tetto.
+             * Dal 25/10/2026 (PO) il tetto è quello dei "vergini": 10 al giorno a
+             * testa, impostati da /gestione (Freschi + Tetto/gg).
+             */
             const selectHumanPool = () => selectPool(and(
                 gdoBase,
                 eq(users.acAutoIntake, true),
                 eq(users.isBot, false),
+                inSquadra,
                 underFreshCap,
             ));
 
@@ -1131,6 +1144,7 @@ export async function POST(req: NextRequest) {
                 gdoBase,
                 eq(users.freshOverflowScorta, true),
                 eq(users.isBot, false),
+                inSquadra,
             ));
 
             /** Pool umano ignorando il tetto: ultima rete, mai un lead orfano. */
@@ -1138,6 +1152,7 @@ export async function POST(req: NextRequest) {
                 gdoBase,
                 eq(users.acAutoIntake, true),
                 eq(users.isBot, false),
+                inSquadra,
             ));
 
             /**
@@ -1146,26 +1161,28 @@ export async function POST(req: NextRequest) {
              * destinazione voluta ma nessun errore di configurazione deve poter
              * fermare l'intake.
              *
-             * Il bot in terza posizione dal 17/09/2026. Prima l'eccedenza, finite le
-             * scorte umane, tornava ai GDO ignorando il tetto — e un tetto che si
-             * scavalca da solo non è un tetto: i 60 al giorno servono proprio a non
-             * far bloccare 106/112/119 sui lead migliori. Da quando GDO 114 chiama
-             * solo ridati non c'è più nessuna scorta umana, quindi senza questo
-             * livello il tetto sarebbe rimasto scritto e mai applicato.
+             * Il bot in terza posizione dal 17/09/2026: un tetto che si scavalca da
+             * solo non è un tetto. Dal 25/10/2026 (PO) il bot prende l'eccedenza
+             * anche sopra la sua soglia giornaliera: i GDO ricevono i loro 10
+             * vergini al giorno e i successivi "seguono la regola di oggi", cioè
+             * vanno al bot. Il pool senza tetto resta l'ultima rete per il caso del
+             * bot spento: un lead orfano è peggio di un tetto sforato.
              *
-             * `selectBotPool(true)` e non `false`: il bot prende l'eccedenza solo
-             * finché è sotto la sua soglia giornaliera. Sopra quella soglia si
-             * ricade sul pool senza tetto, perché un lead orfano è peggio di un
-             * tetto sforato.
+             * L'ordine sta in `ordineRipiegoFreschi` (testato): nel rientro
+             * 'gdo_only' il bot ne resta fuori.
              */
             const selectFreshWithOverflow = async () => {
-                const sotto = await selectHumanPool();
-                if (sotto.length > 0) return sotto;
-                const scorte = await selectScortaPool();
-                if (scorte.length > 0) return scorte;
-                const botSottoSoglia = await selectBotPool(true);
-                if (botSottoSoglia.length > 0) return botSottoSoglia;
-                return await selectHumanPoolNoCap();
+                const livelli: Record<LivelloFreschi, () => Promise<{ id: string; isBot: boolean }[]>> = {
+                    umani_sotto_tetto: selectHumanPool,
+                    scorte: selectScortaPool,
+                    bot: () => selectBotPool(false),
+                    umani_senza_tetto: selectHumanPoolNoCap,
+                };
+                for (const livello of ordineRipiegoFreschi(routing)) {
+                    const scelti = await livelli[livello]();
+                    if (scelti.length > 0) return scelti;
+                }
+                return [];
             };
 
             /**
@@ -1362,10 +1379,10 @@ export async function POST(req: NextRequest) {
                 } else if (routing === 'bot_first') {
                     eligible = await selectBotPool(true);
                     if (eligible.length === 0) eligible = await selectFreshWithOverflow();
-                    // Rete finale: il bot anche sopra soglia. Era l'unico ramo senza,
-                    // e dal 18/09/2026 si puo' arrivare qui davvero — da quando i GDO
-                    // ricevono solo ridati, `selectFreshWithOverflow` torna vuota
-                    // appena il bot supera la soglia, e il lead restava orfano.
+                    // Rete finale: il bot anche sopra soglia. Dal 25/10/2026 il bot
+                    // sopra soglia sta già nella catena dei freschi (tetto dei GDO
+                    // pieno → bot, ed è il funzionamento previsto, non un ripiego):
+                    // questa riga resta come rete se la catena torna vuota.
                     if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
                 } else {
                     eligible = await selectBotPool(false);
