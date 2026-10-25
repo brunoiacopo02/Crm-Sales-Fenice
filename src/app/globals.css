@@ -2477,3 +2477,38 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");
   font-variant-numeric: normal;
 }
+
+/* ─── Barre di scorrimento nella veste scura (collaudo 25/10/2026) ───
+   Senza questo Windows disegna la barra bianca di sistema dentro le colonne
+   scure (pipeline, liste). Sottile e scura su tutto, comprese le .custom-scrollbar. */
+[data-ui="diretta"],
+[data-ui="diretta"] * {
+  scrollbar-width: thin;
+  scrollbar-color: #3D3D3D transparent;
+}
+[data-ui="diretta"] ::-webkit-scrollbar,
+[data-ui="diretta"]::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+[data-ui="diretta"] ::-webkit-scrollbar-track,
+[data-ui="diretta"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-ui="diretta"] ::-webkit-scrollbar-thumb,
+[data-ui="diretta"]::-webkit-scrollbar-thumb {
+  background: #3D3D3D;
+  border-radius: 8px;
+}
+[data-ui="diretta"] ::-webkit-scrollbar-thumb:hover,
+[data-ui="diretta"]::-webkit-scrollbar-thumb:hover {
+  background: #5A5A5A;
+}
+[data-ui="diretta"] main .custom-scrollbar {
+  scrollbar-color: #3D3D3D transparent;
+}
+[data-ui="diretta"] main .custom-scrollbar::-webkit-scrollbar-thumb,
+[data-ui="diretta"] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3D3D3D;
+}

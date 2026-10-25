@@ -10,6 +10,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { setProfileImage, type NegozioView } from "@/app/actions/negozioActions"
+import { CredenzialiDiretta } from "./CredenzialiDiretta"
 import { AvatarDiretta, STATO_TESTO, TitoloDiretta, btn, dataBreve, numero, prezzoTesto } from "./ui"
 
 export function ProfiloDiretta({ view }: { view: NegozioView }) {
@@ -119,6 +120,8 @@ export function ProfiloDiretta({ view }: { view: NegozioView }) {
                     {errore && <div role="status" className="text-sm text-[var(--d-orange)]">{errore}</div>}
                 </div>
             </section>
+
+            <CredenzialiDiretta />
 
             <section aria-label="Storico del negozio">
                 <h2 className="text-lg font-semibold">Storico del negozio</h2>

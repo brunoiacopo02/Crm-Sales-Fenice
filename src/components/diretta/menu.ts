@@ -3,7 +3,7 @@
 // creature, avventura, scambi né profilo dei giochi.
 
 import {
-    Calendar, CalendarClock, Coins, Gauge, Gift, LayoutDashboard, Phone, Quote, Store, Target, User, Users,
+    Calendar, CalendarClock, Coins, KeyRound, Gauge, Gift, LayoutDashboard, Phone, Quote, Store, Target, User, Users,
     type LucideIcon,
 } from "lucide-react"
 
@@ -45,6 +45,7 @@ export const MENU_ADMIN_DIRETTA: VoceGruppo[] = [
     { name: "Registro delle monete", href: "/admin/diretta/registro", icon: Coins },
     { name: "Bonus e obiettivi Conferme", href: "/admin/diretta/conferme", icon: Target },
     { name: "Pagina Squadra", href: "/classifica", icon: Users },
+    { name: "Accessi del team", href: "/admin/accessi", icon: KeyRound },
 ]
 
 /**
