@@ -45,17 +45,17 @@ test('corso Fenice Academy: circa tre mesi al massimo del patto, regalabile, uni
     assert.deepEqual(CATALOGO_NEGOZIO.filter(i => i.giftable).map(i => i.id), [corsi[0].id])
 })
 
-test('premi concreti e permessi: in Piume e almeno una settimana al massimo del patto', () => {
+test('premi concreti e permessi: in Scintille e almeno una settimana al massimo del patto', () => {
     assert.ok(concreti.length >= 5)
     for (const i of concreti) {
-        assert.equal(i.currency, 'P', `${i.id}: i premi veri si comprano con le Piume`)
+        assert.equal(i.currency, 'S', `${i.id}: dal 25/10 le Piume servono solo per il corso`)
         assert.ok(settimaneAlMassimo(i.currency, i.price) >= 1, `${i.id}: ${settimaneAlMassimo(i.currency, i.price).toFixed(2)} settimane`)
     }
 })
 
-test('le Scintille comprano solo lo stile (immagini e personalizzazioni)', () => {
-    for (const i of CATALOGO_NEGOZIO.filter(x => x.currency === 'S')) {
-        assert.ok(i.kind === 'immagine' || i.kind === 'personalizzazione', i.id)
+test('le Piume comprano solo il corso (PO 25/10/2026)', () => {
+    for (const i of CATALOGO_NEGOZIO.filter(x => x.currency === 'P')) {
+        assert.equal(i.kind, 'corso', i.id)
     }
 })
 

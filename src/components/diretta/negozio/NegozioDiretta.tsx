@@ -225,7 +225,7 @@ export function NegozioDiretta({ view }: { view: NegozioView }) {
                         {view.ruolo === 'CONFERME'
                             ? 'Le Scintille arrivano dalle tue conferme, di più quando il lead si presenta; le Piume dagli obiettivi della settimana su presenze e chiusure.'
                             : 'Le Scintille arrivano dagli appuntamenti fissati, le Piume da conferme, presenze e chiusure dei tuoi lead.'}
-                        {' '}Le Scintille comprano immagini e personalizzazioni, le Piume i premi veri.
+                        {' '}Le Piume servono per il corso, le Scintille per tutti gli altri premi.
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 sm:w-[360px]">

@@ -2,12 +2,13 @@
 // l'economia v2 del 25/10 sera: lo script scripts/diretta/negozio-catalogo.ts
 // lo scrive in rewardItems solo con --apply.
 //
-// Regola: le Scintille (ritmo) comprano lo stile, cioè immagini profilo e
-// personalizzazioni, che non costano niente all'azienda; le Piume (risultati
-// verificati) comprano le cose vere. Ogni premio concreto chiede almeno una
-// settimana al massimo del patto col Sales Manager (7,4 appuntamenti per
-// giornata, 12,7% di conferma); il corso circa tre mesi. Due immagini costano
-// più (in settimane) di alcuni premi concreti, per dare valore al profilo.
+// Regola (PO 25/10/2026): le Piume (risultati verificati) comprano SOLO il
+// corso; tutti gli altri premi, concreti, permessi, immagini e
+// personalizzazioni, si comprano con le Scintille, così conta anche il ritmo.
+// Ogni premio concreto chiede almeno una settimana al massimo del patto col
+// Sales Manager (7,4 appuntamenti per giornata, 12,7% di conferma); il corso
+// circa tre mesi. Due immagini costano più (in settimane) di alcuni premi
+// concreti, per dare valore al profilo.
 // Calcoli e costi in docs/superpowers/specs/2026-10-25-economia-v2-margini.md.
 
 import type { RewardKind } from './negozio'
@@ -49,44 +50,44 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
     {
         id: 'sabato-libero',
         name: 'Sabato libero',
-        description: 'Un sabato intero a casa, pagato. La data si concorda e va approvata: se non si può, le Piume tornano nel saldo.',
-        kind: 'permesso', currency: 'P', price: 135, imageUrl: null, giftable: false, sortOrder: 20, roles: RUOLI,
+        description: 'Un sabato intero a casa, pagato. La data si concorda e va approvata: se non si può, le Scintille tornano nel saldo.',
+        kind: 'permesso', currency: 'S', price: 6400, imageUrl: null, giftable: false, sortOrder: 20, roles: RUOLI,
     },
     {
         id: 'cena-con-bruno-e-federico',
         name: 'Cena con Bruno e Federico',
         description: 'Una cena con Bruno e Federico, offerta. La sera si sceglie insieme.',
-        kind: 'concreto', currency: 'P', price: 110, imageUrl: null, giftable: false, sortOrder: 30, roles: RUOLI,
+        kind: 'concreto', currency: 'S', price: 5200, imageUrl: null, giftable: false, sortOrder: 30, roles: RUOLI,
     },
     {
-        id: 'mezza-giornata-venditore',
-        name: 'Mezza giornata con un venditore',
-        description: 'Mezza giornata accanto a un venditore, ad ascoltare le trattative dal vivo. Va approvata e il giorno si concorda.',
-        kind: 'permesso', currency: 'P', price: 55, imageUrl: null, giftable: false, sortOrder: 40, roles: RUOLI,
+        id: 'pausa-30-bruno-fissa',
+        name: "Mezz'ora di pausa: fissa Bruno per te",
+        description: "Trenta minuti di pausa in più, quando vuoi durante il turno (non all'inizio né alla fine). In quella mezz'ora Bruno chiama i tuoi lead e fissa gli appuntamenti al posto tuo. Il momento si concorda.",
+        kind: 'permesso', currency: 'S', price: 3800, imageUrl: null, giftable: false, sortOrder: 40, roles: RUOLI,
     },
     {
         id: 'merenda-sala',
         name: 'Merenda per la sala',
         description: 'Offri tu la merenda a tutta la sala, un pomeriggio a tua scelta.',
-        kind: 'concreto', currency: 'P', price: 40, imageUrl: null, giftable: false, sortOrder: 50, roles: RUOLI,
+        kind: 'concreto', currency: 'S', price: 1900, imageUrl: null, giftable: false, sortOrder: 50, roles: RUOLI,
     },
     {
         id: 'uscita-30-minuti',
         name: 'Uscita 30 minuti prima',
-        description: 'Esci mezz\'ora prima a fine turno, in un giorno da concordare. Va approvata: se non si può, le Piume tornano nel saldo.',
-        kind: 'permesso', currency: 'P', price: 28, imageUrl: null, giftable: false, sortOrder: 60, roles: RUOLI,
+        description: 'Esci mezz\'ora prima a fine turno, in un giorno da concordare. Va approvata: se non si può, le Scintille tornano nel saldo.',
+        kind: 'permesso', currency: 'S', price: 1350, imageUrl: null, giftable: false, sortOrder: 60, roles: RUOLI,
     },
     {
         id: 'pranzo-offerto',
         name: 'Pranzo offerto',
         description: 'Un ordine su Glovo che arriva in ufficio, il giorno che vuoi.',
-        kind: 'concreto', currency: 'P', price: 28, imageUrl: null, giftable: false, sortOrder: 70, roles: RUOLI,
+        kind: 'concreto', currency: 'S', price: 1350, imageUrl: null, giftable: false, sortOrder: 70, roles: RUOLI,
     },
     {
         id: 'caffe-cornetto',
         name: 'Caffè e cornetto',
         description: 'Caffè e cornetto offerti, il giorno che vuoi.',
-        kind: 'concreto', currency: 'P', price: 14, imageUrl: null, giftable: false, sortOrder: 80, roles: RUOLI,
+        kind: 'concreto', currency: 'S', price: 650, imageUrl: null, giftable: false, sortOrder: 80, roles: RUOLI,
     },
     {
         id: 'titolo-voce-della-sala',
