@@ -16,7 +16,10 @@ import { join, relative, sep } from 'node:path'
 const SRC = join(process.cwd(), 'src')
 
 /** Server action rivedute che possono importare il registro. Percorsi relativi a src/, con '/'. */
-const AUTORIZZATE: string[] = []
+// negozioActions: buyReward addebita il proprio saldo in transazione con lock
+// sull'utente e controllo del saldo; handleRewardPurchase rimborsa solo da ADMIN
+// letto dal DB (rivisto il 25/10/2026 al merge della Diretta).
+const AUTORIZZATE: string[] = ['app/actions/negozioActions.ts']
 
 function fileTs(dir: string): string[] {
     const out: string[] = []
