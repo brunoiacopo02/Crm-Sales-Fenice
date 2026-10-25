@@ -91,7 +91,7 @@ const NOMI: Record<string, string> = {
     "/monitor-vendite": "Monitor vendite",
     "/calendari-venditori": "Calendari venditori",
     "/portafoglio-clienti": "Portafoglio clienti",
-    "/conferme": "Appuntamenti delle Conferme",
+    "/conferme": "Appuntamenti",
     "/conferme/analytics": "Analytics staffing",
     "/appuntamenti-oggi": "Appuntamenti di oggi",
     "/import": "Importa lead",

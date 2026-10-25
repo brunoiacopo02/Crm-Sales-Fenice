@@ -39,29 +39,29 @@ export function MenuAdminGruppi({ centro, gruppi, pathname }: {
     pathname: string | null
 }) {
     const corrente = gruppoDellaPagina(gruppi, pathname)
-    // Al primo disegno (anche lato server) è aperto solo il gruppo della pagina:
-    // niente differenze di idratazione. Le scelte salvate arrivano dopo il mount.
-    const [aperti, setAperti] = useState<Record<string, boolean>>(() => (corrente ? { [corrente]: true } : {}))
+    // Solo le scelte fatte a mano si ricordano; il gruppo della pagina corrente
+    // è aperto in più, finché non lo si chiude (fino al prossimo cambio pagina).
+    // Al primo disegno (anche lato server) le scelte salvate non ci sono ancora:
+    // niente differenze di idratazione, arrivano dopo il mount.
+    const [aperti, setAperti] = useState<Record<string, boolean>>({})
+    const [chiusoQui, setChiusoQui] = useState<string | null>(null)
 
     useEffect(() => {
-        const salvati = leggiAperti()
-        setAperti(prima => ({ ...salvati, ...prima }))
+        setAperti(leggiAperti())
     }, [])
 
-    // Cambio pagina: il gruppo che la contiene si apre da solo (e resta aperto).
+    // Cambio pagina: il gruppo che la contiene torna ad aprirsi da solo.
     useEffect(() => {
-        if (!corrente) return
-        setAperti(prima => {
-            if (prima[corrente]) return prima
-            const dopo = { ...prima, [corrente]: true }
-            scriviAperti(dopo)
-            return dopo
-        })
-    }, [corrente])
+        setChiusoQui(null)
+    }, [pathname])
+
+    const isAperto = (label: string) => !!aperti[label] || (label === corrente && chiusoQui !== label)
 
     const alterna = (label: string) => {
+        const ora = isAperto(label)
+        if (label === corrente) setChiusoQui(ora ? label : null)
         setAperti(prima => {
-            const dopo = { ...prima, [label]: !prima[label] }
+            const dopo = { ...prima, [label]: !ora }
             scriviAperti(dopo)
             return dopo
         })
@@ -98,7 +98,7 @@ export function MenuAdminGruppi({ centro, gruppi, pathname }: {
                 {gruppi.map(g => {
                     // Voci senza gruppo (menu fatto di sole voci): niente tendina.
                     if (!g.label) return <div key="voci" className="space-y-0.5">{g.items.map(voce)}</div>
-                    const aperto = !!aperti[g.label]
+                    const aperto = isAperto(g.label)
                     const idVoci = `menu-gruppo-${g.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
                     const daFare = g.items.reduce((n, v) => n + (v.badge ?? 0), 0)
                     const contienePagina = g.label === corrente
