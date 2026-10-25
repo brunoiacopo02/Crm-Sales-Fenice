@@ -15,6 +15,23 @@ test('come funziona, GDO: numeri delle regole e potenziamenti', () => {
     assert.match(t, /solo per il corso/)
 })
 
+test('come funziona, GDO: serie con le tappe e i tre potenziamenti', () => {
+    const t = testo('GDO')
+    assert.match(t, /La serie/)
+    assert.match(t, /arrivi all'8° appuntamento, la serie sale di uno/)
+    assert.match(t, /3 giorni 15 Scintille, 6 giorni 30 Scintille/)
+    assert.match(t, /60 giorni 250 Scintille e 20 Piume/)
+    assert.match(t, /Booster: per 60 minuti/)
+    assert.match(t, /25 Scintille in più se la persona si presenta davvero, fino a 4 presenze/)
+    assert.match(t, /Scudo della serie: .*al massimo 2 al mese/)
+})
+
+test('come funziona: la postazione per tutti, la serie solo ai GDO', () => {
+    assert.match(testo('GDO'), /La tua postazione/)
+    assert.match(testo('CONFERME'), /La tua postazione/)
+    assert.doesNotMatch(testo('CONFERME'), /La serie|Scudo|Moltiplicatore/)
+})
+
 test('come funziona, Conferme: lead per lead e obiettivi della settimana, niente potenziamenti', () => {
     const t = testo('CONFERME')
     assert.match(t, /4 Scintille quando confermi/)

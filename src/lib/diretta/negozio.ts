@@ -3,10 +3,13 @@
 // vero dell'acquisto gira in transazione, con la riga utente bloccata, ma le
 // condizioni sono tutte qui.
 
-export type RewardKind = 'concreto' | 'permesso' | 'immagine' | 'personalizzazione' | 'corso' | 'booster'
+export type RewardKind = 'concreto' | 'permesso' | 'immagine' | 'personalizzazione' | 'corso'
+    | 'booster' | 'moltiplicatore' | 'scudo' | 'postazione'
 export type PurchaseStatus = 'richiesto' | 'consegnato' | 'annullato'
-export type BuyError = 'utente' | 'articolo' | 'ruolo' | 'non_regalabile' | 'gia_tuo' | 'saldo'
+export type BuyError = 'utente' | 'articolo' | 'ruolo' | 'non_regalabile' | 'gia_tuo' | 'postazione_tua' | 'saldo' | 'solo_regalo'
     | 'booster_turno' | 'booster_attivo' | 'booster_oggi'
+    | 'moltiplicatore_turno' | 'moltiplicatore_oggi'
+    | 'scudo_tasca' | 'scudo_mese'
 
 /** Chi riceve un regalo: nome e cognome, niente di più lungo di così. */
 export const GIFT_TO_MAX = 80
@@ -20,6 +23,7 @@ export interface BuyerState {
 }
 
 export interface ItemState {
+    id?: string
     isActive: boolean
     roles: string[]
     currency: string
@@ -33,6 +37,26 @@ export function isDigitale(kind: string): boolean {
     return kind === 'immagine' || kind === 'personalizzazione'
 }
 
+/** Potenziamenti: partono all'acquisto, senza consegna (booster, moltiplicatore, scudo della serie). */
+export function isPotenziamento(kind: string): boolean {
+    return kind === 'booster' || kind === 'moltiplicatore' || kind === 'scudo'
+}
+
+/**
+ * Si prende una volta sola a persona: le cose digitali (già tue) e gli
+ * upgrade della postazione (una cuffia nuova basta). Un acquisto annullato
+ * dall'admin libera di nuovo il posto.
+ */
+export function unaVoltaSola(kind: string): boolean {
+    return isDigitale(kind) || kind === 'postazione'
+}
+
+/**
+ * Premi che si comprano solo per un collega (PO 25/10/2026: "Caffè per un
+ * collega"). L'id è quello del catalogo: rewardItems non ha una colonna apposta.
+ */
+export const SOLO_REGALO: ReadonlySet<string> = new Set(['caffe-per-un-collega'])
+
 /** Tempo tolto al turno (uscite, sabati, affiancamenti): lo approva l'admin. */
 export function daApprovare(kind: string): boolean {
     return kind === 'permesso'
@@ -40,8 +64,8 @@ export function daApprovare(kind: string): boolean {
 
 /** Stato con cui nasce la richiesta: i digitali sono già consegnati. */
 export function statoIniziale(kind: string): PurchaseStatus {
-    // il booster parte all'acquisto: niente da consegnare
-    return isDigitale(kind) || kind === 'booster' ? 'consegnato' : 'richiesto'
+    // i potenziamenti partono all'acquisto: niente da consegnare
+    return isDigitale(kind) || isPotenziamento(kind) ? 'consegnato' : 'richiesto'
 }
 
 /** Nome di chi riceve il regalo, ripulito. Vuoto = nessun regalo. */
@@ -69,10 +93,24 @@ export function checkPurchase(input: {
     if (!item.roles.includes(user.role)) return { ok: false, error: 'ruolo' }
     const giftTo = normalizzaRegalo(input.giftTo)
     if (giftTo && !item.giftable) return { ok: false, error: 'non_regalabile' }
-    if (isDigitale(item.kind) && input.alreadyOwned) return { ok: false, error: 'gia_tuo' }
+    if (!giftTo && item.id && SOLO_REGALO.has(item.id)) return { ok: false, error: 'solo_regalo' }
+    if (unaVoltaSola(item.kind) && input.alreadyOwned) return { ok: false, error: item.kind === 'postazione' ? 'postazione_tua' : 'gia_tuo' }
     const saldo = item.currency === 'S' ? user.scintille : user.piume
     if (saldo < item.price) return { ok: false, error: 'saldo' }
     return { ok: true, giftTo }
+}
+
+export type StatoPostazione = 'base' | 'in_arrivo' | 'tuo'
+
+/**
+ * Stato di uno slot della postazione: "Di base" finché non c'è una richiesta
+ * valida, "In arrivo" quando è richiesto, "Tuo" quando l'admin l'ha consegnato.
+ */
+export function statoPostazione(itemId: string, acquisti: readonly { itemId: string; status: string }[]): StatoPostazione {
+    const suoi = acquisti.filter(a => a.itemId === itemId && a.status !== 'annullato')
+    if (suoi.some(a => a.status === 'consegnato')) return 'tuo'
+    if (suoi.length > 0) return 'in_arrivo'
+    return 'base'
 }
 
 /** Articoli posseduti: ogni richiesta che non è stata annullata. */
@@ -127,6 +165,12 @@ export function messaggioErrore(e: BuyError | 'diretta' | 'errore'): string {
         case 'booster_turno': return 'Il booster si attiva solo durante il turno.'
         case 'booster_attivo': return 'Hai già un booster attivo.'
         case 'booster_oggi': return 'Il booster di oggi l\'hai già usato: domani ce n\'è un altro.'
+        case 'postazione_tua': return 'Questo upgrade della postazione è già tuo, o in arrivo.'
+        case 'solo_regalo': return 'Questo premio è per un collega: scrivi il suo nome.'
+        case 'moltiplicatore_turno': return 'Il moltiplicatore si attiva solo durante il turno.'
+        case 'moltiplicatore_oggi': return 'Il moltiplicatore di oggi è già attivo: domani ce n\'è un altro.'
+        case 'scudo_tasca': return 'Hai già uno scudo da parte: si usa da solo al primo giorno mancato.'
+        case 'scudo_mese': return 'Questo mese hai già preso tutti gli scudi: il mese prossimo ce ne sono altri.'
         default: return 'Qualcosa non ha funzionato. Riprova tra poco.'
     }
 }

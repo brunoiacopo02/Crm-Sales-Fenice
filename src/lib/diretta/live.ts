@@ -19,6 +19,9 @@ import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
 import { countPresences } from '@/lib/presenceCounting'
 import { euroFromPresences, peakWindow, personName, type GamificationTargets } from './config'
 import { readGamificationTargets } from './settings'
+import { readEconomyRules } from '@/lib/economy/awards'
+import { prossimaTappa, type TappaSerie } from '@/lib/economy/serie'
+import { leggiSerie } from '@/lib/economy/serieDb'
 import { contaFissati } from './fissati'
 import { leggiFissati, leggiMembriSquadra } from './fissatiDb'
 import {
@@ -59,6 +62,18 @@ export interface DirettaMia {
     miglioreFissati: { valore: number; settimana: string | null }
     scintille: number
     piume: number
+    /** Serie dei giorni al primo scalino (src/lib/economy/serie.ts). */
+    serie: SerieMia
+}
+
+export interface SerieMia {
+    giorni: number
+    oggiFatto: boolean
+    oggiLavorativo: boolean
+    /** Primo scalino del giorno (fissati validi). */
+    soglia: number
+    prossima: TappaSerie | null
+    scudiInTasca: number
 }
 
 async function calcolaSquadra(companyId: string, giorno: string): Promise<DirettaSquadra> {
@@ -171,11 +186,13 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
     const settimana = weekBoundsRome(now)
     const daFissati = settimana.start > FISSATI_DAL ? settimana.start : FISSATI_DAL
 
-    const [righeSettimana, presenze, saldo, passate] = await Promise.all([
+    const [righeSettimana, presenze, saldo, passate, serie, regole] = await Promise.all([
         leggiFissati({ companyId, userIds: [userId], start: settimana.start, end: settimana.end }),
         countPresences(userId, settimana.start, settimana.end, companyId),
         db.select({ scintille: users.scintille, piume: users.piume }).from(users).where(eq(users.id, userId)).limit(1),
         miglioriInCache(userId, companyId, settimana.start.toISOString()),
+        leggiSerie(db, userId, now),
+        readEconomyRules(),
     ])
 
     const fissatiSettimana = contaFissati(righeSettimana, daFissati, settimana.end).totale
@@ -197,5 +214,13 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
         miglioreFissati,
         scintille: saldo[0]?.scintille ?? 0,
         piume: saldo[0]?.piume ?? 0,
+        serie: {
+            giorni: serie.stato.giorni,
+            oggiFatto: serie.stato.oggiFatto,
+            oggiLavorativo: serie.stato.oggiLavorativo,
+            soglia: obiettivi.personale[0],
+            prossima: prossimaTappa(serie.stato.giorni, regole.serie),
+            scudiInTasca: serie.stato.scudiInTasca,
+        },
     }
 }

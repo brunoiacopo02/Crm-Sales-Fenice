@@ -10,6 +10,8 @@ import type { GamificationTargets } from "@/lib/diretta/config"
 import type { DirettaMia } from "@/lib/diretta/live"
 import { binarioPresenze, chiaveSettimana, etichettaSettimana, euro } from "@/lib/diretta/home"
 import { numeroIt } from "@/lib/diretta/formato"
+import { testoSerie, type SerieDaMostrare } from "@/lib/diretta/serieTesto"
+import { Flame, Shield } from "lucide-react"
 
 export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; obiettivi: GamificationTargets }) {
     const presenze = mia?.presenzeSettimana ?? 0
@@ -63,6 +65,8 @@ export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; ob
                 <div className="text-[32px] font-semibold leading-none tabular-nums">{euro(mia?.euroSettimana ?? 0)}</div>
             </div>
 
+            {mia?.serie && <Serie serie={mia.serie} />}
+
             <div className="mt-5 flex flex-col gap-1.5">
                 <Riga etichetta="Miglior settimana, presenze" valore={mia?.migliorePresenze.valore ?? 0} settimana={mia?.migliorePresenze.settimana ?? null} />
                 <Riga etichetta="Miglior settimana, fissati" valore={mia?.miglioreFissati.valore ?? 0} settimana={mia?.miglioreFissati.settimana ?? null} />
@@ -73,6 +77,34 @@ export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; ob
                 <Saldo etichetta="Piume" valore={mia?.piume ?? null} />
             </div>
         </section>
+    )
+}
+
+/** Serie dei giorni al primo scalino: giorni di fila, oggi, prossima tappa e scudo. */
+function Serie({ serie }: { serie: SerieDaMostrare }) {
+    const t = testoSerie(serie)
+    return (
+        <div className="mt-5 rounded-lg bg-[#2E2E2E] px-3 py-3" aria-label={t.titolo}>
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2 text-[14px] font-semibold">
+                    <Flame
+                        className={`h-4 w-4 shrink-0 ${serie.giorni > 0 ? 'text-[#FF9330]' : 'text-[#8C8C8C]'}`}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                    />
+                    <div className="min-w-0">{t.titolo}</div>
+                </div>
+                {serie.scudiInTasca > 0 && (
+                    <div className="flex shrink-0 items-center gap-1 text-[12px] text-[#BFBFBF]" title={t.scudo ?? undefined}>
+                        <Shield className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                        Scudo
+                    </div>
+                )}
+            </div>
+            <div className={`mt-1 text-[13px] ${serie.oggiFatto ? 'text-[#F2F2F2]' : 'text-[#BFBFBF]'}`}>{t.oggi}</div>
+            {t.prossima && <div className="mt-0.5 text-[12px] text-[#BFBFBF]">{t.prossima}</div>}
+            {t.scudo && <div className="mt-0.5 text-[12px] text-[#BFBFBF]">{t.scudo}</div>}
+        </div>
     )
 }
 

@@ -80,6 +80,22 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         kind: 'booster', currency: 'S', price: 15, imageUrl: null, giftable: false, sortOrder: 45, roles: SOLO_GDO,
     },
     {
+        // Moltiplicatore presenza (src/lib/economy/moltiplicatore.ts): paga
+        // solo sulle presenze verificate dei fissati fatti dopo l'acquisto, lo
+        // stesso giorno. Con i default rende da -20 a +80, in pari con una presenza.
+        id: 'moltiplicatore-presenza',
+        name: 'Moltiplicatore presenza',
+        description: 'Da adesso a fine giornata, ogni appuntamento che fissi ti dà 25 Scintille in più se poi la persona si presenta davvero, fino a 4 presenze. Solo durante il turno, uno al giorno.',
+        kind: 'moltiplicatore', currency: 'S', price: 20, imageUrl: null, giftable: false, sortOrder: 46, roles: SOLO_GDO,
+    },
+    {
+        // Scudo della serie (src/lib/economy/serie.ts): salva un giorno mancato.
+        id: 'scudo-serie',
+        name: 'Scudo della serie',
+        description: 'Salva la tua serie per un giorno lavorativo in cui non arrivi al primo scalino, o in cui manchi. Si usa da solo al primo giorno mancato. Uno da parte alla volta, al massimo due al mese.',
+        kind: 'scudo', currency: 'S', price: 400, imageUrl: null, giftable: false, sortOrder: 47, roles: SOLO_GDO,
+    },
+    {
         id: 'merenda-sala',
         name: 'Merenda per la sala',
         description: 'Offri tu la merenda a tutta la sala, un pomeriggio a tua scelta.',
@@ -92,16 +108,55 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         kind: 'permesso', currency: 'S', price: 1350, imageUrl: null, giftable: false, sortOrder: 60, roles: RUOLI,
     },
     {
+        // Mai nell'ora di punta (DEFAULT_TARGETS: 18-19, sabato 12:30-13:30).
+        id: 'pausa-quando-vuoi',
+        name: 'Pausa quando vuoi per una settimana',
+        description: "Per una settimana scegli tu quando fare le pause del turno, mai nell'ora di punta (18-19, il sabato 12:30-13:30). La settimana si concorda e va approvata: se non si può, le Scintille tornano nel saldo.",
+        kind: 'permesso', currency: 'S', price: 1200, imageUrl: null, giftable: false, sortOrder: 65, roles: RUOLI,
+    },
+    {
         id: 'pranzo-offerto',
         name: 'Pranzo offerto',
         description: 'Un ordine su Glovo che arriva in ufficio, il giorno che vuoi.',
         kind: 'concreto', currency: 'S', price: 1350, imageUrl: null, giftable: false, sortOrder: 70, roles: RUOLI,
     },
     {
+        id: 'spotify-o-netflix',
+        name: 'Un mese di Spotify o Netflix',
+        description: 'Un mese di abbonamento, a scelta fra Spotify e Netflix. Si sceglie dopo la richiesta.',
+        kind: 'concreto', currency: 'S', price: 1300, imageUrl: null, giftable: false, sortOrder: 72, roles: RUOLI,
+    },
+    {
+        id: 'cinema-per-due',
+        name: 'Cinema per due',
+        description: 'Due biglietti del cinema, per il film e la sera che vuoi.',
+        kind: 'concreto', currency: 'S', price: 1800, imageUrl: null, giftable: false, sortOrder: 74, roles: RUOLI,
+    },
+    {
+        id: 'buono-amazon-10',
+        name: 'Buono Amazon da 10',
+        description: 'Un buono regalo Amazon da 10. Arriva dopo la richiesta.',
+        kind: 'concreto', currency: 'S', price: 1200, imageUrl: null, giftable: false, sortOrder: 76, roles: RUOLI,
+    },
+    {
+        id: 'buono-amazon-25',
+        name: 'Buono Amazon da 25',
+        description: 'Un buono regalo Amazon da 25. Arriva dopo la richiesta.',
+        kind: 'concreto', currency: 'S', price: 3000, imageUrl: null, giftable: false, sortOrder: 78, roles: RUOLI,
+    },
+    {
         id: 'caffe-cornetto',
         name: 'Caffè e cornetto',
         description: 'Caffè e cornetto offerti, il giorno che vuoi.',
         kind: 'concreto', currency: 'S', price: 650, imageUrl: null, giftable: false, sortOrder: 80, roles: RUOLI,
+    },
+    {
+        // Si compra solo come regalo (SOLO_REGALO in ./negozio): sotto la
+        // settimana al massimo del patto apposta, è un gesto verso un collega.
+        id: 'caffe-per-un-collega',
+        name: 'Caffè per un collega',
+        description: 'Offri un caffè a un collega, a tuo nome. Scrivi chi lo riceve.',
+        kind: 'concreto', currency: 'S', price: 250, imageUrl: null, giftable: true, sortOrder: 85, roles: RUOLI,
     },
     {
         id: 'titolo-voce-della-sala',
@@ -150,5 +205,37 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         name: 'Squalo',
         description: 'Il simbolo degli squaletti: non molla la presa.',
         kind: 'immagine', currency: 'S', price: 300, imageUrl: '/diretta/premi/squalo.webp', giftable: false, sortOrder: 160, roles: RUOLI,
+    },
+    // La tua postazione (PO 25/10/2026): upgrade fisici, uno per tipo a persona,
+    // richiesti all'admin. Costano parecchio apposta: sono oggetti veri.
+    {
+        id: 'postazione-cuffie',
+        name: 'Cuffie nuove',
+        description: 'Cuffie da call center con microfono che taglia il rumore della sala. Il modello si sceglie dopo la richiesta.',
+        kind: 'postazione', currency: 'S', price: 5000, imageUrl: null, giftable: false, sortOrder: 200, roles: RUOLI,
+    },
+    {
+        id: 'postazione-tastiera',
+        name: 'Tastiera nuova',
+        description: 'Una tastiera comoda per scrivere note ed esiti tutto il turno.',
+        kind: 'postazione', currency: 'S', price: 4000, imageUrl: null, giftable: false, sortOrder: 210, roles: RUOLI,
+    },
+    {
+        id: 'postazione-mouse',
+        name: 'Mouse nuovo',
+        description: 'Un mouse preciso e comodo in mano.',
+        kind: 'postazione', currency: 'S', price: 2500, imageUrl: null, giftable: false, sortOrder: 220, roles: RUOLI,
+    },
+    {
+        id: 'postazione-monitor',
+        name: 'Monitor nuovo',
+        description: 'Un monitor più grande per la tua postazione: CRM e agenda insieme, senza cambiare finestra.',
+        kind: 'postazione', currency: 'S', price: 12000, imageUrl: null, giftable: false, sortOrder: 230, roles: RUOLI,
+    },
+    {
+        id: 'postazione-gadget',
+        name: 'Gadget per la scrivania',
+        description: 'Una lampada, una pianta o un oggetto per la tua scrivania, da scegliere insieme.',
+        kind: 'postazione', currency: 'S', price: 1500, imageUrl: null, giftable: false, sortOrder: 240, roles: RUOLI,
     },
 ]

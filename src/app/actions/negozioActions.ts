@@ -19,6 +19,9 @@ import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { creditOnce, type Currency } from "@/lib/economy/ledger"
 import { currencyLedger } from "@/db/schema"
 import { boosterAttivo, puoComprareBooster, KIND_BOOSTER } from "@/lib/economy/booster"
+import { moltiplicatoriComprati, puoComprareMoltiplicatore, KIND_MOLTIPLICATORE } from "@/lib/economy/moltiplicatore"
+import { prossimaTappa, puoComprareScudo, scudiDelMese, KIND_SCUDO, type TappaSerie } from "@/lib/economy/serie"
+import { leggiSerie } from "@/lib/economy/serieDb"
 import { readEconomyRules } from "@/lib/economy/awards"
 import { readGamificationTargets } from "@/lib/diretta/settings"
 import { shiftWindow } from "@/lib/diretta/config"
@@ -26,7 +29,7 @@ import { dayBoundsRome } from "@/lib/dateUtils"
 import { comeFunziona, type BloccoSpiegazione } from "@/lib/diretta/comeFunziona"
 import { DIRETTA_FLAG_KEYS, personName } from "@/lib/diretta/config"
 import {
-    canTransition, checkPurchase, isDigitale, messaggioErrore, nomeValuta, ownedItemIds, statoIniziale,
+    canTransition, checkPurchase, messaggioErrore, unaVoltaSola, nomeValuta, ownedItemIds, statoIniziale,
     stileProfilo, type BuyError, type PurchaseStatus, type StileProfilo,
 } from "@/lib/diretta/negozio"
 
@@ -74,8 +77,21 @@ export interface NegozioView {
     acquisti: NegozioAcquisto[]
     /** Fine del booster in corso (ISO), null se non ce n'è uno attivo. */
     boosterFino: string | null
+    /** Moltiplicatore presenza già comprato oggi (vale fino a fine giornata). */
+    moltiplicatoreOggi: boolean
+    /** Serie e scudi del GDO (null per le Conferme). */
+    serie: VistaSerie | null
     /** Come si guadagna e come si compra, con i numeri delle regole salvate. */
     comeFunziona: BloccoSpiegazione[]
+}
+
+export interface VistaSerie {
+    giorni: number
+    oggiFatto: boolean
+    prossima: TappaSerie | null
+    scudiInTasca: number
+    scudiMese: number
+    scudiAlMese: number
 }
 
 const asCurrency = (c: string): 'S' | 'P' => (c === 'P' ? 'P' : 'S')
@@ -120,7 +136,18 @@ export async function getNegozioView(): Promise<NegozioView> {
         eq(currencyLedger.userId, me.id), gte(currencyLedger.createdAt, start), lt(currencyLedger.createdAt, end),
     )) : []
     const booster = boosterAttivo(righeOggi, adesso)
-    const [regole, obiettivi] = await Promise.all([readEconomyRules(), readGamificationTargets()])
+    const [regole, obiettivi, serieLetta] = await Promise.all([
+        readEconomyRules(), readGamificationTargets(),
+        me.role === 'GDO' ? leggiSerie(db, me.id, adesso) : Promise.resolve(null),
+    ])
+    const serie: VistaSerie | null = serieLetta ? {
+        giorni: serieLetta.stato.giorni,
+        oggiFatto: serieLetta.stato.oggiFatto,
+        prossima: prossimaTappa(serieLetta.stato.giorni, regole.serie),
+        scudiInTasca: serieLetta.stato.scudiInTasca,
+        scudiMese: scudiDelMese(serieLetta.scudi, serieLetta.oggi),
+        scudiAlMese: regole.serie.scudiAlMese,
+    } : null
     return {
         nome: personName(me),
         ruolo: me.role,
@@ -138,6 +165,8 @@ export async function getNegozioView(): Promise<NegozioView> {
             createdAt: p.createdAt.toISOString(), handledAt: p.handledAt ? p.handledAt.toISOString() : null,
         })),
         boosterFino: booster ? booster.fino.toISOString() : null,
+        moltiplicatoreOggi: moltiplicatoriComprati(righeOggi) > 0,
+        serie,
         comeFunziona: comeFunziona(me.role, regole, obiettivi),
     }
 }
@@ -191,14 +220,14 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
                 .where(and(eq(rewardItems.id, itemId), eq(rewardItems.companyId, FENICE))).limit(1)
 
             let alreadyOwned = false
-            if (item && isDigitale(item.kind)) {
+            if (item && unaVoltaSola(item.kind)) {
                 const owned = await tx.select({ id: rewardPurchases.id }).from(rewardPurchases)
                     .where(and(eq(rewardPurchases.userId, user.id), eq(rewardPurchases.itemId, item.id), ne(rewardPurchases.status, 'annullato')))
                     .limit(1)
                 alreadyOwned = owned.length > 0
             }
 
-            const check = checkPurchase({ user, item, giftTo, alreadyOwned })
+            const check = checkPurchase({ user, item: item ? { ...item, id: item.id } : item, giftTo, alreadyOwned })
             if (!check.ok) return { ok: false, error: check.error }
             if (!item) return { ok: false, error: 'articolo' }
 
@@ -218,6 +247,28 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
                 const puo = puoComprareBooster({ righeOggi, now, turno: shiftWindow(now, targets), rules: rules.booster })
                 if (!puo.ok) return { ok: false, error: puo.error }
                 booster = { minuti: rules.booster.minuti }
+            }
+            // Moltiplicatore presenza: come il booster, solo in turno e uno al giorno.
+            // Scudo della serie: uno da parte alla volta, al massimo N nel mese.
+            let marca: Record<string, unknown> = {}
+            if (item.kind === KIND_MOLTIPLICATORE) {
+                const [targets, rules] = await Promise.all([readGamificationTargets(), readEconomyRules()])
+                const { start, end } = dayBoundsRome(now)
+                const righeOggi = await tx.select({
+                    reason: currencyLedger.reason, amount: currencyLedger.amount,
+                    createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
+                }).from(currencyLedger).where(and(
+                    eq(currencyLedger.userId, user.id), gte(currencyLedger.createdAt, start), lt(currencyLedger.createdAt, end),
+                ))
+                const puo = puoComprareMoltiplicatore({ righeOggi, now, turno: shiftWindow(now, targets), rules: rules.moltiplicatore })
+                if (!puo.ok) return { ok: false, error: puo.error }
+                marca = { moltiplicatore: true }
+            } else if (item.kind === KIND_SCUDO) {
+                const rules = await readEconomyRules()
+                const serie = await leggiSerie(tx, user.id, now)
+                const puo = puoComprareScudo({ stato: serie.stato, scudi: serie.scudi, oggi: serie.oggi, rules: rules.serie })
+                if (!puo.ok) return { ok: false, error: puo.error }
+                marca = { scudo: true }
             }
             const status = statoIniziale(item.kind)
             await tx.insert(rewardPurchases).values({
@@ -239,7 +290,7 @@ export async function buyReward(itemId: string, giftTo?: string | null, requestI
                 amount: -item.price,
                 reason: 'negozio',
                 idemKey: `buy:${purchaseId}`,
-                metadata: booster ? { purchaseId, itemId: item.id, booster: true, minuti: booster.minuti } : { purchaseId, itemId: item.id },
+                metadata: booster ? { purchaseId, itemId: item.id, booster: true, minuti: booster.minuti } : { purchaseId, itemId: item.id, ...marca },
                 companyId: FENICE,
             }, tx)
             if (!debited) throw new Error('NEGOZIO_DEBITO_NON_SCRITTO')
