@@ -5,6 +5,7 @@ import { StreakCounter } from "@/components/StreakCounter"
 import { SafeWrapper } from "@/components/SafeWrapper"
 import { VenditoriAgendaButton } from "@/components/VenditoriAgendaButton"
 import { ConfermeDirettaColumn } from "@/components/conferme/diretta/ConfermeDirettaColumn"
+import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import { isDirettaOn } from "@/lib/diretta/settings"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
@@ -44,6 +45,8 @@ export default async function ConfermePage() {
                         <SafeWrapper><ConfermeDirettaColumn /></SafeWrapper>
                     </div>
                     <div className="min-w-0 flex-[999_1_560px] px-4 pt-2 sm:px-8">
+                        {/* Citazione del giorno e consiglio di vendita, in cima alla board */}
+                        <SafeWrapper><DailyQuoteSlotServer role="CONFERME" className="mb-2 mt-4" /></SafeWrapper>
                         <SafeWrapper><ConfermeBoardDiretta currentUser={session.user} variant="diretta" /></SafeWrapper>
                     </div>
                 </div>
@@ -68,6 +71,11 @@ export default async function ConfermePage() {
                     </div>
                 </div>
             </div>
+
+            {/* Citazione del giorno e consiglio di vendita (PO 25/10/2026) */}
+            {session.user.role === 'CONFERME' && (
+                <SafeWrapper><DailyQuoteSlotServer role="CONFERME" /></SafeWrapper>
+            )}
 
             {session.user.role === 'CONFERME' && (
                 <>

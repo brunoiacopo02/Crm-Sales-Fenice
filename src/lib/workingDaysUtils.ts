@@ -5,7 +5,7 @@
  */
 
 // Computus — Meeus/Jones/Butcher algorithm for Gregorian Easter Sunday.
-function easterSunday(year: number): { month: number; day: number } {
+export function easterSunday(year: number): { month: number; day: number } {
     const a = year % 19;
     const b = Math.floor(year / 100);
     const c = year % 100;

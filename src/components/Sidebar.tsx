@@ -316,6 +316,7 @@ export function Sidebar({ companyId, salesPipelineEnabled, lancioUmaniEnabled, d
                     label: "Team",
                     items: [
                         { name: "Gestione Account", href: "/team", icon: UserCog },
+                        ...(role === "ADMIN" ? [{ name: "Citazioni del giorno", href: "/admin/citazioni", icon: FileText }] : []),
                     ],
                 },
                 // Ultima voce di tutta la sidebar, e solo ADMIN: oltre al ruolo

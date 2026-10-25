@@ -4,6 +4,7 @@ import { TeamManagementClient } from "@/components/TeamManagementClient"
 import { ManagerSprintCard } from "@/components/ManagerSprintCard"
 import { TeamGoalAdminClient } from "@/components/TeamGoalAdminClient"
 import { SafeWrapper } from "@/components/SafeWrapper"
+import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import dynamic from "next/dynamic"
 import { getGdoUsersForTrading } from "@/app/actions/tradingActions"
 
@@ -41,6 +42,11 @@ export default async function TeamPage() {
                     <DuelCreateModal gdoUsers={gdoUsers} creatorRole={session.user.role} />
                 </SafeWrapper>
             </div>
+
+            {/* Citazione del giorno e consiglio di vendita (PO 25/10/2026), con il link alle approvazioni */}
+            {session.user.role === 'ADMIN' && (
+                <SafeWrapper><DailyQuoteSlotServer role="ADMIN" className="max-w-7xl mx-auto" /></SafeWrapper>
+            )}
 
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                 <div>
