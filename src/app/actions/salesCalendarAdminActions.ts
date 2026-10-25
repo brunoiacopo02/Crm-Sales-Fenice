@@ -21,7 +21,8 @@ import { absenceReportCheck, absenceRefusalMessage, CALENDAR_PENALTY_EUR, type C
 import { romeMonthKey } from "@/lib/venditore/latePenalties"
 import { formatRomeAppointmentLabel, toRomeDateStr, monthBoundsRome } from "@/lib/dateUtils"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
-import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
+import { coperturaSenzaLead, type CoverageCell } from "@/lib/venditore/calendarCoverage"
+import { accountDiProva } from "@/lib/prova/sql"
 import { revalidatePath } from "next/cache"
 
 /**
@@ -77,6 +78,11 @@ export async function reportSalesAbsence(
         const role = user?.user_metadata?.role as string | undefined
         if (!user || !role || !["CONFERME", "ADMIN"].includes(role)) {
             return { success: false, error: "Non autorizzato." }
+        }
+        // Prova (migr. 0050): i venditori sono tutti veri, e una multa da un
+        // account di prova arriverebbe a una persona vera con la notifica.
+        if (await accountDiProva(user.id)) {
+            return { success: false, error: "Dall'account di prova non si segnalano assenze: i venditori sono veri." }
         }
         const ctx = await currentTenant()
         assertSalesArea(ctx)
@@ -221,7 +227,7 @@ function venditoreTenantScope(ctx: TenantContext) {
  * annullare una multa o cambiare l'esenzione (spec §7) — `canWrite` riflette
  * esattamente questo, non un generico "ruolo gestionale".
  */
-async function requireCalendarSupervisor(): Promise<{ userId: string; role: string; canWrite: boolean; ctx: TenantContext }> {
+async function requireCalendarSupervisor(): Promise<{ userId: string; role: string; canWrite: boolean; diProva: boolean; ctx: TenantContext }> {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     const role = user?.user_metadata?.role as string | undefined
@@ -230,7 +236,10 @@ async function requireCalendarSupervisor(): Promise<{ userId: string; role: stri
     }
     const ctx = await currentTenant()
     assertSalesArea(ctx)
-    return { userId: user.id, role, canWrite: role === 'ADMIN', ctx }
+    // Prova (migr. 0050): le agende sono fatte di lead veri, che un account di
+    // prova non vede (vedi getCalendarSupervision e getForcedBookings).
+    const diProva = await accountDiProva(user.id)
+    return { userId: user.id, role, canWrite: role === 'ADMIN', diProva, ctx }
 }
 
 export interface SupervisionView {
@@ -301,7 +310,7 @@ export async function getCalendarSupervision(
     weekStartIso?: string,
     monthKeyInput?: string,
 ): Promise<SupervisionView> {
-    const { role, ctx } = await requireCalendarSupervisor()
+    const { role, diProva, ctx } = await requireCalendarSupervisor()
 
     // Una data illeggibile dal client ricade sulla settimana corrente invece di
     // propagare `Invalid Date` fin dentro le query (dove diventa un errore di
@@ -470,7 +479,8 @@ export async function getCalendarSupervision(
 
     return {
         weekStartIso: weekStart.toISOString(),
-        coverage,
+        // La copertura porta chi è occupato e con quale lead.
+        coverage: diProva ? coperturaSenzaLead(coverage) : coverage,
         venditori,
         matrix,
         compilation,
@@ -600,7 +610,7 @@ export interface ForcedBooking {
  * un innerJoin la farebbe sparire in silenzio.
  */
 export async function getForcedBookings(monthKey?: string): Promise<ForcedBooking[]> {
-    const { ctx } = await requireCalendarSupervisor()
+    const { diProva, ctx } = await requireCalendarSupervisor()
     const mk = monthKey || romeMonthKey(new Date())
     const { start, end } = monthBoundsRome(mk)
 
@@ -621,6 +631,9 @@ export async function getForcedBookings(monthKey?: string): Promise<ForcedBookin
             eq(leadEvents.eventType, 'appointment_forced'),
             gte(leadEvents.timestamp, start),
             lt(leadEvents.timestamp, end),
+            // Prova (migr. 0050): ognuno vede le forzature della sua parte. Le
+            // righe di un lead cancellato restano a chi guarda i lead veri.
+            diProva ? eq(leads.isTest, true) : or(isNull(leads.id), eq(leads.isTest, false)),
         ))
         .orderBy(desc(leadEvents.timestamp))
 

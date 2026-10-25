@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildDemand, buildCoverage, coverageStatus } from './calendarCoverage'
+import { buildDemand, buildCoverage, coverageStatus, coperturaSenzaLead } from './calendarCoverage'
 import { weekSlots, slotKey, romeInstant } from './calendarSlots'
 
 const LUNEDI = new Date('2026-09-14T00:00:00+02:00')
@@ -97,4 +97,23 @@ test('chi ha gia un appuntamento non conta come disponibile, ma resta in busy', 
     const cell = cells.find(c => c.slotKey === key)!
     assert.deepEqual(cell.available, ['b'])
     assert.equal(cell.busy.length, 1)
+})
+
+test('copertura per un account di prova: chi è occupato resta, il lead vero no', () => {
+    const slots = weekSlots(romeInstant('2026-09-14', 0))
+    const key = slotKey(slots[0])
+    const cells = buildCoverage({
+        slots,
+        availability: [{ salesUserId: 'a', slotKey: key }, { salesUserId: 'b', slotKey: key }],
+        blocks: [],
+        appointments: [{ salesUserId: 'a', slotKey: key, leadId: 'lead-vero-77', leadName: 'Mario Rossi' }],
+        demand: [],
+    })
+    const mascherata = coperturaSenzaLead(cells).find(c => c.slotKey === key)!
+    assert.deepEqual(mascherata.busy, [{ salesUserId: 'a', leadId: '', leadName: '' }])
+    assert.deepEqual(mascherata.available, ['b'])
+    assert.equal(JSON.stringify(coperturaSenzaLead(cells)).includes('Mario'), false)
+    assert.equal(JSON.stringify(coperturaSenzaLead(cells)).includes('lead-vero-77'), false)
+    // L'originale non cambia.
+    assert.equal(cells.find(c => c.slotKey === key)!.busy[0].leadName, 'Mario Rossi')
 })

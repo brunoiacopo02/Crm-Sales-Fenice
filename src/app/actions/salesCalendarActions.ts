@@ -14,7 +14,7 @@ import {
 } from "@/lib/venditore/calendarSlots"
 import { manualBlockCheck, blockRefusalMessage } from "@/lib/venditore/calendarRules"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
-import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
+import { coperturaSenzaLead, type CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { isValidTemplateSlot, slotsFromTemplate, templateKey, type TemplateSlot } from "@/lib/venditore/calendarTemplate"
 import { materializeTemplates } from "@/lib/venditore/calendarRunner"
 import { revalidatePath } from "next/cache"
@@ -368,7 +368,8 @@ export async function getCalendarWeek(input?: {
         slotCount: plan?.slotCount ?? 0,
         late: plan?.late ?? false,
         penaltyIso: penalty?.dueAt ? penalty.dueAt.toISOString() : null,
-        coverage,
+        // Anche la copertura porta chi è occupato e con quale lead.
+        coverage: vistaDiProva ? coperturaSenzaLead(coverage) : coverage,
         venditori: venditoriRows.map(v => ({ id: v.id, name: v.name })),
     }
 }

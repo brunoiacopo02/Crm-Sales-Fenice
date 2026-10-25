@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 
 import { sendInternalAlert } from "@/app/actions/alertActions"
-import { getConfermeHeartbeats, type ConfermeHeartbeat } from "@/app/actions/presenceActions"
+import { getColleghiDellaStessaParte, getConfermeHeartbeats, type ConfermeHeartbeat } from "@/app/actions/presenceActions"
 import { Users, Send, AlertTriangle, MessageSquarePlus } from "lucide-react"
 import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeConnection } from "@/lib/confermePresence"
 import { collegaName } from "@/lib/conferme/boardView"
@@ -15,6 +15,10 @@ const HEARTBEAT_POLL_MS = 30_000
 export function TeamRadarWidget({ currentUser, variant = 'classic' }: { currentUser: any; variant?: 'classic' | 'diretta' }) {
     const [activeUsers, setActiveUsers] = useState<any[]>([])
     const [heartbeats, setHeartbeats] = useState<ConfermeHeartbeat[]>([])
+    // Gli account della stessa parte (prova con prova, migr. 0050): il canale
+    // Realtime è uno per tutti, il filtro si fa qui. Finché non arriva, del
+    // canale non si mostra nessuno: restano i battiti, già filtrati sul DB.
+    const [stessaParte, setStessaParte] = useState<Set<string> | null>(null)
     const [connected, setConnected] = useState(false)
     const [selectedUser, setSelectedUser] = useState<any | null>(null)
     const [message, setMessage] = useState("")
@@ -44,6 +48,14 @@ export function TeamRadarWidget({ currentUser, variant = 'classic' }: { currentU
         return () => { offPresence(); offConnection(); disconnect() }
     }, [currentUser.id])
 
+    useEffect(() => {
+        let cancelled = false
+        getColleghiDellaStessaParte()
+            .then(ids => { if (!cancelled) setStessaParte(new Set(ids)) })
+            .catch(e => console.warn("[presence] getColleghiDellaStessaParte fallito:", e))
+        return () => { cancelled = true }
+    }, [currentUser.id])
+
     // Task P1: heartbeat DB come fonte di verità di backup — copre i casi in
     // cui il Realtime non propaga (churn di subscribe, rete instabile). Poll
     // ogni 30s, il server filtra già i soli heartbeat freschi (< 90s).
@@ -65,7 +77,9 @@ export function TeamRadarWidget({ currentUser, variant = 'classic' }: { currentU
     // activity/leadId dell'heartbeat fanno da fallback quando manca il dato realtime.
     const mergedUsers = useMemo(() => {
         const map = new Map<string, any>()
-        for (const p of activeUsers) map.set(p.user.id, p)
+        for (const p of activeUsers) {
+            if (stessaParte?.has(p.user.id)) map.set(p.user.id, p)
+        }
         for (const h of heartbeats) {
             const existing = map.get(h.userId)
             if (existing) {
@@ -75,7 +89,7 @@ export function TeamRadarWidget({ currentUser, variant = 'classic' }: { currentU
             }
         }
         return Array.from(map.values())
-    }, [activeUsers, heartbeats])
+    }, [activeUsers, heartbeats, stessaParte])
 
     const handleSend = async () => {
         if (!selectedUser || !message.trim()) return

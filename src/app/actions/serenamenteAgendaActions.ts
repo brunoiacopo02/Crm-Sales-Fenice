@@ -5,6 +5,8 @@ import { and, eq } from "drizzle-orm"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { logLeadEvent } from "@/lib/eventLogger"
+import { accountDiProva } from "@/lib/prova/sql"
+import { erroreMondoDiverso, stessoMondo } from "@/lib/prova/regole"
 
 const AGENDA_URL = process.env.SERENAMENTE_AGENDA_URL ?? "https://web-app-messaggistica.vercel.app/api/send-agenda"
 
@@ -34,6 +36,16 @@ export async function sendAgendaSerenamente(leadId: string): Promise<SendAgendaS
 
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
     if (!lead) return { success: false, error: "Lead non trovato" }
+
+    // Prova (migr. 0050), come sendAgendaToLead: niente WhatsApp fra le due
+    // parti, e a un lead di prova non parte niente: l'invio si simula.
+    const attore = { isTest: await accountDiProva(user.id) }
+    if (!stessoMondo(lead, attore)) return { success: false, error: erroreMondoDiverso(attore) }
+    if (lead.isTest) {
+        await db.update(leads).set({ agendaSentAt: new Date() })
+            .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId)))
+        return { success: true, alreadySent: lead.agendaSentAt !== null }
+    }
 
     const phone = normalizePhoneIT(lead.phone || "")
     if (!phone) return { success: false, error: "Numero di telefono mancante o non valido" }

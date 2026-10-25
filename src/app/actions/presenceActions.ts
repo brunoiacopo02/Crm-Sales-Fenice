@@ -98,3 +98,16 @@ export async function getConfermeHeartbeats(): Promise<ConfermeHeartbeat[]> {
         updatedAt: r.updatedAt,
     }))
 }
+
+/**
+ * Gli account della stessa parte di chi guarda (prova con prova, veri con
+ * veri, migr. 0050). Il canale Realtime della board è uno solo per tutti e
+ * non si tocca: il Radar usa questo elenco per non mostrare i colleghi
+ * dell'altra parte, e il lead su cui lavorano.
+ */
+export async function getColleghiDellaStessaParte(): Promise<string[]> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const rows = await db.select({ id: users.id }).from(users).where(accountDelMondoDiAccount(ctx.userId))
+    return rows.map(r => r.id)
+}

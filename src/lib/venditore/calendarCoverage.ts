@@ -84,6 +84,15 @@ export interface CoverageCell {
     status: CoverageStatus
 }
 
+/**
+ * La copertura senza i lead, per chi guarda da un account di prova (migr.
+ * 0050): chi è occupato e quanti sono restano, id e nome del lead vero no.
+ * Le agende dei venditori sono fatte solo di lead veri.
+ */
+export function coperturaSenzaLead(cells: CoverageCell[]): CoverageCell[] {
+    return cells.map(c => ({ ...c, busy: c.busy.map(b => ({ salesUserId: b.salesUserId, leadId: '', leadName: '' })) }))
+}
+
 export function buildCoverage(params: {
     slots: Date[]
     availability: Array<{ salesUserId: string; slotKey: string }>

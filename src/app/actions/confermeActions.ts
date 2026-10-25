@@ -21,7 +21,7 @@ import { slotKey, slotLabel, slotStartFor, weekStartFor, romeInstant } from "@/l
 import { toRomeDateStr } from "@/lib/dateUtils"
 import { personName } from "@/lib/diretta/config"
 import { weekCoverage } from "@/lib/venditore/calendarQueries"
-import type { CoverageCell } from "@/lib/venditore/calendarCoverage"
+import { coperturaSenzaLead, type CoverageCell } from "@/lib/venditore/calendarCoverage"
 import { bookingCheck, bookingRefusalMessage, forceReasonProblem, type BookingDecision, type BookingRefusal } from "@/lib/venditore/calendarBooking"
 import { lancioFirst } from "@/lib/lancio/conferme"
 import { appointmentMoveStamp, confermeBoardColumn } from "@/lib/conferme/boardWindow"
@@ -2049,7 +2049,8 @@ export async function getVenditoriAgenda(startDate: Date, endDate: Date, opts?: 
                 };
             })
             .sort((a, b) => a.name.localeCompare(b.name, 'it')),
-        coverage,
+        // Anche la copertura porta chi è occupato e con quale lead.
+        coverage: vistaDiProva ? coperturaSenzaLead(coverage) : coverage,
         reportedSlots,
     };
 }
