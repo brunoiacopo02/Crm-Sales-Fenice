@@ -1,7 +1,7 @@
 // Premi in euro della settimana (PO 25/10/2026, seconda tornata): classifica
 // dei primi tre, bonus presenze dei GDO e bonus di squadra delle Conferme.
 // Funzioni pure: la settimana, i conti e la forma di quello che si registra a
-// settimana chiusa (tabella weeklyPrizeRuns, migr. 0049). La lettura dal DB è
+// settimana chiusa (tabella weeklyPrizeRuns, migr. 0051). La lettura dal DB è
 // in ./settimanaDb.ts, l'action admin in src/app/actions/premiSettimanaActions.ts.
 //
 // La settimana va da lunedì a sabato (la domenica non si lavora): il lunedì

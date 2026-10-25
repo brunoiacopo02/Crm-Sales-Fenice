@@ -112,7 +112,7 @@ export const users = pgTable('users', {
     dailyFreshCap: integer('dailyFreshCap'),
 
     // Tetto giornaliero di RIDATI dal bot per questo GDO (giorno solare di Roma,
-    // migr. 0049, PO 25/10/2026). A tetto pieno esce dal giro dei ridati fino a
+    // migr. 0051, PO 25/10/2026). A tetto pieno esce dal giro dei ridati fino a
     // domani. null = nessun tetto, come per tutti dal 19/10.
     dailyReturnCap: integer('dailyReturnCap'),
 
@@ -1953,7 +1953,7 @@ export const dailyQuoteSchedule = pgTable('dailyQuoteSchedule', {
     approvedAt: timestamp('approvedAt', { withTimezone: true, mode: 'date' }),
 }, (t) => [primaryKey({ columns: [t.day, t.kind] })]);
 
-// Premi in euro della settimana lun-sab (migr. 0049, PO 25/10/2026): classifica
+// Premi in euro della settimana lun-sab (migr. 0051, PO 25/10/2026): classifica
 // dei primi tre, bonus presenze dei GDO e bonus di squadra delle Conferme,
 // calcolati e registrati dall'admin a settimana chiusa
 // (/admin/diretta/premi-settimana). `snapshot` è PremiSettimana di
