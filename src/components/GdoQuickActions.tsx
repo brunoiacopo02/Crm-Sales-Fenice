@@ -8,6 +8,8 @@ import { getAnimationsEnabled } from "@/lib/animationUtils"
 import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 import { appointmentSlotWarning } from "@/lib/conferme/appointmentSlotWarning"
+import { emettiAppuntamentoDiretta } from "@/lib/diretta/eventi"
+import { useDirettaUi } from "./diretta/DirettaUi"
 
 type GdoQuickActionsProps = {
     leadId: string
@@ -48,6 +50,8 @@ function spawnMiniConfetti(card: HTMLElement) {
 export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillNote, popoverDirection = 'down' }: GdoQuickActionsProps) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
+    // Diretta (PO 25/10/2026): stessa logica degli esiti, cambia solo la veste.
+    const direttaUi = useDirettaUi()
 
     // Popover states
     const [activePopover, setActivePopover] = useState<'scartato' | 'richiamo' | 'appuntamento' | null>(null)
@@ -124,6 +128,9 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                 router.refresh()
                 return
             }
+            // Il server ha registrato l'appuntamento: la home Diretta fa avanzare
+            // il contatore subito, senza aspettare il prossimo aggiornamento.
+            if (outcome === 'APPUNTAMENTO') emettiAppuntamentoDiretta(leadId)
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);
@@ -147,7 +154,9 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                 if (card) {
                     switch (outcome) {
                         case 'APPUNTAMENTO':
-                            spawnMiniConfetti(card)
+                            // Nella Diretta il momento appuntamento lo fa la home:
+                            // niente coriandoli colorati sulla card.
+                            if (!direttaUi.attiva) spawnMiniConfetti(card)
                             card.style.animation = 'pa-slide-out 600ms ease-in forwards'
                             animDelay = 650
                             break
@@ -192,6 +201,106 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
         loading || 
         (activePopover === 'scartato' && !discardReason) || 
         ((activePopover === 'richiamo' || activePopover === 'appuntamento') && !dateStr)
+
+    // ── Veste Diretta: stessi gestori, stessi controlli, solo la grafica scura.
+    // Il lead in cima alla coda ("aperto") ha i bottoni grandi su una riga.
+    if (direttaUi.attiva) {
+        const grande = direttaUi.aperto
+        const base = `flex items-center justify-center gap-2 rounded-lg border-2 font-medium transition-colors disabled:opacity-50 ${grande ? 'h-14 px-4 text-[15px]' : 'h-9 px-3 text-[13px]'}`
+        const neutro = (attivo: boolean) => `${base} bg-transparent text-[#F2F2F2] hover:border-[#8C8C8C] ${attivo ? 'border-[#F2F2F2]' : 'border-[#3D3D3D]'}`
+        const icona = grande ? 'h-[18px] w-[18px]' : 'h-4 w-4'
+        const avviso = activePopover === 'appuntamento' && dateStr ? appointmentSlotWarning(dateStr, new Date()) : null
+        return (
+            <div className={grande ? "relative grid w-full grid-cols-2 gap-2 sm:grid-cols-4" : "relative flex flex-wrap items-center gap-1.5"} ref={containerRef}>
+                <button
+                    onClick={(e) => { e.stopPropagation(); handleAction('NON_RISPOSTO'); }}
+                    disabled={loading}
+                    className={neutro(false)}
+                >
+                    <PhoneOff className={icona} strokeWidth={1.5} /> Non risponde
+                </button>
+                <button
+                    onClick={(e) => openPopover(e, 'richiamo')}
+                    disabled={loading}
+                    className={neutro(activePopover === 'richiamo')}
+                >
+                    <CalendarClock className={icona} strokeWidth={1.5} /> Richiamo
+                </button>
+                <button
+                    onClick={(e) => openPopover(e, 'scartato')}
+                    disabled={loading}
+                    className={neutro(activePopover === 'scartato')}
+                >
+                    <Ban className={icona} strokeWidth={1.5} /> Da scartare
+                </button>
+                <button
+                    onClick={(e) => openPopover(e, 'appuntamento')}
+                    disabled={loading}
+                    className={`${base} bg-[#FF9330] font-semibold text-[#171717] hover:bg-[#FFA552] ${activePopover === 'appuntamento' ? 'border-[#F2F2F2]' : 'border-[#FF9330] hover:border-[#FFA552]'}`}
+                >
+                    <Handshake className={icona} strokeWidth={1.5} /> Appuntamento
+                </button>
+
+                {activePopover === 'scartato' && (
+                    <div ref={popoverRef} onClick={e => e.stopPropagation()} className={`absolute right-0 ${popoverPositionClass} z-50 w-72 rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 text-[#F2F2F2]`}>
+                        <div className="mb-3 text-[15px] font-semibold">Scarta il lead</div>
+                        <select
+                            value={discardReason}
+                            onChange={(e) => setDiscardReason(e.target.value)}
+                            className="input-fenice !text-xs !py-2 !px-2.5 mb-2"
+                        >
+                            <option value="" disabled>Scegli il motivo</option>
+                            {GDO_DISCARD_REASONS.map(reason => (
+                                <option key={reason} value={reason}>{reason}</option>
+                            ))}
+                        </select>
+                        <div className="mt-3 flex justify-end gap-2">
+                            <button onClick={() => setActivePopover(null)} className="px-3 py-2 text-[13px] text-[#BFBFBF] hover:text-[#F2F2F2]">Annulla</button>
+                            <button onClick={() => handleAction('DA_SCARTARE')} disabled={isSubmitDisabled} className="rounded-lg bg-[#F2F2F2] px-4 py-2 text-[13px] font-semibold text-[#171717] disabled:opacity-40">
+                                Conferma scarto
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {(activePopover === 'richiamo' || activePopover === 'appuntamento') && (
+                    <div ref={popoverRef} onClick={e => e.stopPropagation()} className={`absolute right-0 ${popoverPositionClass} z-50 w-72 rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 text-[#F2F2F2]`}>
+                        <div className="mb-3 text-[15px] font-semibold">
+                            {activePopover === 'appuntamento' ? "Fissa l'appuntamento" : 'Programma il richiamo'}
+                        </div>
+                        <div className="mb-1 text-[13px] text-[#BFBFBF]">Data e ora</div>
+                        <div className="mb-3">
+                            {activePopover === 'appuntamento' ? (
+                                <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                            ) : (
+                                <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                            )}
+                        </div>
+                        {avviso && (
+                            <div className="mb-3 rounded-lg bg-[#2E2E2E] px-3 py-2 text-[13px] text-[#F2F2F2]">{avviso}</div>
+                        )}
+                        <div className="mb-1 text-[13px] text-[#BFBFBF]">Note, facoltative</div>
+                        <textarea
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder={activePopover === 'appuntamento' ? "Note per le Conferme" : "Motivo del richiamo"}
+                            className="input-fenice !text-xs !py-2 !px-2.5 resize-none h-16 mb-3"
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setActivePopover(null)} className="px-3 py-2 text-[13px] text-[#BFBFBF] hover:text-[#F2F2F2]">Annulla</button>
+                            <button
+                                onClick={() => handleAction(activePopover === 'appuntamento' ? 'APPUNTAMENTO' : 'RICHIAMO')}
+                                disabled={isSubmitDisabled}
+                                className={`rounded-lg px-4 py-2 text-[13px] font-semibold text-[#171717] disabled:opacity-40 ${activePopover === 'appuntamento' ? 'bg-[#FF9330]' : 'bg-[#F2F2F2]'}`}
+                            >
+                                {activePopover === 'appuntamento' ? 'Conferma appuntamento' : 'Conferma richiamo'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    }
 
     return (
         <div className="relative flex items-center gap-1.5" ref={containerRef}>

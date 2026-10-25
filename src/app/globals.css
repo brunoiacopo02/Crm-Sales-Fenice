@@ -1,4 +1,8 @@
 @import "tailwindcss";
+/* I documenti non contengono classi; i percorsi Windows scritti nei piani
+   Tailwind li legge come escape CSS non validi e la build fallisce
+   ("Invalid code point"). Restano fuori dalla scansione. */
+@source not "../../docs";
 
 @theme {
   /* === FONTS === */
@@ -2317,3 +2321,179 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 @media (prefers-reduced-motion: reduce) {
   [data-ui="diretta"] * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Home GDO "Diretta" (ramo home, PO 25/10/2026).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* La home occupa tutto il main, a filo e su fondo scuro. Sugli schermi larghi
+   ogni colonna scorre per conto suo; su quelli stretti scorre la pagina. */
+[data-ui="diretta"] main:has(.d-home) {
+  padding: 0;
+  background: var(--d-bg);
+}
+@media (min-width: 1280px) {
+  [data-ui="diretta"] main:has(.d-home) { overflow: hidden; }
+}
+
+/* Card dei lead nella board Diretta: sono le LeadCard di sempre, con la stessa
+   logica. Per vestirle di scuro senza toccarne il markup, dentro la card si
+   rimappano i colori del tema (Tailwind v4 li legge da variabili). La rimappa
+   vale solo per le parti della card fuori dagli overlay: script, note,
+   duplicati, modifica richiamo e agenda (.fixed) restano chiari come oggi.
+   Prima si fotografano i valori originali sul contenitore Diretta (--d-o-*),
+   poi si rimappano nella card e si ripristinano negli overlay. */
+[data-ui="diretta"] {
+  --d-o-white: var(--color-white); --d-o-brand-light: var(--color-brand-light); --d-o-brand-charcoal: var(--color-brand-charcoal); --d-o-brand-orange: var(--color-brand-orange);
+  --d-o-brand-orange-hover: var(--color-brand-orange-hover); --d-o-ash-50: var(--color-ash-50); --d-o-ash-100: var(--color-ash-100); --d-o-ash-200: var(--color-ash-200);
+  --d-o-ash-300: var(--color-ash-300); --d-o-ash-400: var(--color-ash-400); --d-o-ash-500: var(--color-ash-500); --d-o-ash-600: var(--color-ash-600);
+  --d-o-ash-700: var(--color-ash-700); --d-o-ash-800: var(--color-ash-800); --d-o-ash-900: var(--color-ash-900); --d-o-slate-50: var(--color-slate-50);
+  --d-o-slate-100: var(--color-slate-100); --d-o-slate-200: var(--color-slate-200); --d-o-slate-300: var(--color-slate-300); --d-o-slate-400: var(--color-slate-400);
+  --d-o-slate-500: var(--color-slate-500); --d-o-slate-600: var(--color-slate-600); --d-o-slate-700: var(--color-slate-700); --d-o-slate-800: var(--color-slate-800);
+  --d-o-slate-900: var(--color-slate-900); --d-o-orange-50: var(--color-orange-50); --d-o-orange-100: var(--color-orange-100); --d-o-orange-200: var(--color-orange-200);
+  --d-o-orange-300: var(--color-orange-300); --d-o-orange-400: var(--color-orange-400); --d-o-orange-500: var(--color-orange-500); --d-o-orange-600: var(--color-orange-600);
+  --d-o-orange-700: var(--color-orange-700); --d-o-orange-800: var(--color-orange-800); --d-o-orange-900: var(--color-orange-900); --d-o-emerald-50: var(--color-emerald-50);
+  --d-o-emerald-100: var(--color-emerald-100); --d-o-emerald-200: var(--color-emerald-200); --d-o-emerald-300: var(--color-emerald-300); --d-o-emerald-400: var(--color-emerald-400);
+  --d-o-emerald-500: var(--color-emerald-500); --d-o-emerald-600: var(--color-emerald-600); --d-o-emerald-700: var(--color-emerald-700); --d-o-emerald-800: var(--color-emerald-800);
+  --d-o-emerald-900: var(--color-emerald-900); --d-o-blue-50: var(--color-blue-50); --d-o-blue-100: var(--color-blue-100); --d-o-blue-200: var(--color-blue-200);
+  --d-o-blue-300: var(--color-blue-300); --d-o-blue-400: var(--color-blue-400); --d-o-blue-500: var(--color-blue-500); --d-o-blue-600: var(--color-blue-600);
+  --d-o-blue-700: var(--color-blue-700); --d-o-blue-800: var(--color-blue-800); --d-o-blue-900: var(--color-blue-900); --d-o-red-50: var(--color-red-50);
+  --d-o-red-100: var(--color-red-100); --d-o-red-200: var(--color-red-200); --d-o-red-300: var(--color-red-300); --d-o-red-400: var(--color-red-400);
+  --d-o-red-500: var(--color-red-500); --d-o-red-600: var(--color-red-600); --d-o-red-700: var(--color-red-700); --d-o-red-800: var(--color-red-800);
+  --d-o-red-900: var(--color-red-900); --d-o-gold-50: var(--color-gold-50); --d-o-gold-100: var(--color-gold-100); --d-o-gold-200: var(--color-gold-200);
+  --d-o-gold-300: var(--color-gold-300); --d-o-gold-400: var(--color-gold-400); --d-o-gold-500: var(--color-gold-500); --d-o-gold-600: var(--color-gold-600);
+  --d-o-gold-700: var(--color-gold-700); --d-o-gold-800: var(--color-gold-800); --d-o-gold-900: var(--color-gold-900); --d-o-amber-50: var(--color-amber-50);
+  --d-o-amber-100: var(--color-amber-100); --d-o-amber-200: var(--color-amber-200); --d-o-amber-300: var(--color-amber-300); --d-o-amber-400: var(--color-amber-400);
+  --d-o-amber-500: var(--color-amber-500); --d-o-amber-600: var(--color-amber-600); --d-o-amber-700: var(--color-amber-700); --d-o-amber-800: var(--color-amber-800);
+  --d-o-amber-900: var(--color-amber-900); --d-o-ember-50: var(--color-ember-50); --d-o-ember-100: var(--color-ember-100); --d-o-ember-200: var(--color-ember-200);
+  --d-o-ember-300: var(--color-ember-300); --d-o-ember-400: var(--color-ember-400); --d-o-ember-500: var(--color-ember-500); --d-o-ember-600: var(--color-ember-600);
+  --d-o-ember-700: var(--color-ember-700); --d-o-ember-800: var(--color-ember-800); --d-o-ember-900: var(--color-ember-900); --d-o-brand-orange-50: var(--color-brand-orange-50);
+  --d-o-brand-orange-100: var(--color-brand-orange-100); --d-o-brand-orange-200: var(--color-brand-orange-200); --d-o-brand-orange-300: var(--color-brand-orange-300); --d-o-brand-orange-400: var(--color-brand-orange-400);
+  --d-o-brand-orange-500: var(--color-brand-orange-500); --d-o-brand-orange-600: var(--color-brand-orange-600); --d-o-brand-orange-700: var(--color-brand-orange-700); --d-o-brand-orange-800: var(--color-brand-orange-800);
+  --d-o-brand-orange-900: var(--color-brand-orange-900);
+}
+[data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) {
+  color-scheme: dark;
+  --color-white: #262626; --color-brand-light: #262626; --color-brand-charcoal: #F2F2F2; --color-brand-orange: #FF9330;
+  --color-brand-orange-hover: #FFA552; --color-ash-50: #2E2E2E; --color-ash-100: #2E2E2E; --color-ash-200: #3D3D3D;
+  --color-ash-300: #4D4D4D; --color-ash-400: #8C8C8C; --color-ash-500: #A6A6A6; --color-ash-600: #BFBFBF;
+  --color-ash-700: #D9D9D9; --color-ash-800: #F2F2F2; --color-ash-900: #F2F2F2; --color-slate-50: #2E2E2E;
+  --color-slate-100: #2E2E2E; --color-slate-200: #3D3D3D; --color-slate-300: #4D4D4D; --color-slate-400: #8C8C8C;
+  --color-slate-500: #A6A6A6; --color-slate-600: #BFBFBF; --color-slate-700: #D9D9D9; --color-slate-800: #F2F2F2;
+  --color-slate-900: #F2F2F2; --color-orange-50: #2E2E2E; --color-orange-100: #333333; --color-orange-200: #3D3D3D;
+  --color-orange-300: #4D4D4D; --color-orange-400: #BFBFBF; --color-orange-500: #BFBFBF; --color-orange-600: #F2F2F2;
+  --color-orange-700: #F2F2F2; --color-orange-800: #F2F2F2; --color-orange-900: #F2F2F2; --color-emerald-50: #2E2E2E;
+  --color-emerald-100: #333333; --color-emerald-200: #3D3D3D; --color-emerald-300: #4D4D4D; --color-emerald-400: #BFBFBF;
+  --color-emerald-500: #BFBFBF; --color-emerald-600: #F2F2F2; --color-emerald-700: #F2F2F2; --color-emerald-800: #F2F2F2;
+  --color-emerald-900: #F2F2F2; --color-blue-50: #2E2E2E; --color-blue-100: #333333; --color-blue-200: #3D3D3D;
+  --color-blue-300: #4D4D4D; --color-blue-400: #BFBFBF; --color-blue-500: #BFBFBF; --color-blue-600: #F2F2F2;
+  --color-blue-700: #F2F2F2; --color-blue-800: #F2F2F2; --color-blue-900: #F2F2F2; --color-red-50: #2E2E2E;
+  --color-red-100: #333333; --color-red-200: #3D3D3D; --color-red-300: #4D4D4D; --color-red-400: #BFBFBF;
+  --color-red-500: #BFBFBF; --color-red-600: #F2F2F2; --color-red-700: #F2F2F2; --color-red-800: #F2F2F2;
+  --color-red-900: #F2F2F2; --color-gold-50: #2E2E2E; --color-gold-100: #333333; --color-gold-200: #3D3D3D;
+  --color-gold-300: #4D4D4D; --color-gold-400: #BFBFBF; --color-gold-500: #BFBFBF; --color-gold-600: #F2F2F2;
+  --color-gold-700: #F2F2F2; --color-gold-800: #F2F2F2; --color-gold-900: #F2F2F2; --color-amber-50: #2E2E2E;
+  --color-amber-100: #333333; --color-amber-200: #3D3D3D; --color-amber-300: #4D4D4D; --color-amber-400: #FF9330;
+  --color-amber-500: #FF9330; --color-amber-600: #F2F2F2; --color-amber-700: #F2F2F2; --color-amber-800: #F2F2F2;
+  --color-amber-900: #F2F2F2; --color-ember-50: #2E2E2E; --color-ember-100: #333333; --color-ember-200: #3D3D3D;
+  --color-ember-300: #4D4D4D; --color-ember-400: #FF9330; --color-ember-500: #FF9330; --color-ember-600: #F2F2F2;
+  --color-ember-700: #F2F2F2; --color-ember-800: #F2F2F2; --color-ember-900: #F2F2F2; --color-brand-orange-50: #2E2E2E;
+  --color-brand-orange-100: #333333; --color-brand-orange-200: #3D3D3D; --color-brand-orange-300: #4D4D4D; --color-brand-orange-400: #FF9330;
+  --color-brand-orange-500: #FF9330; --color-brand-orange-600: #FF9330; --color-brand-orange-700: #FF9330; --color-brand-orange-800: #FF9330;
+  --color-brand-orange-900: #FF9330;
+}
+[data-ui="diretta"] .d-board [data-lead-card] .fixed {
+  color-scheme: light;
+  color: var(--color-brand-charcoal);
+  --color-white: var(--d-o-white); --color-brand-light: var(--d-o-brand-light); --color-brand-charcoal: var(--d-o-brand-charcoal); --color-brand-orange: var(--d-o-brand-orange);
+  --color-brand-orange-hover: var(--d-o-brand-orange-hover); --color-ash-50: var(--d-o-ash-50); --color-ash-100: var(--d-o-ash-100); --color-ash-200: var(--d-o-ash-200);
+  --color-ash-300: var(--d-o-ash-300); --color-ash-400: var(--d-o-ash-400); --color-ash-500: var(--d-o-ash-500); --color-ash-600: var(--d-o-ash-600);
+  --color-ash-700: var(--d-o-ash-700); --color-ash-800: var(--d-o-ash-800); --color-ash-900: var(--d-o-ash-900); --color-slate-50: var(--d-o-slate-50);
+  --color-slate-100: var(--d-o-slate-100); --color-slate-200: var(--d-o-slate-200); --color-slate-300: var(--d-o-slate-300); --color-slate-400: var(--d-o-slate-400);
+  --color-slate-500: var(--d-o-slate-500); --color-slate-600: var(--d-o-slate-600); --color-slate-700: var(--d-o-slate-700); --color-slate-800: var(--d-o-slate-800);
+  --color-slate-900: var(--d-o-slate-900); --color-orange-50: var(--d-o-orange-50); --color-orange-100: var(--d-o-orange-100); --color-orange-200: var(--d-o-orange-200);
+  --color-orange-300: var(--d-o-orange-300); --color-orange-400: var(--d-o-orange-400); --color-orange-500: var(--d-o-orange-500); --color-orange-600: var(--d-o-orange-600);
+  --color-orange-700: var(--d-o-orange-700); --color-orange-800: var(--d-o-orange-800); --color-orange-900: var(--d-o-orange-900); --color-emerald-50: var(--d-o-emerald-50);
+  --color-emerald-100: var(--d-o-emerald-100); --color-emerald-200: var(--d-o-emerald-200); --color-emerald-300: var(--d-o-emerald-300); --color-emerald-400: var(--d-o-emerald-400);
+  --color-emerald-500: var(--d-o-emerald-500); --color-emerald-600: var(--d-o-emerald-600); --color-emerald-700: var(--d-o-emerald-700); --color-emerald-800: var(--d-o-emerald-800);
+  --color-emerald-900: var(--d-o-emerald-900); --color-blue-50: var(--d-o-blue-50); --color-blue-100: var(--d-o-blue-100); --color-blue-200: var(--d-o-blue-200);
+  --color-blue-300: var(--d-o-blue-300); --color-blue-400: var(--d-o-blue-400); --color-blue-500: var(--d-o-blue-500); --color-blue-600: var(--d-o-blue-600);
+  --color-blue-700: var(--d-o-blue-700); --color-blue-800: var(--d-o-blue-800); --color-blue-900: var(--d-o-blue-900); --color-red-50: var(--d-o-red-50);
+  --color-red-100: var(--d-o-red-100); --color-red-200: var(--d-o-red-200); --color-red-300: var(--d-o-red-300); --color-red-400: var(--d-o-red-400);
+  --color-red-500: var(--d-o-red-500); --color-red-600: var(--d-o-red-600); --color-red-700: var(--d-o-red-700); --color-red-800: var(--d-o-red-800);
+  --color-red-900: var(--d-o-red-900); --color-gold-50: var(--d-o-gold-50); --color-gold-100: var(--d-o-gold-100); --color-gold-200: var(--d-o-gold-200);
+  --color-gold-300: var(--d-o-gold-300); --color-gold-400: var(--d-o-gold-400); --color-gold-500: var(--d-o-gold-500); --color-gold-600: var(--d-o-gold-600);
+  --color-gold-700: var(--d-o-gold-700); --color-gold-800: var(--d-o-gold-800); --color-gold-900: var(--d-o-gold-900); --color-amber-50: var(--d-o-amber-50);
+  --color-amber-100: var(--d-o-amber-100); --color-amber-200: var(--d-o-amber-200); --color-amber-300: var(--d-o-amber-300); --color-amber-400: var(--d-o-amber-400);
+  --color-amber-500: var(--d-o-amber-500); --color-amber-600: var(--d-o-amber-600); --color-amber-700: var(--d-o-amber-700); --color-amber-800: var(--d-o-amber-800);
+  --color-amber-900: var(--d-o-amber-900); --color-ember-50: var(--d-o-ember-50); --color-ember-100: var(--d-o-ember-100); --color-ember-200: var(--d-o-ember-200);
+  --color-ember-300: var(--d-o-ember-300); --color-ember-400: var(--d-o-ember-400); --color-ember-500: var(--d-o-ember-500); --color-ember-600: var(--d-o-ember-600);
+  --color-ember-700: var(--d-o-ember-700); --color-ember-800: var(--d-o-ember-800); --color-ember-900: var(--d-o-ember-900); --color-brand-orange-50: var(--d-o-brand-orange-50);
+  --color-brand-orange-100: var(--d-o-brand-orange-100); --color-brand-orange-200: var(--d-o-brand-orange-200); --color-brand-orange-300: var(--d-o-brand-orange-300); --color-brand-orange-400: var(--d-o-brand-orange-400);
+  --color-brand-orange-500: var(--d-o-brand-orange-500); --color-brand-orange-600: var(--d-o-brand-orange-600); --color-brand-orange-700: var(--d-o-brand-orange-700); --color-brand-orange-800: var(--d-o-brand-orange-800);
+  --color-brand-orange-900: var(--d-o-brand-orange-900);
+}
+
+[data-ui="diretta"] .d-board [data-lead-card] {
+  background-color: var(--d-surface);
+  border: 2px solid transparent;
+  border-radius: var(--d-radius-l);
+  box-shadow: none;
+  color: var(--d-text);
+  transition: border-color 150ms ease-out;
+}
+[data-ui="diretta"] .d-board [data-lead-card]::before { display: none; }
+[data-ui="diretta"] .d-board [data-lead-card]:hover { border-color: var(--d-line); }
+[data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) :is(.shadow-soft, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-card) { box-shadow: none; }
+[data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) .uppercase { text-transform: none; letter-spacing: 0; }
+[data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) .italic { font-style: normal; }
+[data-ui="diretta"] .d-board [data-lead-card] > :not(.fixed) :is(.animate-pulse, .animate-pulse-slow, .animate-glow-pulse) { animation: none; }
+[data-ui="diretta"] .d-board :focus-visible { outline: 2px solid var(--d-orange); outline-offset: 2px; }
+/* Per GDO e Conferme Serenamente non esiste: il bollino "Fenice" su ogni card è rumore. */
+[data-ui="diretta"] .d-board [data-lead-card] [title="Lead Fenice"] { display: none; }
+/* Lo script è un aiuto, non una cosa da fare adesso: niente arancione. */
+[data-ui="diretta"] .d-board [data-lead-card] [title="Apri script chiamata"] { color: var(--d-text); border-color: var(--d-line); background: transparent; }
+
+/* Il lead in cima alla coda è "aperto": bordo arancione, nome grande e
+   bottoni esito grandi su una riga a parte. */
+[data-ui="diretta"] .d-board .d-aperto [data-lead-card] { border-color: var(--d-orange); padding: 20px 24px; }
+[data-ui="diretta"] .d-board .d-aperto [data-lead-card] [class~="text-[15px]"] { font-size: 22px; line-height: 1.2; }
+[data-ui="diretta"] .d-board .d-aperto [data-lead-card] > div:first-child { flex-wrap: wrap; row-gap: 16px; }
+[data-ui="diretta"] .d-board .d-aperto [data-lead-card] > div:first-child > div:last-child {
+  flex-basis: 100%; flex-wrap: wrap; justify-content: flex-start; padding-left: 0;
+}
+
+/* Colonna centrale stretta (schermi da laptop): le azioni vanno a capo sotto
+   i dati del lead invece di schiacciarli. Dipende dalla struttura della riga
+   di LeadCard: riga principale = primo figlio, azioni = suo ultimo figlio. */
+[data-ui="diretta"] .d-coda { container-type: inline-size; }
+@container (max-width: 1080px) {
+  [data-ui="diretta"] .d-board [data-lead-card] > div:first-child { flex-wrap: wrap; row-gap: 12px; }
+  [data-ui="diretta"] .d-board [data-lead-card] > div:first-child > div:last-child {
+    flex-basis: 100%; flex-wrap: wrap; justify-content: flex-start; padding-left: 0;
+  }
+}
+
+/* Momento appuntamento: parte subito, dura al massimo 2 secondi, più ricco
+   al 1°, all'8° e al 10° e nell'ora di punta. Con prefers-reduced-motion le
+   durate si azzerano (regola qui sopra) e restano solo i numeri nuovi. */
+@keyframes d-pop { 0% { transform: scale(1); } 35% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes d-pop-forte { 0% { transform: scale(1); } 30% { transform: scale(1.18); } 65% { transform: scale(0.98); } 100% { transform: scale(1); } }
+@keyframes d-traccia { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes d-inverti {
+  0%, 100% { background-color: transparent; color: inherit; }
+  12%, 78% { background-color: #171717; color: #FF9330; }
+}
+@keyframes d-svanisce {
+  0% { opacity: 0; transform: translateY(6px); }
+  15% { opacity: 1; transform: none; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes d-punta { 0% { outline-color: transparent; } 25% { outline-color: #F2F2F2; } 100% { outline-color: transparent; } }
+[data-ui="diretta"] .d-pop { animation: d-pop 450ms ease-out; transform-origin: left bottom; }
+[data-ui="diretta"] .d-pop-forte { animation: d-pop-forte 800ms ease-out; transform-origin: left bottom; }
+[data-ui="diretta"] .d-pop-forte.d-inverti { animation: d-pop-forte 800ms ease-out, d-inverti 1600ms ease-in-out; border-radius: 8px; }
+[data-ui="diretta"] .d-traccia { animation: d-traccia 700ms ease-out both; }
+[data-ui="diretta"] .d-svanisce { animation: d-svanisce 1800ms ease-out; }
+[data-ui="diretta"] .d-punta-pop { outline: 3px solid transparent; outline-offset: 2px; animation: d-punta 1200ms ease-out; }

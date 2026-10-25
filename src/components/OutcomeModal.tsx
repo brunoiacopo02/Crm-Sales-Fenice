@@ -6,6 +6,7 @@ import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { useRouter } from "next/navigation"
 import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
+import { emettiAppuntamentoDiretta } from "@/lib/diretta/eventi"
 
 type OutcomeModalProps = {
     leadId: string
@@ -80,6 +81,8 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                 onClose()
                 return
             }
+            // Appuntamento registrato dal server: avanza il contatore della Diretta.
+            if (outcome === 'APPUNTAMENTO') emettiAppuntamentoDiretta(leadId)
             if (result?.rewardData) {
                 const { emitRewardEarned } = await import('@/lib/animationUtils');
                 emitRewardEarned(result.rewardData);

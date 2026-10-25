@@ -9,9 +9,20 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 // Codici GDO richiesti da specifiche
 const GDO_CODES = [105, 113, 114, 115, 116, 117, 118, 119]
 
+/**
+ * Account, nomi, stato e target li cambiano solo ADMIN e MANAGER: le uniche
+ * chiamate vengono da /team (TeamManagementClient), che è già riservata a
+ * loro. Fino al 25/10/2026 le action non controllavano il ruolo e un GDO
+ * poteva chiamarle a mano (audit Diretta).
+ */
+function soloGestori(ctx: { role: string }) {
+    if (ctx.role !== 'ADMIN' && ctx.role !== 'MANAGER') throw new Error('Non autorizzato')
+}
+
 export async function seedGdoAccounts() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    soloGestori(ctx)
     // 1. Controlla quali esistono già per evitare duplicati ciecamente
     const existingUsers = await db.select({ gdoCode: users.gdoCode }).from(users).where(and(eq(users.role, 'GDO'), eq(users.companyId, ctx.companyId)))
     const existingCodes = new Set(existingUsers.map(u => u.gdoCode).filter(Boolean))
@@ -92,6 +103,7 @@ export async function getTeamAccounts() {
 export async function updateGdoProfile(userId: string, data: { displayName?: string, avatarUrl?: string, isActive?: boolean }) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    soloGestori(ctx)
     await db.update(users)
         .set({
             ...data,
@@ -105,6 +117,7 @@ export async function updateGdoProfile(userId: string, data: { displayName?: str
 export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedTarget: number, scope: 'ALL' | string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    soloGestori(ctx)
     if (scope === 'ALL') {
         await db.update(users)
             .set({ dailyApptTarget, weeklyConfirmedTarget })
@@ -122,6 +135,7 @@ export async function updateGdoTargets(dailyApptTarget: number, weeklyConfirmedT
 export async function updateConfermeTargets(confermeTargetTier1: number, confermeTargetTier2: number, confermeExtraTier1: number, confermeExtraTier2: number, scope: 'ALL' | string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    soloGestori(ctx)
     if (scope === 'ALL') {
         await db.update(users)
             .set({ confermeTargetTier1, confermeTargetTier2, confermeExtraTier1, confermeExtraTier2 })

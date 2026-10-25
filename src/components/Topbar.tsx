@@ -2,7 +2,8 @@
 import { useAuth } from "@/components/AuthProvider"
 import { useSidebar } from "@/components/providers/SidebarProvider"
 import Image from "next/image"
-import { Search, Bell, X, Phone, User, Trophy, Menu } from "lucide-react"
+import Link from "next/link"
+import { Search, Bell, X, Phone, User, Trophy, Menu, Sparkles, Feather } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { searchLeads, SearchResult } from "@/app/actions/searchActions"
 import { usePathname, useRouter } from "next/navigation"
@@ -19,8 +20,23 @@ import { getUserWalletCoins, getUserLevelProgress } from "@/app/actions/sprintAc
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications"
 import { getAnimationsEnabled, type RewardEarnedDetail } from "@/lib/animationUtils"
+import { getDirettaRichiamiScaduti, getDirettaSaldo } from "@/app/actions/direttaActions"
+import { DIRETTA_APPUNTAMENTO } from "@/lib/diretta/eventi"
+import { oraBreve, testoTurno } from "@/lib/diretta/home"
+import type { GamificationTargets } from "@/lib/diretta/config"
+import type { DirettaIo } from "@/lib/diretta/io"
+import { MENU_GDO_DIRETTA } from "@/components/diretta/menu"
+import { useOrologio } from "@/components/diretta/useOrologio"
 
-export function Topbar() {
+type TopbarProps = {
+    /** Diretta accesa per il ruolo (dal layout, lato server). */
+    diretta?: boolean
+    ruolo?: string
+    io?: DirettaIo | null
+    obiettivi?: GamificationTargets | null
+}
+
+export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: TopbarProps = {}) {
     const { toggle } = useSidebar()
     const { user: authUser, isLoading } = useAuth();
     const session = authUser ? { user: { id: authUser.id, role: authUser.user_metadata?.role, email: authUser.email, name: authUser.user_metadata?.name } } : null;
@@ -50,6 +66,8 @@ export function Topbar() {
     const isGamificationRole = session?.user?.role === "GDO" || session?.user?.role === "CONFERME"
 
     useEffect(() => {
+        // Con la Diretta monete, XP e skin vecchie non si mostrano: niente query.
+        if (diretta) return
         if (session?.user?.id) {
             getUserWalletCoins(session.user.id).then(c => { setWalletCoins(c); setDisplayedCoins(c); }).catch(console.error)
             getEquippedSkinCss(session.user.id).then(setSkinCss).catch(console.error)
@@ -57,7 +75,7 @@ export function Topbar() {
                 getUserLevelProgress(session.user.id).then(p => { if (p) setLevelProgress(p); }).catch(console.error)
             }
         }
-    }, [session?.user?.id, isGamificationRole])
+    }, [session?.user?.id, isGamificationRole, diretta])
 
     // Count-up animation when walletCoins changes
     useEffect(() => {
@@ -87,14 +105,92 @@ export function Topbar() {
                 setTimeout(() => setFloatingCoins(prev => prev.filter(f => f.id !== id)), 1500)
             }
             // Refresh wallet from server
-            if (session?.user?.id) {
+            if (session?.user?.id && !diretta) {
                 getUserWalletCoins(session.user.id).then(setWalletCoins).catch(console.error)
                 getUserLevelProgress(session.user.id).then(p => { if (p) setLevelProgress(p); }).catch(console.error)
             }
         }
         window.addEventListener('reward_earned', handler)
         return () => window.removeEventListener('reward_earned', handler)
-    }, [session?.user?.id])
+    }, [session?.user?.id, diretta])
+
+    // ── Diretta: saldo Scintille e Piume, richiami del menu, orologio ──
+    const direttaGdo = diretta && ruolo === 'GDO'
+    const [saldo, setSaldo] = useState<{ scintille: number; piume: number } | null>(io ? { scintille: io.scintille, piume: io.piume } : null)
+    const saldoPrima = useRef(saldo)
+    const [guadagno, setGuadagno] = useState<{ testo: string; chiave: number } | null>(null)
+    const [richiamiScaduti, setRichiamiScaduti] = useState(0)
+    const [cercaAperta, setCercaAperta] = useState(false)
+    const cercaRef = useRef<HTMLInputElement>(null)
+    const adesso = useOrologio(15_000)
+
+    // Il layout rilegge il saldo a ogni refresh: le props nuove vincono.
+    useEffect(() => {
+        if (diretta && io) setSaldo({ scintille: io.scintille, piume: io.piume })
+    }, [diretta, io?.scintille, io?.piume]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // "+N" accanto al saldo quando sale.
+    useEffect(() => {
+        if (!saldo) return
+        const p = saldoPrima.current
+        if (p) {
+            const ds = saldo.scintille - p.scintille
+            const dp = saldo.piume - p.piume
+            const parti = [ds > 0 ? `+${ds} Scintille` : null, dp > 0 ? `+${dp} ${dp === 1 ? 'Piuma' : 'Piume'}` : null].filter(Boolean)
+            if (parti.length > 0) setGuadagno({ testo: parti.join(', '), chiave: Date.now() })
+        }
+        saldoPrima.current = saldo
+    }, [saldo])
+
+    useEffect(() => {
+        if (!guadagno) return
+        const id = setTimeout(() => setGuadagno(null), 1800)
+        return () => clearTimeout(id)
+    }, [guadagno])
+
+    // Dopo un appuntamento il premio lo scrive il server: si rilegge il saldo.
+    // Sulle notifiche (conferme, presenze) al massimo una lettura ogni 10 s.
+    useEffect(() => {
+        if (!diretta) return
+        let ultima = 0
+        let attesa: ReturnType<typeof setTimeout> | null = null
+        const rileggi = () => {
+            ultima = Date.now()
+            getDirettaSaldo().then(s => { if (s) setSaldo(s) }).catch(() => { })
+        }
+        const suAppuntamento = () => {
+            if (attesa) clearTimeout(attesa)
+            attesa = setTimeout(rileggi, 400)
+        }
+        const suNotifica = () => { if (Date.now() - ultima >= 10_000) rileggi() }
+        window.addEventListener(DIRETTA_APPUNTAMENTO, suAppuntamento)
+        window.addEventListener('realtime_update', suNotifica)
+        return () => {
+            if (attesa) clearTimeout(attesa)
+            window.removeEventListener(DIRETTA_APPUNTAMENTO, suAppuntamento)
+            window.removeEventListener('realtime_update', suNotifica)
+        }
+    }, [diretta])
+
+    // Richiami scaduti per la voce di menu, a ogni cambio pagina.
+    useEffect(() => {
+        if (!direttaGdo) return
+        getDirettaRichiamiScaduti().then(setRichiamiScaduti).catch(() => { })
+    }, [direttaGdo, pathname])
+
+    useEffect(() => {
+        if (cercaAperta) cercaRef.current?.focus()
+    }, [cercaAperta])
+
+    // La ricerca a comparsa si chiude cliccando fuori.
+    useEffect(() => {
+        if (!cercaAperta) return
+        const fuori = (e: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setCercaAperta(false)
+        }
+        document.addEventListener('mousedown', fuori)
+        return () => document.removeEventListener('mousedown', fuori)
+    }, [cercaAperta])
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -185,6 +281,245 @@ export function Topbar() {
         setSelectedLeadId(leadId)
         setIsDrawerOpen(true)
         setIsOpen(false)
+    }
+
+    // ── Veste Diretta (GDO e Conferme con l'interruttore acceso) ──
+    // Scura e sobria: logo, menu (GDO, schermi larghi), ricerca, orologio con il
+    // tempo a fine turno (solo lato client), pausa, notifiche, saldo, avatar col
+    // nome vero. La logica di ricerca, notifiche e drawer è quella di sempre.
+    if (diretta && (ruolo === 'GDO' || ruolo === 'CONFERME')) {
+        const nonLette = notifications.filter(n => n.status === 'unread').length
+        const nome = io?.nomeVero ?? io?.nome ?? session?.user?.name ?? ''
+        const iniziale = io?.iniziale ?? (nome.charAt(0).toUpperCase() || 'F')
+        const turno = direttaGdo && adesso && obiettivi ? testoTurno(adesso, obiettivi) : null
+        return (
+            <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b-2 border-[#262626] bg-[#171717] px-4 text-[#F2F2F2] lg:px-6">
+                <button
+                    type="button"
+                    onClick={toggle}
+                    aria-label="Apri il menu"
+                    className={`-ml-1 shrink-0 rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] ${direttaGdo ? 'xl:hidden' : 'lg:hidden'}`}
+                >
+                    <Menu className="h-5 w-5" strokeWidth={1.5} />
+                </button>
+
+                {direttaGdo && (
+                    <Link href="/" className="mr-2 flex shrink-0 items-center gap-2.5">
+                        <span aria-hidden="true" className="h-6 w-6 rounded-lg bg-[#FF9330]" />
+                        <span className="hidden text-[16px] font-semibold sm:inline">Fenice</span>
+                    </Link>
+                )}
+
+                {direttaGdo && (
+                    <nav aria-label="Menu" className="hidden min-w-0 items-center gap-1 xl:flex">
+                        {MENU_GDO_DIRETTA.map(v => {
+                            const attiva = pathname === v.href
+                            return (
+                                <Link
+                                    key={v.href}
+                                    href={v.href}
+                                    aria-current={attiva ? 'page' : undefined}
+                                    className={`whitespace-nowrap rounded-lg px-3 py-2 text-[14px] transition-colors ${attiva ? 'bg-[#262626] font-medium text-[#F2F2F2]' : 'text-[#BFBFBF] hover:text-[#F2F2F2]'}`}
+                                >
+                                    {v.name}
+                                    {v.richiami && richiamiScaduti > 0 && (
+                                        <span className="ml-1.5 tabular-nums text-[#FF9330]">{richiamiScaduti}</span>
+                                    )}
+                                </Link>
+                            )
+                        })}
+                    </nav>
+                )}
+
+                <div className="min-w-0 flex-1" />
+
+                {direttaGdo && (
+                    <div className="relative" ref={wrapperRef}>
+                        <button
+                            type="button"
+                            onClick={() => setCercaAperta(v => !v)}
+                            aria-label="Cerca un lead"
+                            aria-expanded={cercaAperta}
+                            className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2] min-[1760px]:hidden"
+                        >
+                            <Search className="h-5 w-5" strokeWidth={1.5} />
+                        </button>
+                        <div className={`${cercaAperta ? 'absolute right-0 top-full z-[100] mt-2 w-[min(26rem,calc(100vw-2rem))]' : 'hidden'} min-[1760px]:static min-[1760px]:mt-0 min-[1760px]:block min-[1760px]:w-72`}>
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8C8C8C]" strokeWidth={1.5} />
+                                <input
+                                    ref={cercaRef}
+                                    type="text"
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    onFocus={() => { if (query.trim().length >= 2) setIsOpen(true) }}
+                                    placeholder="Cerca per nome, email o telefono"
+                                    className="h-10 w-full rounded-lg border-2 border-[#262626] bg-[#262626] pl-9 pr-9 text-[14px] text-[#F2F2F2] placeholder:text-[#8C8C8C] focus:border-[#8C8C8C] focus:outline-none"
+                                />
+                                {query && (
+                                    <button
+                                        type="button"
+                                        onClick={handleClear}
+                                        aria-label="Cancella la ricerca"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-[#8C8C8C] transition-colors hover:text-[#F2F2F2]"
+                                    >
+                                        <X className="h-4 w-4" strokeWidth={1.5} />
+                                    </button>
+                                )}
+                            </div>
+                            {isOpen && (
+                                <div className="absolute left-0 right-0 top-full z-[100] mt-2 overflow-hidden rounded-2xl border-2 border-[#3D3D3D] bg-[#262626]">
+                                    {isSearching ? (
+                                        <div className="p-4 text-center text-[14px] text-[#BFBFBF]">Ricerca in corso</div>
+                                    ) : results.length > 0 ? (
+                                        <ul className="max-h-96 overflow-y-auto">
+                                            {results.map(lead => (
+                                                <li key={lead.id} className="border-b-2 border-[#2E2E2E] last:border-0">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { handleResultClick(lead.id); setCercaAperta(false) }}
+                                                        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-[#2E2E2E]"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <div className="truncate text-[14px] font-medium text-[#F2F2F2]">{lead.name}</div>
+                                                            <div className="mt-0.5 truncate text-[13px] text-[#BFBFBF]">{lead.phone}{lead.email ? `, ${lead.email}` : ''}</div>
+                                                        </div>
+                                                        <div className="shrink-0 text-[12px] text-[#BFBFBF]">{lead.statusLabel}</div>
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <div className="p-4 text-center text-[14px] text-[#BFBFBF]">Nessun lead trovato</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="hidden shrink-0 text-[14px] tabular-nums text-[#BFBFBF] md:block">
+                    {adesso && (
+                        <>
+                            <span className="text-[#F2F2F2]">{oraBreve(adesso)}</span>
+                            {turno && <span className="hidden 2xl:inline">, {turno}</span>}
+                        </>
+                    )}
+                </div>
+
+                {direttaGdo && <PauseTimer variant="diretta" />}
+
+                <div className="relative shrink-0" ref={notifRef}>
+                    <button
+                        type="button"
+                        onClick={() => setIsNotifOpen(!isNotifOpen)}
+                        aria-label={nonLette > 0 ? `Notifiche, ${nonLette} da leggere` : 'Notifiche'}
+                        className="relative rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]"
+                    >
+                        <Bell className="h-5 w-5" strokeWidth={1.5} />
+                        {nonLette > 0 && (
+                            <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-[6px] bg-[#FF9330] px-1 text-[11px] font-semibold tabular-nums text-[#171717]">
+                                {nonLette}
+                            </span>
+                        )}
+                    </button>
+                    {isNotifOpen && (
+                        <div className="absolute right-0 z-[100] mt-2 w-80 overflow-hidden rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] text-[#F2F2F2]">
+                            <div className="flex items-center justify-between border-b-2 border-[#2E2E2E] px-4 py-3">
+                                <div className="text-[14px] font-semibold">Notifiche</div>
+                                {nonLette > 0 && (
+                                    <button type="button" onClick={handleMarkAllRead} className="text-[12px] font-medium text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]">
+                                        Segna tutte lette
+                                    </button>
+                                )}
+                            </div>
+                            <div className="max-h-[28rem] overflow-y-auto">
+                                {notifications.length > 0 ? (
+                                    <ul>
+                                        {notifications.map(notif => (
+                                            <li key={notif.id} className="border-b-2 border-[#2E2E2E] last:border-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleNotifClick(notif)}
+                                                    className={`w-full px-4 py-3 text-left transition-colors hover:bg-[#2E2E2E] ${notif.status === 'unread' ? 'bg-[#2E2E2E]' : ''}`}
+                                                >
+                                                    <div className={`line-clamp-1 text-[14px] ${notif.status === 'unread' ? 'font-semibold' : ''}`}>{notif.title}</div>
+                                                    <div className="mt-1 line-clamp-2 text-[13px] text-[#BFBFBF]">{notif.body}</div>
+                                                    <div className="mt-1.5 text-[12px] tabular-nums text-[#8C8C8C]">
+                                                        {new Date(notif.createdAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })}
+                                                    </div>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <div className="p-8 text-center text-[14px] text-[#BFBFBF]">Nessuna notifica</div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="relative flex shrink-0 items-center gap-3 rounded-lg bg-[#262626] px-3 py-1.5 text-[13px] tabular-nums" title="Il tuo saldo di Scintille e Piume">
+                    <div className="flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+                        <span className="font-semibold">{saldo?.scintille ?? 0}</span>
+                        <span className="sr-only 2xl:not-sr-only 2xl:text-[#BFBFBF]">Scintille</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <Feather className="h-4 w-4 text-[#BFBFBF]" strokeWidth={1.5} aria-hidden="true" />
+                        <span className="font-semibold">{saldo?.piume ?? 0}</span>
+                        <span className="sr-only 2xl:not-sr-only 2xl:text-[#BFBFBF]">Piume</span>
+                    </div>
+                    {guadagno && (
+                        <div key={guadagno.chiave} aria-live="polite" className="d-svanisce pointer-events-none absolute right-0 top-full mt-1.5 whitespace-nowrap rounded-lg bg-[#FF9330] px-2.5 py-1 text-[12px] font-semibold text-[#171717]">
+                            {guadagno.testo}
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2.5">
+                    <span className="hidden max-w-[10rem] truncate text-[14px] text-[#F2F2F2] 2xl:inline">{nome}</span>
+                    {io?.immagine ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={io.immagine} alt={nome} className="h-9 w-9 rounded-lg object-cover" />
+                    ) : (
+                        <div aria-label={nome} className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F2F2F2] text-[14px] font-semibold text-[#171717]">
+                            {iniziale}
+                        </div>
+                    )}
+                </div>
+
+                <ContactDrawer
+                    isOpen={isDrawerOpen}
+                    leadId={selectedLeadId}
+                    onClose={() => setIsDrawerOpen(false)}
+                />
+
+                {liveToast && (
+                    <div className="fixed bottom-6 right-6 z-50 max-w-sm">
+                        <div className="relative rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 pr-10 text-[#F2F2F2]">
+                            <button
+                                type="button"
+                                onClick={() => setLiveToast(null)}
+                                aria-label="Chiudi"
+                                className="absolute right-2 top-2 rounded-lg p-1 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]"
+                            >
+                                <X className="h-4 w-4" strokeWidth={1.5} />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { const t = liveToast; setLiveToast(null); handleNotifClick(t) }}
+                                className="block text-left"
+                            >
+                                <div className="text-[14px] font-semibold leading-tight">{liveToast.title}</div>
+                                <div className="mt-1 text-[13px] leading-snug text-[#BFBFBF]">{liveToast.body}</div>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </header>
+        )
     }
 
     return (

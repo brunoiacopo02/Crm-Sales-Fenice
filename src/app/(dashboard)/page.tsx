@@ -4,6 +4,8 @@ import { PipelineBoard } from "@/components/PipelineBoard"
 import { GdoLeadMetrics } from "@/components/GdoLeadMetrics"
 import { GdoDailyObjectives } from "@/components/GdoDailyObjectives"
 import { SafeWrapper } from "@/components/SafeWrapper"
+import { DirettaHome } from "@/components/diretta/DirettaHome"
+import { direttaAccesa, leggiIo } from "@/lib/diretta/io"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
@@ -53,6 +55,25 @@ export default async function DashboardPage() {
     } catch (e: any) {
         pipelineError = e?.message || String(e);
         console.error("Pipeline fetch error:", e);
+    }
+
+    // Restyle "Diretta" (PO 25/10/2026): con l'interruttore acceso il GDO vede la
+    // home nuova; spento, l'albero qui sotto resta quello di sempre.
+    if (session?.user?.role === 'GDO' && await direttaAccesa('GDO')) {
+        const io = await leggiIo(session.user.id, session.user.name ?? null).catch(() => null)
+        return (
+            <DirettaHome
+                userId={session.user.id}
+                nome={io?.nomeVero ?? ''}
+                firstCall={firstCall}
+                secondCall={secondCall}
+                thirdCall={thirdCall}
+                fourthCall={fourthCall}
+                isFourthCallActive={isFourthCallActive}
+                recalls={recalls}
+                pipelineError={pipelineError}
+            />
+        )
     }
 
     return (
