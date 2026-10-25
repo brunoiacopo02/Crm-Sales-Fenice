@@ -79,7 +79,7 @@ async function main() {
     for (const i of CATALOGO_NEGOZIO) {
         const settimane = settimaneAlMassimo(i.currency, i.price).toFixed(1)
         const valuta = i.currency === 'P' ? 'Piume' : 'Scintille'
-        console.log(`  ${i.id.padEnd(26)} ${String(i.price).padStart(5)} ${valuta.padEnd(9)} ${settimane.padStart(5)} sett. al massimo  ${i.kind}${i.giftable ? ', regalabile' : ''}`)
+        console.log(`  ${i.id.padEnd(26)} ${String(i.price).padStart(5)} ${valuta.padEnd(9)} ${settimane.padStart(5)} sett. al massimo  ${i.kind}${i.giftable ? ', regalabile' : ''}  per ${i.roles.join(' e ')}`)
     }
     console.log('')
     console.log(`Da creare: ${nuovi.length}`)

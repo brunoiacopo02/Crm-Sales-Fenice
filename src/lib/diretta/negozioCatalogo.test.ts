@@ -104,8 +104,11 @@ test('personalizzazioni del catalogo e registro coincidono', () => {
     assert.deepEqual(pers, Object.keys(PERSONALIZZAZIONI).sort())
 })
 
-test('ruoli: tutto il catalogo è per GDO e Conferme', () => {
-    for (const i of CATALOGO_NEGOZIO) assert.deepEqual([...i.roles].sort(), ['CONFERME', 'GDO'], i.id)
+test("ruoli: tutto il catalogo è per GDO e Conferme, tranne la mezz'ora in cui fissa Bruno (solo GDO)", () => {
+    for (const i of CATALOGO_NEGOZIO) {
+        const attesi = i.id === 'pausa-30-bruno-fissa' ? ['GDO'] : ['CONFERME', 'GDO']
+        assert.deepEqual([...i.roles].sort(), attesi, i.id)
+    }
 })
 
 test('settimane al massimo dei premi principali', () => {

@@ -39,6 +39,9 @@ export function settimaneAlMassimo(currency: string, price: number): number {
 }
 
 const RUOLI = ['GDO', 'CONFERME']
+// "Fissa Bruno per te" ha senso solo per chi fissa (collaudo del 25/10/2026):
+// alle Conferme non si offre.
+const SOLO_GDO = ['GDO']
 
 export const CATALOGO_NEGOZIO: CatalogItem[] = [
     {
@@ -63,7 +66,7 @@ export const CATALOGO_NEGOZIO: CatalogItem[] = [
         id: 'pausa-30-bruno-fissa',
         name: "Mezz'ora di pausa: fissa Bruno per te",
         description: "Trenta minuti di pausa in più, quando vuoi durante il turno (non all'inizio né alla fine). In quella mezz'ora Bruno chiama i tuoi lead e fissa gli appuntamenti al posto tuo. Il momento si concorda.",
-        kind: 'permesso', currency: 'S', price: 3800, imageUrl: null, giftable: false, sortOrder: 40, roles: RUOLI,
+        kind: 'permesso', currency: 'S', price: 3800, imageUrl: null, giftable: false, sortOrder: 40, roles: SOLO_GDO,
     },
     {
         id: 'merenda-sala',
