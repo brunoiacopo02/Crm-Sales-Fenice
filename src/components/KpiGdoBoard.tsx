@@ -393,8 +393,12 @@ export function KpiGdoBoard() {
                 </div>
             )}
 
-            {/* STORICO BISETTIMANALE PRESENZE (solo quando si guarda un singolo GDO) */}
-            {gdoFilter !== "ALL" && (
+            {/* STORICO BISETTIMANALE PRESENZE (solo quando si guarda un singolo GDO).
+                Il bonus bisettimanale 18/22 è finito con il ciclo 12-25/10/2026: dal
+                26/10 vale €12 dalla 5ª presenza della settimana (PO 25/10/2026). Ai GDO
+                non si mostra più; admin e manager tengono lo storico per chiudere i
+                pagamenti dei cicli passati. */}
+            {gdoFilter !== "ALL" && isAdminOrManager && (
                 <BiweeklyHistoryTable userId={gdoFilter} lookback={8} />
             )}
 
