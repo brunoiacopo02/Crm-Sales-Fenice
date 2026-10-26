@@ -39,14 +39,11 @@ export default function LoginPage() {
     return (
         <div className="flex min-h-screen flex-col justify-center bg-[#171717] px-4 py-12 text-[#F2F2F2]">
             <div className="mx-auto w-full max-w-md">
-                <div className="flex items-center gap-2.5">
-                    <span aria-hidden="true" className="h-6 w-6 rounded-full bg-[#FF9330]" />
-                    <span className="text-[20px] font-semibold">Fenice</span>
-                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/elixir-group-logo.png" alt="Elixir Group" width={977} height={405} className="h-auto w-52" />
                 <h1 className="mt-8 text-[36px] font-semibold leading-tight tracking-tight">
-                    Fenice Academy <span className="text-[#FF9330]">CRM</span>
+                    Elixir Group <span className="text-[#FF9330]">CRM</span>
                 </h1>
-                <p className="mt-2 text-[15px] text-[#BFBFBF]">Rialzarsi e risorgere dalle proprie ceneri.</p>
 
                 <form className="mt-8 flex flex-col gap-5 rounded-[16px] bg-[#262626] p-6 sm:p-8" onSubmit={handleSubmit}>
                     <div>
