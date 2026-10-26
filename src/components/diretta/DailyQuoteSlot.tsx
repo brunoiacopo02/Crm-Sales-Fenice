@@ -23,8 +23,8 @@ interface Props {
     className?: string
     /**
      * Riga compatta della home GDO (collaudo del 25/10/2026): la citazione resta
-     * consultabile dopo la schermata d'inizio turno. Citazione in due righe al
-     * massimo e autore; "Approfondisci" apre riflessione e consiglio di vendita.
+     * consultabile dopo la schermata d'inizio turno. Citazione e consiglio di
+     * vendita in due righe al massimo e autore, ciascuno col suo "Approfondisci".
      */
     compatta?: boolean
 }
@@ -70,29 +70,46 @@ export function DailyQuoteSlot({ initial, manageHref, className = "", compatta =
 
 export default DailyQuoteSlot
 
-/** La frase del giorno in poco spazio: la citazione (o il consiglio, se manca) e un solo "Approfondisci". */
+/**
+ * La frase del giorno in poco spazio: citazione e consiglio di vendita in vista
+ * tutti e due (PO 26/10/2026: il consiglio non va aperto), due righe al massimo
+ * e autore; "Approfondisci" su ciascuno apre solo la sua riflessione.
+ */
 function RigaCompatta({ data, className }: { data: TodayQuotes; className: string }) {
-    const [open, setOpen] = useState(false)
-    const panelId = useId()
-    const principale = data.citazione ?? data.vendita
-    if (!principale) return null
-    const altro = data.citazione ? data.vendita : null
-    const haDettagli = !!principale.deepen || !!altro
+    const voci = [
+        data.citazione && { titolo: "Frase del giorno", item: data.citazione },
+        data.vendita && { titolo: "Consiglio di vendita", item: data.vendita },
+    ].filter((v): v is { titolo: string; item: ShownQuote } => !!v)
+    if (voci.length === 0) return null
     return (
         <section
             aria-label="Frase del giorno"
             className={`rounded-[16px] bg-[color:var(--d-surface,#262626)] px-4 py-3.5 text-[color:var(--d-text,#F2F2F2)] ${className}`}
             style={{ fontFamily: "var(--font-poppins), system-ui, sans-serif" }}
         >
-            <div className="text-[13px] text-[color:var(--d-muted,#BFBFBF)]">{data.citazione ? 'Frase del giorno' : 'Consiglio di vendita'}</div>
-            {principale.text && (
-                <blockquote className="mt-1 line-clamp-2 text-[14px] font-medium leading-snug" title={principale.text}>
-                    {principale.text}
+            {voci.map((v, i) => (
+                <div key={v.titolo} className={i > 0 ? "mt-3 border-t-2 border-[color:var(--d-line,#3D3D3D)] pt-3" : ""}>
+                    <VoceCompatta titolo={v.titolo} item={v.item} />
+                </div>
+            ))}
+        </section>
+    )
+}
+
+function VoceCompatta({ titolo, item }: { titolo: string; item: ShownQuote }) {
+    const [open, setOpen] = useState(false)
+    const panelId = useId()
+    return (
+        <>
+            <div className="text-[13px] text-[color:var(--d-muted,#BFBFBF)]">{titolo}</div>
+            {item.text && (
+                <blockquote className="mt-1 line-clamp-2 text-[14px] font-medium leading-snug" title={item.text}>
+                    {item.text}
                 </blockquote>
             )}
             <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                <div className="min-w-0 truncate text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{principale.author}</div>
-                {haDettagli && (
+                <div className="min-w-0 truncate text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{item.author}</div>
+                {item.deepen && (
                     <button
                         type="button"
                         onClick={() => setOpen(o => !o)}
@@ -105,24 +122,15 @@ function RigaCompatta({ data, className }: { data: TodayQuotes; className: strin
                     </button>
                 )}
             </div>
-            {haDettagli && (
-                <div id={panelId} hidden={!open} className="mt-2 space-y-3">
-                    {principale.deepen && (
-                        <div>
-                            {principale.deepen.work && (
-                                <div className="text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{principale.deepen.work}</div>
-                            )}
-                            <div className="mt-1 whitespace-pre-line text-[13px] leading-relaxed">{principale.deepen.text}</div>
-                        </div>
+            {item.deepen && (
+                <div id={panelId} hidden={!open} className="mt-2">
+                    {item.deepen.work && (
+                        <div className="text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{item.deepen.work}</div>
                     )}
-                    {altro && (
-                        <div className="border-t-2 border-[color:var(--d-line,#3D3D3D)] pt-3">
-                            <QuoteBlock kind="vendita" item={altro} />
-                        </div>
-                    )}
+                    <div className="mt-1 whitespace-pre-line text-[13px] leading-relaxed">{item.deepen.text}</div>
                 </div>
             )}
-        </section>
+        </>
     )
 }
 
