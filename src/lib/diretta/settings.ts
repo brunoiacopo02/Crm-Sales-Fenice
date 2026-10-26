@@ -9,16 +9,23 @@ import {
     type GamificationTargets, type RuoloDiretta,
 } from './config'
 
-/** true se la UI Diretta è accesa per quel ruolo (GDO, Conferme, admin). Spenta di default e per ogni errore. */
+/**
+ * true se la UI Diretta è accesa per quel ruolo (GDO, Conferme, admin). Spenta di default.
+ * Su un errore di lettura riprova una volta (26/10/2026: col carico del primo giorno
+ * un GDO si è ritrovato la grafica vecchia) e lascia traccia nei log prima di spegnerla.
+ */
 export async function isDirettaOn(role: string | null | undefined): Promise<boolean> {
     const key = chiaveInterruttore(role)
     if (!key) return false
-    try {
-        const [row] = await db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).limit(1)
-        return row?.value === 'on'
-    } catch {
-        return false
+    for (let tentativo = 1; tentativo <= 2; tentativo++) {
+        try {
+            const [row] = await db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).limit(1)
+            return row?.value === 'on'
+        } catch (e) {
+            console.error(`[diretta] lettura interruttore ${key} fallita (tentativo ${tentativo})`, e)
+        }
     }
+    return false
 }
 
 export async function readDirettaFlags(): Promise<Record<RuoloDiretta, boolean>> {

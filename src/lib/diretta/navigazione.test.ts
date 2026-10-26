@@ -17,8 +17,10 @@ test('menu Diretta del GDO: profilo raggiungibile, pausa tolta, si può uscire',
     // senza sidebar il GDO esce dal pulsante nella barra in alto
     assert.match(leggi('components/Topbar.tsx'), /aria-label="Esci"/)
     assert.equal(new Set(tutte).size, tutte.length)
-    // la barra in alto resta di sei voci: il profilo ci arriva dall'avatar
-    assert.equal(MENU_GDO_DIRETTA.length, 6)
+    // la barra in alto resta di cinque voci: il profilo ci arriva dall'avatar,
+    // i richiami sono una coda della Pipeline (niente doppione, 26/10/2026)
+    assert.equal(MENU_GDO_DIRETTA.length, 5)
+    assert.ok(!tutte.includes('/richiami'))
     assert.match(leggi('components/Topbar.tsx'), /href="\/profilo"/)
     // il menu a scomparsa mostra anche le voci personali
     assert.match(leggi('components/Sidebar.tsx'), /MENU_GDO_DIRETTA_PERSONALE/)
