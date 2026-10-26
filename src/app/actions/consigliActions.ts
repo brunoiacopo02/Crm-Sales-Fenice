@@ -5,9 +5,11 @@
 // un riquadro che non blocca niente, solo finché c'è qualcosa da leggere, e lo
 // chiude con "Letto". Scrive solo l'admin (ruolo letto dalla tabella users).
 // Le frasi pronte le crea e le modifica l'admin: partono vuote.
+// Un consiglio "fisso" invece resta in una striscia sotto la barra in alto
+// finché l'admin non lo toglie, e non passa dal riquadro "Letto".
 
 import { randomUUID } from "crypto"
-import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm"
 import { db } from "@/db"
 import { appSettings, callTips, users } from "@/db/schema"
 import { assertSalesArea, currentTenant } from "@/lib/tenancy"
@@ -19,6 +21,8 @@ const FRASI_KEY = "consigli_frasi_pronte"
 const MAX_MESSAGGIO = 500
 const MAX_FRASE = 200
 const MAX_FRASI = 12
+/** Consigli fissi in vista allo stesso tempo per persona. */
+const MAX_FISSI = 3
 /** Chi può ricevere un consiglio. */
 const RUOLI_DESTINATARI = ["GDO", "CONFERME"] as const
 
@@ -27,6 +31,8 @@ export interface Consiglio {
     message: string
     createdAt: string
     readAt: string | null
+    pinned: boolean
+    removedAt: string | null
 }
 
 export interface Destinatario {
@@ -43,28 +49,59 @@ async function requireAdmin(): Promise<{ id: string }> {
     return admin
 }
 
-const riga = (r: { id: string; message: string; createdAt: Date; readAt: Date | null }): Consiglio => ({
+const COLONNE = {
+    id: callTips.id, message: callTips.message, createdAt: callTips.createdAt,
+    readAt: callTips.readAt, pinned: callTips.pinned, removedAt: callTips.removedAt,
+}
+
+const riga = (r: { id: string; message: string; createdAt: Date; readAt: Date | null; pinned: boolean; removedAt: Date | null }): Consiglio => ({
     id: r.id, message: r.message, createdAt: r.createdAt.toISOString(), readAt: r.readAt?.toISOString() ?? null,
+    pinned: r.pinned, removedAt: r.removedAt?.toISOString() ?? null,
 })
+
+/** Chi è in sessione, se può ricevere consigli (GDO o Conferme). */
+async function destinatarioInSessione(): Promise<{ id: string; companyId: string } | null> {
+    const io = await ruoloDb()
+    if (!io || !(RUOLI_DESTINATARI as readonly string[]).includes(io.role)) return null
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    return { id: io.id, companyId: ctx.companyId }
+}
 
 // ── Chi riceve ───────────────────────────────────────────────────────────
 
-/** I consigli di oggi ancora da leggere, dal più vecchio. Vuoto per chi non è GDO o Conferme. */
+/** I consigli di oggi ancora da leggere, dal più vecchio (i fissi a parte). Vuoto per chi non è GDO o Conferme. */
 export async function getMieiConsigli(): Promise<Consiglio[]> {
-    const io = await ruoloDb()
-    if (!io || !(RUOLI_DESTINATARI as readonly string[]).includes(io.role)) return []
-    const ctx = await currentTenant()
-    assertSalesArea(ctx)
-    const rows = await db.select({ id: callTips.id, message: callTips.message, createdAt: callTips.createdAt, readAt: callTips.readAt })
+    const io = await destinatarioInSessione()
+    if (!io) return []
+    const rows = await db.select(COLONNE)
         .from(callTips)
         .where(and(
             eq(callTips.receiverId, io.id),
-            eq(callTips.companyId, ctx.companyId),
+            eq(callTips.companyId, io.companyId),
+            eq(callTips.pinned, false),
             isNull(callTips.readAt),
             gte(callTips.createdAt, dayBoundsRome(new Date()).start),
         ))
         .orderBy(asc(callTips.createdAt))
         .limit(20)
+    return rows.map(riga)
+}
+
+/** I consigli fissi di chi è in sessione, dal più recente: restano finché l'admin non li toglie. */
+export async function getMieiConsigliFissi(): Promise<Consiglio[]> {
+    const io = await destinatarioInSessione()
+    if (!io) return []
+    const rows = await db.select(COLONNE)
+        .from(callTips)
+        .where(and(
+            eq(callTips.receiverId, io.id),
+            eq(callTips.companyId, io.companyId),
+            eq(callTips.pinned, true),
+            isNull(callTips.removedAt),
+        ))
+        .orderBy(desc(callTips.createdAt))
+        .limit(MAX_FISSI)
     return rows.map(riga)
 }
 
@@ -102,14 +139,15 @@ export async function getDestinatariConsigli(): Promise<Destinatario[]> {
         .sort((a, b) => (a.ruolo === b.ruolo ? 0 : a.ruolo === "GDO" ? -1 : 1) || a.nome.localeCompare(b.nome, "it"))
 }
 
-/** I consigli di oggi mandati a una persona, con l'ora di lettura. */
+/** I consigli di oggi mandati a una persona, con l'ora di lettura (i fissi a parte). */
 export async function getConsigliInviati(receiverId: string): Promise<Consiglio[]> {
     const admin = await requireAdmin()
-    const rows = await db.select({ id: callTips.id, message: callTips.message, createdAt: callTips.createdAt, readAt: callTips.readAt })
+    const rows = await db.select(COLONNE)
         .from(callTips)
         .where(and(
             eq(callTips.senderId, admin.id),
             eq(callTips.receiverId, receiverId),
+            eq(callTips.pinned, false),
             gte(callTips.createdAt, dayBoundsRome(new Date()).start),
         ))
         .orderBy(asc(callTips.createdAt))
@@ -117,7 +155,26 @@ export async function getConsigliInviati(receiverId: string): Promise<Consiglio[
     return rows.map(riga)
 }
 
-export async function inviaConsiglio(receiverId: string, message: string): Promise<Esito> {
+/** I consigli fissi ancora in vista a una persona, di qualunque giorno. */
+export async function getConsigliFissiDi(receiverId: string): Promise<Consiglio[]> {
+    await requireAdmin()
+    const rows = await db.select(COLONNE)
+        .from(callTips)
+        .where(and(eq(callTips.receiverId, receiverId), eq(callTips.pinned, true), isNull(callTips.removedAt)))
+        .orderBy(desc(callTips.createdAt))
+    return rows.map(riga)
+}
+
+/** Toglie un consiglio fisso: sparisce subito dalla striscia di chi lo riceve. */
+export async function togliConsiglioFisso(id: string): Promise<Esito> {
+    await requireAdmin()
+    await db.update(callTips)
+        .set({ removedAt: new Date() })
+        .where(and(eq(callTips.id, id), eq(callTips.pinned, true), isNull(callTips.removedAt)))
+    return { ok: true }
+}
+
+export async function inviaConsiglio(receiverId: string, message: string, fisso = false): Promise<Esito> {
     const admin = await requireAdmin()
     const testo = (message ?? "").trim()
     if (!testo) return { ok: false, error: "Scrivi il consiglio" }
@@ -127,12 +184,18 @@ export async function inviaConsiglio(receiverId: string, message: string): Promi
     if (!dest || !dest.isActive || !(RUOLI_DESTINATARI as readonly string[]).includes(dest.role)) {
         return { ok: false, error: "Si può scrivere solo a GDO e Conferme attivi" }
     }
+    if (fisso) {
+        const attivi = await db.select({ id: callTips.id }).from(callTips)
+            .where(and(eq(callTips.receiverId, receiverId), eq(callTips.pinned, true), isNull(callTips.removedAt)))
+        if (attivi.length >= MAX_FISSI) return { ok: false, error: `Ha già ${MAX_FISSI} consigli fissi: togline uno prima` }
+    }
     await db.insert(callTips).values({
         id: randomUUID(),
         companyId: dest.companyId ?? "fenice",
         senderId: admin.id,
         receiverId,
         message: testo,
+        pinned: fisso,
     })
     return { ok: true }
 }

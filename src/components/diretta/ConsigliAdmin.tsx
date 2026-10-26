@@ -5,11 +5,14 @@
 // scrive e si invia; sopra ci sono i consigli di oggi a quella persona con
 // l'ora di lettura. Le frasi pronte le crea e le modifica l'admin (partono
 // vuote): un clic le mette nella casella, da ritoccare prima di inviare.
+// Con "Fisso" il consiglio resta sotto la barra di chi lo riceve finché non lo
+// si toglie da qui (elenco "Fissi" sopra la chat).
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Lightbulb, Pencil, Plus, Send, X } from "lucide-react"
+import { Lightbulb, Pencil, Pin, Plus, Send, X } from "lucide-react"
 import {
-    getConsigliInviati, getDestinatariConsigli, getFrasiPronte, inviaConsiglio, salvaFrasiPronte,
+    getConsigliFissiDi, getConsigliInviati, getDestinatariConsigli, getFrasiPronte, inviaConsiglio, salvaFrasiPronte,
+    togliConsiglioFisso,
     type Consiglio, type Destinatario,
 } from "@/app/actions/consigliActions"
 import { onBusEvent } from "@/lib/realtimeBus"
@@ -22,6 +25,8 @@ export function ConsigliAdmin() {
     const [persone, setPersone] = useState<Destinatario[]>([])
     const [scelto, setScelto] = useState("")
     const [inviati, setInviati] = useState<Consiglio[]>([])
+    const [fissi, setFissi] = useState<Consiglio[]>([])
+    const [fisso, setFisso] = useState(false)
     const [testo, setTesto] = useState("")
     const [frasi, setFrasi] = useState<string[]>([])
     const [modificaFrasi, setModificaFrasi] = useState(false)
@@ -43,7 +48,14 @@ export function ConsigliAdmin() {
     const caricaInviati = useCallback(() => {
         if (!scelto) return
         getConsigliInviati(scelto).then(setInviati).catch(() => { /* resta l'ultimo elenco */ })
+        getConsigliFissiDi(scelto).then(setFissi).catch(() => { /* resta l'ultimo elenco */ })
     }, [scelto])
+
+    const togli = async (id: string) => {
+        const r = await togliConsiglioFisso(id).catch(() => null)
+        if (r?.ok) setFissi(fs => fs.filter(f => f.id !== id))
+        else setErrore("Non sono riuscito a toglierlo, riprova.")
+    }
 
     useEffect(() => {
         if (!aperto || !scelto) return
@@ -61,9 +73,10 @@ export function ConsigliAdmin() {
         setInvio(true)
         setErrore("")
         try {
-            const r = await inviaConsiglio(scelto, testo)
+            const r = await inviaConsiglio(scelto, testo, fisso)
             if (r.ok) {
                 setTesto("")
+                setFisso(false)
                 caricaInviati()
             } else {
                 setErrore(r.error)
@@ -119,7 +132,7 @@ export function ConsigliAdmin() {
                 <select
                     id="consigli-persona"
                     value={scelto}
-                    onChange={e => { setScelto(e.target.value); setInviati([]); setErrore("") }}
+                    onChange={e => { setScelto(e.target.value); setInviati([]); setFissi([]); setErrore("") }}
                     className={`${CAMPO} mt-1 h-10`}
                 >
                     <option value="">Scegli la persona</option>
@@ -133,6 +146,27 @@ export function ConsigliAdmin() {
                     })}
                 </select>
             </div>
+
+            {fissi.length > 0 && (
+                <div className="mx-4 mt-3 rounded-xl border-2 border-[#3D3D3D] px-3 py-2">
+                    <div className="text-[12px] text-[#BFBFBF]">Fissi, li vede sempre sotto la barra in alto</div>
+                    <ul className="mt-1 flex flex-col gap-1.5">
+                        {fissi.map(f => (
+                            <li key={f.id} className="flex items-start gap-2 text-[13px] leading-snug">
+                                <Pin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#FF9330]" strokeWidth={2} aria-hidden="true" />
+                                <div className="min-w-0 flex-1 whitespace-pre-line">{f.message}</div>
+                                <button
+                                    type="button"
+                                    onClick={() => togli(f.id)}
+                                    className="shrink-0 rounded-lg px-2 py-0.5 text-[12px] font-medium text-[#BFBFBF] transition-colors hover:bg-[#2E2E2E] hover:text-[#F2F2F2]"
+                                >
+                                    Togli
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             <div className="min-h-[6rem] flex-1 overflow-y-auto px-4 py-3">
                 {!scelto ? (
@@ -246,7 +280,18 @@ export function ConsigliAdmin() {
                         <Send className="h-4 w-4" strokeWidth={2} />
                     </button>
                 </div>
-                {errore && <div role="alert" className="mt-2 text-[13px] font-medium text-[#FF9330]">{errore}</div>}
+                <label className="mt-2 flex cursor-pointer items-center gap-2 text-[13px] text-[#BFBFBF]">
+                    <input
+                        type="checkbox"
+                        checked={fisso}
+                        onChange={e => setFisso(e.target.checked)}
+                        disabled={!scelto}
+                        className="h-4 w-4 accent-[#FF9330]"
+                    />
+                    <Pin className="h-3.5 w-3.5 text-[#FF9330]" strokeWidth={2} aria-hidden="true" />
+                    Fisso: lo vede sempre, finché non lo togli
+                </label>
+                {errore &&<div role="alert" className="mt-2 text-[13px] font-medium text-[#FF9330]">{errore}</div>}
             </div>
         </section>
     )

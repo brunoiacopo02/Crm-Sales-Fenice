@@ -14,6 +14,7 @@ const CrossCompanyRecallBanner = dynamic(() => import("@/components/CrossCompany
 const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBanner").then(mod => ({ default: mod.ConfermeRecallBanner })))
 const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeRecallBlockingAlert").then(mod => ({ default: mod.ConfermeRecallBlockingAlert })))
 const ConsigliInArrivo = dynamic(() => import("@/components/diretta/ConsigliInArrivo").then(mod => ({ default: mod.ConsigliInArrivo })))
+const ConsigliFissi = dynamic(() => import("@/components/diretta/ConsigliFissi").then(mod => ({ default: mod.ConsigliFissi })))
 const ConsigliAdmin = dynamic(() => import("@/components/diretta/ConsigliAdmin").then(mod => ({ default: mod.ConsigliAdmin })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
@@ -114,6 +115,10 @@ export default async function DashboardLayout({
                         <div className={`flex-1 flex flex-col h-full overflow-hidden ${isTheme ? 'bg-transparent' : ''} ${direttaAdmin ? 'bg-[#171717]' : ''}`}>
                             {showSprintBanner && <SprintBanner />}
                             <Topbar diretta={diretta} ruolo={session.user.role} io={direttaIo} obiettivi={direttaObiettivi} />
+                            {/* Consigli fissi dall'admin: una riga sotto la barra finché non li toglie (PO 26/10/2026). */}
+                            {(session.user.role === 'GDO' || session.user.role === 'CONFERME') && (
+                                <SafeWrapper><ConsigliFissi /></SafeWrapper>
+                            )}
                             <main className={`flex-1 overflow-y-auto p-3 sm:p-6 ${isTheme ? 'bg-transparent' : 'bg-gray-50'} ${direttaAdmin ? 'd-foglio-admin lg:rounded-tl-[16px]' : ''}`}>
                                 <AllCompaniesGate active={isAllCompanies}>
                                     {children}

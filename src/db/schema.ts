@@ -1978,4 +1978,7 @@ export const callTips = pgTable('callTips', {
     message: text('message').notNull(),
     createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     readAt: timestamp('readAt', { withTimezone: true, mode: 'date' }),
+    // Fisso (migr. 0055): resta in vista finché l'admin non lo toglie (removedAt).
+    pinned: boolean('pinned').default(false).notNull(),
+    removedAt: timestamp('removedAt', { withTimezone: true, mode: 'date' }),
 }, (t) => [index('call_tips_receiver_idx').on(t.receiverId, t.createdAt)]);
