@@ -12,7 +12,8 @@
  * - `crm:<companyId>`  → eventi di squadra: 'leads' (ping), 'leadEvents',
  *   'duels', 'userAchievements', 'bossBattles', 'seasonalEvents',
  *   'internalAlerts' (broadcast a tutti)
- * - `user:<userId>`    → 'notifications' ({op, row}), 'internalAlerts' (ping)
+ * - `user:<userId>`    → 'notifications' ({op, row}), 'internalAlerts' (ping),
+ *   'callTips' (ping: consiglio arrivato a chi riceve, letto a chi l'ha scritto)
  *
  * Regole (stesse di confermePresence.ts):
  * - UNA SOLA istanza di canale per topic per tab (refcount in initRealtimeBus).
@@ -36,12 +37,13 @@ export type BusEvent =
     | "userAchievements"
     | "bossBattles"
     | "seasonalEvents"
+    | "callTips"
 
 type BusListener = (payload: any) => void
 
 const BUS_EVENTS: BusEvent[] = [
     "leads", "leadEvents", "notifications", "internalAlerts",
-    "duels", "userAchievements", "bossBattles", "seasonalEvents",
+    "duels", "userAchievements", "bossBattles", "seasonalEvents", "callTips",
 ]
 
 const LEADS_DEBOUNCE_MS = 1_500

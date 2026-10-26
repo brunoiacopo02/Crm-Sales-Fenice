@@ -13,6 +13,8 @@ const GlobalAlertListener = dynamic(() => import("@/components/GlobalAlertListen
 const CrossCompanyRecallBanner = dynamic(() => import("@/components/CrossCompanyRecallBanner").then(mod => ({ default: mod.CrossCompanyRecallBanner })))
 const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBanner").then(mod => ({ default: mod.ConfermeRecallBanner })))
 const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeRecallBlockingAlert").then(mod => ({ default: mod.ConfermeRecallBlockingAlert })))
+const ConsigliInArrivo = dynamic(() => import("@/components/diretta/ConsigliInArrivo").then(mod => ({ default: mod.ConsigliInArrivo })))
+const ConsigliAdmin = dynamic(() => import("@/components/diretta/ConsigliAdmin").then(mod => ({ default: mod.ConsigliAdmin })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
 import { readSalesPipelineConfig } from "@/app/actions/salesPipelineConfigActions"
@@ -137,6 +139,14 @@ export default async function DashboardLayout({
                         Il banner avvisa dei richiami IN ARRIVO; quelli già scaduti passano
                         all'avviso bloccante qui sotto, così non ci sono due avvisi per la
                         stessa cosa. */}
+                    {/* Consigli in chiamata (PO 26/10/2026): l'admin scrive, GDO e Conferme li
+                        vedono solo quando ne arriva uno, in un riquadro che non blocca niente. */}
+                    {(session.user.role === 'GDO' || session.user.role === 'CONFERME') && (
+                        <SafeWrapper><ConsigliInArrivo /></SafeWrapper>
+                    )}
+                    {session.user.role === 'ADMIN' && (
+                        <SafeWrapper><ConsigliAdmin /></SafeWrapper>
+                    )}
                     {session.user.role === 'CONFERME' && (
                         <>
                             <SafeWrapper><ConfermeRecallBanner variant={diretta ? 'diretta' : 'classic'} /></SafeWrapper>

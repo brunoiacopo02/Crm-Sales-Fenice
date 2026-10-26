@@ -1968,3 +1968,14 @@ export const weeklyPrizeRuns = pgTable('weeklyPrizeRuns', {
     computedAt: timestamp('computedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
     computedBy: text('computedBy').references(() => users.id),
 }, (t) => [primaryKey({ columns: [t.companyId, t.weekStart] })]);
+
+// Consigli in chiamata dall'admin al GDO o alle Conferme (PO 26/10/2026, migr. 0054).
+export const callTips = pgTable('callTips', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    senderId: text('senderId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    receiverId: text('receiverId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    message: text('message').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    readAt: timestamp('readAt', { withTimezone: true, mode: 'date' }),
+}, (t) => [index('call_tips_receiver_idx').on(t.receiverId, t.createdAt)]);
