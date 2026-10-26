@@ -2309,6 +2309,9 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   --d-paper: #FFFFFF;
   --d-ok: #31BC00;
   --d-ko: #E70000;
+  --d-ko-text: #FF6B6B;        /* rosso leggibile come testo sullo scuro */
+  --d-nr1: #FFD43B;            /* board Conferme: 1ª chiamata a vuoto (Alberto, 26/10/2026) */
+  --d-nr2: #B98CFF;            /* 2ª chiamata a vuoto */
   --d-radius-s: 8px;
   --d-radius-l: 16px;
   font-family: var(--font-poppins), system-ui, sans-serif;

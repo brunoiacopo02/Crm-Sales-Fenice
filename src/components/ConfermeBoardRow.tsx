@@ -256,8 +256,13 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
             if (lead.confirmationsOutcome === 'scartato') return 'Scartato'
             return null
         })()
-        // Bordo pieno (mai su un lato solo): arancione per lo snooze scaduto, grigio per il lead in mano a un collega.
-        const stato = isSnoozeOverdue
+        // Il bot scrive le disdette sempre con lo stesso attacco "DISDETTA —":
+        // se è l'ultima nota del Fissatore la riga va in rosso (Alberto, 26/10/2026).
+        const disdettaBot = !lead.confirmationsOutcome && /^DISDETTA\b/i.test(item.lastBotNote?.text ?? '')
+        // Bordo pieno (mai su un lato solo): rosso per la disdetta del bot, arancione per lo snooze scaduto, grigio per il lead in mano a un collega.
+        const stato = disdettaBot
+            ? 'border-[var(--d-ko-text)]'
+            : isSnoozeOverdue
             ? 'border-[var(--d-orange)]'
             : isLocked
                 ? 'border-[var(--d-line)]'
@@ -306,11 +311,11 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                             </div>
                         ) : (
                             !lead.confirmationsOutcome && callsMade > 0 && layoutMode !== 'richiami' && (
-                                <div className="shrink-0 text-[var(--d-muted)]">{callsMade}ª chiamata a vuoto</div>
+                                <div className={`shrink-0 rounded-md px-2 py-0.5 text-[13px] font-semibold text-[var(--d-orange-ink)] ${callsMade === 1 ? 'bg-[var(--d-nr1)]' : 'bg-[var(--d-nr2)]'}`}>{callsMade}ª chiamata a vuoto</div>
                             )
                         )}
                         {!lead.confirmationsOutcome && lead.confSnoozeAt && (
-                            <div className={`flex shrink-0 items-center gap-1.5 font-medium ${isSnoozeOverdue ? 'text-[var(--d-orange)]' : 'text-[var(--d-muted)]'}`}>
+                            <div className={`flex shrink-0 items-center gap-1.5 font-semibold ${isSnoozeOverdue ? 'rounded-md bg-[var(--d-orange)] px-2 py-0.5 text-[var(--d-orange-ink)]' : 'text-[var(--d-orange)]'}`}>
                                 <Clock className="h-3.5 w-3.5" strokeWidth={1.75} />
                                 {isSnoozeOverdue ? `Da risentire adesso, era alle ${ora(lead.confSnoozeAt)}` : `Da risentire alle ${ora(lead.confSnoozeAt)}`}
                             </div>
@@ -500,8 +505,8 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
 
                 {item.lastBotNote && (
                     <div className="pointer-events-none flex w-full items-center gap-2 text-[13px]" title={item.lastBotNote.text}>
-                        <span className="shrink-0 font-semibold">Fissatore</span>
-                        <span className="min-w-0 flex-1 truncate text-[var(--d-muted)]">{item.lastBotNote.text}</span>
+                        <span className={`shrink-0 font-semibold ${disdettaBot ? 'text-[var(--d-ko-text)]' : ''}`}>Fissatore</span>
+                        <span className={`min-w-0 flex-1 truncate ${disdettaBot ? 'font-medium text-[var(--d-ko-text)]' : 'text-[var(--d-muted)]'}`}>{item.lastBotNote.text}</span>
                         <span className="shrink-0 text-[var(--d-faint)]">{format(new Date(item.lastBotNote.createdAt), "dd/MM HH:mm")}</span>
                         {item.lastBotNote.isNew && <span className="shrink-0 font-semibold text-[var(--d-orange)]">Nuova</span>}
                     </div>
