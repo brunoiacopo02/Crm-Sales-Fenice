@@ -369,6 +369,27 @@ export async function setProfileImage(itemId: string | null): Promise<{ ok: true
     return { ok: true }
 }
 
+/**
+ * Il nome vero che si vede in barra, in Squadra e nelle schede (PO 26/10/2026):
+ * ognuno può correggere il proprio. Solo lettere, spazi, apostrofi e trattini.
+ */
+export async function setMyFirstName(nome: string): Promise<{ ok: true; nome: string } | { ok: false; error: string }> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    const pulito = typeof nome === 'string' ? nome.trim().replace(/\s+/g, ' ') : ''
+    if (pulito.length < 2 || pulito.length > 30) return { ok: false, error: 'Il nome va da 2 a 30 lettere.' }
+    if (!/^[\p{L}][\p{L} '’-]*$/u.test(pulito)) return { ok: false, error: 'Usa solo lettere, spazi e apostrofi.' }
+    try {
+        await db.update(users).set({ firstName: pulito }).where(eq(users.id, ctx.userId))
+    } catch (e) {
+        console.error('[negozio] setMyFirstName', e)
+        return { ok: false, error: messaggioErrore('errore') }
+    }
+    updateTag(TAG_SQUADRA)
+    revalidatePath('/', 'layout')
+    return { ok: true, nome: pulito }
+}
+
 // ── Admin ────────────────────────────────────────────────────────────────
 
 /** Solo ADMIN, letto dalla tabella users: i metadati della sessione non bastano. */

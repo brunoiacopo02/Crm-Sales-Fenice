@@ -1,7 +1,7 @@
 "use client"
 
 // Profilo semplice della Diretta (/profilo per GDO e Conferme con
-// l'interruttore acceso): nome, immagine scelta tra quelle comprate, saldo e
+// l'interruttore acceso): nome (correggibile da sé, PO 26/10/2026), immagine scelta tra quelle comprate, saldo e
 // storico del negozio. Creature, avventura, scambi e quest non ci sono più.
 // Ci si arriva dall'avatar della barra in alto; al GDO porta anche allo
 // storico delle pause.
@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { setProfileImage, type NegozioView } from "@/app/actions/negozioActions"
+import { setMyFirstName, setProfileImage, type NegozioView } from "@/app/actions/negozioActions"
 import { CredenzialiDiretta } from "./CredenzialiDiretta"
 import { AvatarDiretta, STATO_TESTO, TitoloDiretta, btn, dataBreve, numero, prezzoTesto } from "./ui"
 
@@ -55,7 +55,7 @@ export function ProfiloDiretta({ view }: { view: NegozioView }) {
                         <AvatarDiretta nome={view.nome} immagine={inUso} cornice={view.stile.cornice} size={96} />
                     </div>
                     <div className="min-w-0">
-                        <div className="text-[28px] font-semibold leading-tight">{view.nome}</div>
+                        <NomeModificabile nome={view.nome} />
                         {view.stile.titolo && <div className="mt-1 text-[15px] text-[var(--d-muted)]">{view.stile.titolo}</div>}
                     </div>
                 </div>
@@ -146,5 +146,75 @@ export function ProfiloDiretta({ view }: { view: NegozioView }) {
                 )}
             </section>
         </div>
+    )
+}
+
+/** Il nome in grande; "Correggi" lo apre in un campo, Salva lo scrive per tutti. */
+function NomeModificabile({ nome }: { nome: string }) {
+    const router = useRouter()
+    const [aperto, setAperto] = useState(false)
+    const [valore, setValore] = useState(nome)
+    const [salvando, setSalvando] = useState(false)
+    const [errore, setErrore] = useState<string | null>(null)
+
+    useEffect(() => { if (!aperto) setValore(nome) }, [nome, aperto])
+
+    const salva = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (salvando) return
+        setSalvando(true)
+        setErrore(null)
+        try {
+            const r = await setMyFirstName(valore)
+            if (r.ok) {
+                setAperto(false)
+                router.refresh()
+            } else {
+                setErrore(r.error)
+            }
+        } catch {
+            setErrore('Connessione assente. Riprova tra poco.')
+        } finally {
+            setSalvando(false)
+        }
+    }
+
+    if (!aperto) {
+        return (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <div className="text-[28px] font-semibold leading-tight">{nome}</div>
+                <button
+                    type="button"
+                    onClick={() => { setValore(nome); setErrore(null); setAperto(true) }}
+                    className="text-sm font-medium text-[var(--d-muted)] underline underline-offset-4 hover:text-[var(--d-text)]"
+                >
+                    Correggi il nome
+                </button>
+            </div>
+        )
+    }
+
+    return (
+        <form onSubmit={salva} className="flex flex-col gap-2">
+            <label htmlFor="nome-profilo" className="text-sm text-[var(--d-muted)]">Il tuo nome</label>
+            <div className="flex flex-wrap items-center gap-2">
+                <input
+                    id="nome-profilo"
+                    value={valore}
+                    onChange={e => setValore(e.target.value)}
+                    maxLength={30}
+                    autoFocus
+                    autoComplete="given-name"
+                    className="h-11 w-56 rounded-lg border-2 border-[var(--d-line)] bg-[var(--d-surface)] px-3 text-[16px] text-[var(--d-text)] focus:border-[var(--d-orange)] focus:outline-none"
+                />
+                <button type="submit" className={btn.primario} disabled={salvando || valore.trim() === nome}>
+                    {salvando ? 'Salvo' : 'Salva'}
+                </button>
+                <button type="button" className={btn.linea} disabled={salvando} onClick={() => setAperto(false)}>
+                    Annulla
+                </button>
+            </div>
+            {errore && <div role="status" className="text-sm text-[var(--d-orange)]">{errore}</div>}
+        </form>
     )
 }
