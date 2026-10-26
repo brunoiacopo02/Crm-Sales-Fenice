@@ -359,7 +359,9 @@ export function ContactDrawer({
                                     <h3 className="text-[15px] font-semibold">Esito della chiamata</h3>
                                     <div className="mt-3 flex flex-wrap items-center gap-1.5">
                                         <DirettaUiProvider>
-                                            <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} popoverDirection="up" />
+                                            {/* Verso il basso (26/10/2026): l'esito è in cima alla scheda, aperto
+                                                verso l'alto il richiamo usciva dalla parte visibile e non si compilava. */}
+                                            <GdoQuickActions leadId={lead.id} leadVersion={lead.version} onSettled={refreshProfile} popoverDirection="down" />
                                         </DirettaUiProvider>
                                         <AgendaButton
                                             leadId={lead.id}
