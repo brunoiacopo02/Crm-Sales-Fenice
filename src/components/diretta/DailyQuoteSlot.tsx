@@ -24,7 +24,7 @@ interface Props {
     /**
      * Riga compatta della home GDO (collaudo del 25/10/2026): la citazione resta
      * consultabile dopo la schermata d'inizio turno. Citazione e consiglio di
-     * vendita in due righe al massimo e autore, ciascuno col suo "Approfondisci".
+     * vendita per intero (PO 26/10/2026) e autore, ciascuno col suo "Approfondisci".
      */
     compatta?: boolean
 }
@@ -72,7 +72,7 @@ export default DailyQuoteSlot
 
 /**
  * La frase del giorno in poco spazio: citazione e consiglio di vendita in vista
- * tutti e due (PO 26/10/2026: il consiglio non va aperto), due righe al massimo
+ * tutti e due e per intero (PO 26/10/2026: niente da aprire, niente tagli)
  * e autore; "Approfondisci" su ciascuno apre solo la sua riflessione.
  */
 function RigaCompatta({ data, className }: { data: TodayQuotes; className: string }) {
@@ -103,12 +103,12 @@ function VoceCompatta({ titolo, item }: { titolo: string; item: ShownQuote }) {
         <>
             <div className="text-[13px] text-[color:var(--d-muted,#BFBFBF)]">{titolo}</div>
             {item.text && (
-                <blockquote className="mt-1 line-clamp-2 text-[14px] font-medium leading-snug" title={item.text}>
+                <blockquote className="mt-1 text-[14px] font-medium leading-snug">
                     {item.text}
                 </blockquote>
             )}
             <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                <div className="min-w-0 truncate text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{item.author}</div>
+                <div className="min-w-0 text-[12px] text-[color:var(--d-muted,#BFBFBF)]">{item.author}</div>
                 {item.deepen && (
                     <button
                         type="button"
