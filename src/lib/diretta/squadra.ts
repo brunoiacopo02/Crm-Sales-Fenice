@@ -5,11 +5,12 @@
 // posizione non si ricava nemmeno aprendo la rete del browser.
 //
 // Classifica settimanale (seconda tornata del 25/10): settimana lun-sab, si
-// mostrano solo i primi tre con il premio in euro (50, 25, 10 lordi); ordine e
+// mostrano solo i primi tre con il premio in euro (50, 25, 10 lordi; a pari
+// merito stessa posizione e premi divisi, PO 26/10/2026); ordine e
 // premi sono gli stessi che l'admin registra a settimana chiusa
 // (src/lib/economy/premiSettimana.ts).
 
-import { ordinaPerPresenze } from '@/lib/economy/premiSettimana'
+import { ordinaPerPresenze, posizioniPremiate } from '@/lib/economy/premiSettimana'
 
 export type LeaderboardMode = 'top3' | 'completa' | 'nessuna'
 export const LEADERBOARD_MODE_KEY = 'leaderboard_mode'
@@ -34,28 +35,32 @@ export interface MembroSquadra {
 
 const perNome = (a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' })
 
-/** Presenze della settimana, a pari presenze i fissati validi, poi il nome (lo stesso ordine dei premi). */
+/** Presenze della settimana, poi il nome solo come ordine di lettura (a pari presenze si è pari merito). */
 export function ordinaClassifica(membri: MembroSquadra[]): MembroSquadra[] {
     return ordinaPerPresenze(membri)
 }
 
-/** Il podio: i primi tre con almeno `minPresenze` presenze (una, di default). */
-export function primiTre(ordinati: MembroSquadra[], minPresenze = 1): MembroSquadra[] {
-    return ordinati.filter(x => x.presenze >= minPresenze).slice(0, 3)
+/**
+ * Il podio: chi sta nelle prime tre posizioni con almeno `minPresenze`
+ * presenze (una, di default). A pari merito si sta nella stessa posizione e
+ * i premi si dividono (posizioniPremiate): il podio può avere più di tre persone.
+ */
+export function primiTre(membri: MembroSquadra[], minPresenze = 1, premiEuro: readonly number[] = []) {
+    return posizioniPremiate(membri, premiEuro, minPresenze).filter(x => x.posizione <= 3 && x.presenze >= minPresenze)
 }
 
 /**
- * Presenze che servono a chi guarda per superare chi gli sta subito sopra.
+ * Presenze che servono a chi guarda per raggiungere chi gli sta subito sopra:
+ * a pari presenze si è nella stessa posizione, quindi basta pareggiare.
  * null se non è in squadra, se è sul podio o se il podio è ancora vuoto.
- * Si conta un'unità in più del distacco: a pari presenze l'ordine dipende dai
- * fissati, e la frase deve restare vera qualunque cosa succeda.
  */
 export function mancaPerSalire(ordinati: MembroSquadra[], viewerId: string, minPresenze = 1): number | null {
-    const idx = ordinati.findIndex(x => x.id === viewerId)
-    if (idx <= 0) return null
+    const io = ordinati.find(x => x.id === viewerId)
+    if (!io) return null
     const podio = primiTre(ordinati, minPresenze)
     if (podio.length === 0 || podio.some(x => x.id === viewerId)) return null
-    return Math.max(1, ordinati[idx - 1].presenze - ordinati[idx].presenze + 1)
+    const sopra = ordinati.filter(x => x.presenze > io.presenze).at(-1)
+    return sopra ? Math.max(1, sopra.presenze - io.presenze) : null
 }
 
 /** Chi ha superato la soglia di presenze della settimana, in ordine alfabetico. */
@@ -150,13 +155,13 @@ export function buildSquadraView(snap: SquadraSnapshot, viewerId: string): Squad
         punta: snap.punta,
         sogliaFenici: snap.sogliaFenici,
         primiTre: snap.mode === 'top3'
-            ? primiTre(ordinati, snap.minPresenze).map((x, i) => ({ ...persona(x), posizione: i + 1, presenze: x.presenze, premio: snap.premiEuro[i] ?? 0 }))
+            ? primiTre(snap.membri, snap.minPresenze, snap.premiEuro).map(x => ({ ...persona(x), posizione: x.posizione, presenze: x.presenze, premio: x.euro }))
             : [],
         mancaPerSalire: snap.mode === 'top3' ? mancaPerSalire(ordinati, viewerId, snap.minPresenze) : null,
         classifica: snap.mode === 'completa'
-            ? ordinati.map((x, i) => ({
-                ...persona(x), posizione: i + 1, presenze: x.presenze, fissati: x.fissati,
-                premio: i < 3 && x.presenze >= snap.minPresenze ? snap.premiEuro[i] ?? 0 : 0,
+            ? posizioniPremiate(snap.membri, snap.premiEuro, snap.minPresenze).map(x => ({
+                ...persona(x), posizione: x.posizione, presenze: x.presenze, fissati: x.fissati,
+                premio: x.posizione <= 3 ? x.euro : 0,
             }))
             : [],
         fenici: feniciDellaSettimana(snap.membri, snap.sogliaFenici).map(persona),

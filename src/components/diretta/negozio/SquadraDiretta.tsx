@@ -146,7 +146,7 @@ export function SquadraDiretta({ iniziale }: { iniziale: SquadraView }) {
                             <h2 className="text-lg font-semibold">I primi tre della settimana</h2>
                             <div className="mt-1 text-sm leading-relaxed text-[var(--d-muted)]">
                                 Da lunedì {GIORNO(view.settimana.lunedi)} a sabato {GIORNO(view.settimana.sabato)}, per presenze.
-                                A pari presenze contano i fissati validi, poi l&apos;ordine alfabetico. Lunedì si riparte da zero.
+                                A pari presenze si è pari merito: stessa posizione e premio diviso. Lunedì si riparte da zero.
                             </div>
                             {view.primiTre.length === 0 ? (
                                 <div className="mt-4 text-[15px] text-[var(--d-muted)]">Ancora nessuna presenza questa settimana.</div>
@@ -177,7 +177,7 @@ export function SquadraDiretta({ iniziale }: { iniziale: SquadraView }) {
                                 <div className="mt-4 text-[15px] leading-relaxed">
                                     Ti {n === 1 ? 'manca' : 'mancano'}{' '}
                                     <span className="font-semibold text-[var(--d-orange)]">{n} {n === 1 ? 'presenza' : 'presenze'}</span>{' '}
-                                    per salire di una posizione.
+                                    per salire di posizione.
                                 </div>
                             )}
                         </section>
@@ -186,7 +186,7 @@ export function SquadraDiretta({ iniziale }: { iniziale: SquadraView }) {
                     {view.mode === 'completa' && (
                         <section aria-label="La settimana">
                             <h2 className="text-lg font-semibold">La settimana</h2>
-                            <div className="mt-1 text-sm text-[var(--d-muted)]">Per presenze; a pari presenze conta chi ha fissato di più.</div>
+                            <div className="mt-1 text-sm text-[var(--d-muted)]">Per presenze; a pari presenze si è pari merito e il premio si divide.</div>
                             <div className="mt-3 overflow-x-auto">
                                 <table className="w-full min-w-[420px] text-[15px]">
                                     <thead>

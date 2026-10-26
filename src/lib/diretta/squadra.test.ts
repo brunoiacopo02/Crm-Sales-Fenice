@@ -17,8 +17,8 @@ test('modalità classifica: top3 di default, valori sconosciuti tornano al defau
     assert.equal(parseLeaderboardMode('tutti'), 'top3')
 })
 
-test('ordine: presenze, poi fissati, poi nome', () => {
-    const o = ordinaClassifica([m('1', 'Zora', 3, 9), m('2', 'Anthony', 5, 1), m('3', 'Beatrice', 3, 12), m('4', 'Alessandro', 3, 12)])
+test('ordine: presenze, poi il nome; i fissati non spareggiano', () => {
+    const o = ordinaClassifica([m('1', 'Zora', 3, 30), m('2', 'Anthony', 5, 1), m('3', 'Beatrice', 3, 12), m('4', 'Alessandro', 3, 2)])
     assert.deepEqual(o.map(x => x.nome), ['Anthony', 'Alessandro', 'Beatrice', 'Zora'])
 })
 
@@ -28,15 +28,16 @@ test('primi tre: solo chi ha almeno una presenza', () => {
     assert.deepEqual(primiTre(ordinaClassifica([m('1', 'A', 0)])), [])
 })
 
-test('distanza: quante presenze per superare chi sta subito sopra', () => {
-    const o = ordinaClassifica([m('a', 'A', 6), m('b', 'B', 5), m('c', 'C', 5), m('d', 'D', 3), m('e', 'E', 0)])
-    assert.equal(mancaPerSalire(o, 'd'), 3)      // C ne ha 5: con 3 in più arriva a 6
-    assert.equal(mancaPerSalire(o, 'e'), 4)
-    assert.equal(mancaPerSalire(o, 'b'), null)   // è tra i primi tre
+test('distanza: quante presenze per raggiungere chi sta subito sopra (a pari merito si sale)', () => {
+    const o = ordinaClassifica([m('a', 'A', 6), m('b', 'B', 5), m('c', 'C', 5), m('d', 'D', 3), m('e', 'E', 1), m('f', 'F', 0)])
+    assert.equal(mancaPerSalire(o, 'd'), 2)      // è 4°: con 2 in più pareggia B e C e sale al 2° pari merito
+    assert.equal(mancaPerSalire(o, 'e'), 2)      // D ne ha 3: con 2 in più lo pareggia
+    assert.equal(mancaPerSalire(o, 'f'), 1)
+    assert.equal(mancaPerSalire(o, 'b'), null)   // è sul podio
     assert.equal(mancaPerSalire(o, 'x'), null)   // non è in squadra
-    // a pari presenze ne basta una
+    // tutti a pari merito: tutti sul podio, nessuna distanza
     const p = ordinaClassifica([m('a', 'A', 4), m('b', 'B', 4), m('c', 'C', 4), m('d', 'D', 4, 0)])
-    assert.equal(mancaPerSalire(p, 'd'), 1)
+    assert.equal(mancaPerSalire(p, 'd'), null)
     // nessuno ha presenze: niente podio, niente distanza
     assert.equal(mancaPerSalire(ordinaClassifica([m('a', 'A', 0), m('b', 'B', 0), m('c', 'C', 0), m('d', 'D', 0)]), 'd'), null)
 })
@@ -94,7 +95,7 @@ test('vista top3: podio, distanza di chi guarda, nessun numero degli altri', () 
     const v = buildSquadraView(snap('top3'), 'n')
     assert.deepEqual(v.primiTre.map(x => [x.posizione, x.nome, x.presenze, x.premio]), [[1, 'Anthony', 6, 50], [2, 'Zora', 5, 25], [3, 'Riccardo', 2, 10]])
     assert.deepEqual(v.settimana, { lunedi: '2026-10-26', sabato: '2026-10-31' })
-    assert.equal(v.mancaPerSalire, 2)
+    assert.equal(v.mancaPerSalire, 1)   // Riccardo ne ha 2: con una in più lo pareggia
     assert.deepEqual(v.classifica, [])
     assert.deepEqual(v.fenici.map(x => x.nome), ['Anthony', 'Zora'])
     assert.ok(!('presenze' in v.fenici[0]))
@@ -120,11 +121,18 @@ test('vista completa e nessuna', () => {
     assert.equal(buildSquadraView(snap('top3'), 'conferme-1').sonoInSquadra, false)
 })
 
-test('podio: a pari presenze i fissati validi, poi il nome; i premi seguono la posizione', () => {
+test('podio: a pari presenze stessa posizione e premi sommati e divisi', () => {
     const s = snap('top3')
-    s.membri = [m('a', 'Zora', 4, 10), m('b', 'Anthony', 4, 10), m('c', 'Riccardo', 4, 12), m('d', 'Noemi', 0, 30)]
+    s.membri = [m('a', 'Zora', 4, 10), m('b', 'Anthony', 4, 2), m('c', 'Riccardo', 4, 12), m('d', 'Noemi', 0, 30)]
     const v = buildSquadraView(s, 'd')
-    assert.deepEqual(v.primiTre.map(x => [x.nome, x.premio]), [['Riccardo', 50], ['Anthony', 25], ['Zora', 10]])
+    assert.deepEqual(v.primiTre.map(x => [x.posizione, x.nome, x.premio]), [[1, 'Anthony', 28.33], [1, 'Riccardo', 28.33], [1, 'Zora', 28.33]])
+    // due primi a pari merito: (50 + 25) / 2 a testa, chi viene dopo è terzo
+    s.membri = [m('a', 'Zora', 6, 3), m('b', 'Anthony', 6, 20), m('c', 'Riccardo', 4), m('e', 'Lorenzo', 3)]
+    assert.deepEqual(buildSquadraView(s, 'e').primiTre.map(x => [x.posizione, x.nome, x.premio]), [[1, 'Anthony', 37.5], [1, 'Zora', 37.5], [3, 'Riccardo', 10]])
+    // pari merito al terzo posto: si dividono il terzo premio, e sono tutti sul podio
+    s.membri = [m('a', 'Zora', 6), m('b', 'Anthony', 5), m('c', 'Riccardo', 4), m('e', 'Lorenzo', 4)]
+    assert.deepEqual(buildSquadraView(s, 'e').primiTre.map(x => [x.posizione, x.nome, x.premio]), [[1, 'Zora', 50], [2, 'Anthony', 25], [3, 'Lorenzo', 5], [3, 'Riccardo', 5]])
+    s.membri = [m('a', 'Zora', 4, 10), m('b', 'Anthony', 4, 10), m('c', 'Riccardo', 4, 12), m('d', 'Noemi', 0, 30)]
     // chi non ha presenze non sale sul podio, anche con tanti fissati
     assert.equal(v.primiTre.some(x => x.nome === 'Noemi'), false)
     // con la soglia del podio a 5 presenze resta vuoto

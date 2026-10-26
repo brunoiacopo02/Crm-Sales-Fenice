@@ -61,7 +61,7 @@ export default async function BonusPage() {
                     etichetta="Premi"
                     valore={`${eur(primo)} · ${eur(secondo)} · ${eur(terzo)}`}
                     sotto="ai primi tre della settimana"
-                    testo="Si guarda chi ha più presenze da lunedì a sabato. A pari presenze vince chi ha più fissati validi, poi l'ordine alfabetico. Si vedono solo i primi tre; il lunedì si riparte da zero."
+                    testo="Si guarda chi ha più presenze da lunedì a sabato. A pari presenze si è pari merito: i premi dei posti occupati si sommano e si dividono in parti uguali. Si vedono solo i primi tre; il lunedì si riparte da zero."
                 />
                 <BonusCard
                     icon={<Headphones className="h-5 w-5" />}

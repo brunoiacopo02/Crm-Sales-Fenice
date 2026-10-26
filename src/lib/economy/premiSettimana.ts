@@ -10,7 +10,7 @@
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
 import type { GamificationTargets } from '@/lib/diretta/config'
 import { progressoSquadra, type ConfermeBonusConfig } from '@/lib/conferme/bonus'
-import { premioClassifica, type EconomyRules } from './rules'
+import type { EconomyRules } from './rules'
 
 const GIORNO_MS = 86_400_000
 
@@ -60,14 +60,40 @@ export interface RigaClassificaInput {
 }
 
 const perNome = (a: { nome: string }, b: { nome: string }) => a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' })
+const arrotonda = (n: number) => Math.round(n * 100) / 100
 
 /**
- * Presenze della settimana; a parità i fissati validi della settimana; poi
- * l'ordine alfabetico del nome (a parità di tutto, decide l'alfabeto: è
- * l'unico criterio che non si può discutere dopo).
+ * Presenze della settimana, poi il nome solo come ordine di lettura: a pari
+ * presenze si è pari merito (PO 26/10/2026, i fissati non spareggiano più:
+ * chi fissa meno ma meglio non deve perdere).
  */
-export function ordinaPerPresenze<T extends { nome: string; presenze: number; fissati: number }>(righe: readonly T[]): T[] {
-    return [...righe].sort((a, b) => (b.presenze - a.presenze) || (b.fissati - a.fissati) || perNome(a, b))
+export function ordinaPerPresenze<T extends { nome: string; presenze: number }>(righe: readonly T[]): T[] {
+    return [...righe].sort((a, b) => (b.presenze - a.presenze) || perNome(a, b))
+}
+
+/**
+ * Posizioni a pari merito e premi divisi (PO 26/10/2026). Chi ha le stesse
+ * presenze sta nella stessa posizione (1, 1, 3); i premi dei posti che il
+ * gruppo occupa si sommano e si dividono in parti uguali: due primi a pari
+ * merito prendono (50 + 25) / 2 = 37,50 a testa e chi viene dopo è terzo.
+ * Il monte premi della settimana resta lo stesso. Sotto `minPresenze` niente premio.
+ */
+export function posizioniPremiate<T extends { nome: string; presenze: number }>(
+    righe: readonly T[],
+    premiEuro: readonly number[],
+    minPresenze: number,
+): Array<T & { posizione: number; euro: number }> {
+    const ordinati = ordinaPerPresenze(righe)
+    const out: Array<T & { posizione: number; euro: number }> = []
+    for (let i = 0; i < ordinati.length;) {
+        let j = i
+        while (j < ordinati.length && ordinati[j].presenze === ordinati[i].presenze) j++
+        const monte = ordinati[i].presenze >= minPresenze ? premiEuro.slice(i, j).reduce((t, x) => t + x, 0) : 0
+        const euro = arrotonda(monte / (j - i))
+        for (let k = i; k < j; k++) out.push({ ...ordinati[k], posizione: i + 1, euro })
+        i = j
+    }
+    return out
 }
 
 // ── Calcolo dei premi ───────────────────────────────────────────────────
@@ -106,17 +132,13 @@ export interface PremiSettimana {
     totaleEuro: number
 }
 
-const arrotonda = (n: number) => Math.round(n * 100) / 100
-
 export function calcolaPremiSettimana(
     n: NumeriSettimana,
     regole: { economia: EconomyRules; obiettivi: Pick<GamificationTargets, 'presenzeSogliaEuro' | 'euroPerPresenza'>; conferme: ConfermeBonusConfig },
 ): PremiSettimana {
-    const ordinati = ordinaPerPresenze(n.gdo)
-    const classifica = ordinati
-        .filter(r => r.presenze >= regole.economia.classifica.minPresenze)
-        .slice(0, 3)
-        .map((r, i) => ({ ...r, posizione: i + 1, euro: premioClassifica(i + 1, regole.economia) }))
+    const min = regole.economia.classifica.minPresenze
+    const classifica = posizioniPremiate(n.gdo, regole.economia.classifica.premiEuro, min)
+        .filter(r => r.posizione <= 3 && r.presenze >= min)
 
     // €12 lordi per ogni presenza oltre la soglia (dalla 5ª): la stessa regola
     // di euroFromPresences della Diretta, che il GDO vede nel suo salvadanaio.

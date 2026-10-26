@@ -33,7 +33,7 @@ function RegoleBox({ r }: { r: Regole }) {
                 <div className="font-semibold text-brand-charcoal">Classifica</div>
                 <div className="mt-1">
                     Primi tre per presenze della settimana: {eur(r.classifica[0])}, {eur(r.classifica[1])}, {eur(r.classifica[2])} lordi.
-                    A pari presenze contano i fissati validi, poi l&apos;ordine alfabetico. Serve almeno {r.minPresenze === 1 ? "una presenza" : `${r.minPresenze} presenze`}.
+                    A pari presenze si è pari merito: i premi dei posti occupati si sommano e si dividono. Serve almeno {r.minPresenze === 1 ? "una presenza" : `${r.minPresenze} presenze`}.
                 </div>
             </div>
             <div>

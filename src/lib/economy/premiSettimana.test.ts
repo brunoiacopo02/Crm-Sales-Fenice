@@ -42,14 +42,14 @@ test('settimana dal lunedì, la precedente e quando è chiusa', () => {
     assert.equal(settimanaChiusa(s, new Date('2026-11-07T23:00:00Z')), true)    // domenica 00:00
 })
 
-test('ordine: presenze, poi fissati validi, poi il nome', () => {
+test('ordine: presenze, poi il nome; i fissati non contano', () => {
     const o = ordinaPerPresenze([
         { nome: 'Zora', presenze: 5, fissati: 40 },
         { nome: 'anthony', presenze: 5, fissati: 40 },
         { nome: 'Riccardo', presenze: 5, fissati: 44 },
         { nome: 'Noemi', presenze: 6, fissati: 10 },
     ])
-    assert.deepEqual(o.map(x => x.nome), ['Noemi', 'Riccardo', 'anthony', 'Zora'])
+    assert.deepEqual(o.map(x => x.nome), ['Noemi', 'anthony', 'Riccardo', 'Zora'])
 })
 
 const numeri = (p: Partial<NumeriSettimana> = {}): NumeriSettimana => ({
@@ -72,7 +72,8 @@ const REGOLE = {
 
 test('premi della settimana: classifica 50/25/10, presenze dalla 5ª a 12 euro, Conferme oltre 16 a 12 euro a testa', () => {
     const p = calcolaPremiSettimana(numeri(), REGOLE)
-    assert.deepEqual(p.classifica.map(r => [r.posizione, r.nome, r.euro]), [[1, 'Anthony', 50], [2, 'Riccardo', 25], [3, 'Zora', 10]])
+    // Riccardo e Zora a pari merito (5 presenze): secondi tutti e due, (25 + 10) / 2 a testa
+    assert.deepEqual(p.classifica.map(r => [r.posizione, r.nome, r.euro]), [[1, 'Anthony', 50], [2, 'Riccardo', 17.5], [2, 'Zora', 17.5]])
     assert.deepEqual(p.presenzeGdo.map(r => [r.nome, r.pagate, r.euro]), [['Anthony', 3, 36], ['Riccardo', 1, 12], ['Zora', 1, 12]])
     assert.ok(p.conferme)
     assert.equal(p.conferme!.oltre, 3)
@@ -81,7 +82,7 @@ test('premi della settimana: classifica 50/25/10, presenze dalla 5ª a 12 euro, 
     // 85 di classifica + 60 di presenze + 72 delle Conferme
     assert.equal(p.totaleEuro, 217)
     assert.deepEqual(euroPerPersona(p).map(x => [x.nome, x.euro]), [
-        ['Anthony', 86], ['Riccardo', 37], ['Alberto', 36], ['Andrea', 36], ['Zora', 22],
+        ['Anthony', 86], ['Alberto', 36], ['Andrea', 36], ['Riccardo', 29.5], ['Zora', 29.5],
     ])
 })
 
