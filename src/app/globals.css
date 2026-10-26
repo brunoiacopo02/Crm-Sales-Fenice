@@ -2467,6 +2467,23 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
 [data-ui="diretta"] .d-svanisce { animation: d-svanisce 1800ms ease-out; }
 [data-ui="diretta"] .d-punta-pop { outline: 3px solid transparent; outline-offset: 2px; animation: d-punta 1200ms ease-out; }
 
+/* Ora di punta nella barra in alto del GDO (PO 26/10/2026): fiammelle che
+   tremolano solo con transform e opacità (niente layout, niente clic). Con le
+   animazioni ridotte restano ferme: la regola generale qui sopra accorcerebbe
+   un ciclo infinito a un lampeggio, quindi qui l'animazione si toglie. */
+@keyframes d-fiamma {
+  0%, 100% { transform: scale(1, 1) rotate(0deg); opacity: 1; }
+  25% { transform: scale(0.94, 1.1) rotate(-4deg); opacity: 0.85; }
+  50% { transform: scale(1.04, 0.95) rotate(2deg); opacity: 1; }
+  75% { transform: scale(0.97, 1.06) rotate(4deg); opacity: 0.9; }
+}
+@keyframes d-entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+[data-ui="diretta"] .d-fiamma { animation: d-fiamma 1400ms ease-in-out infinite; transform-origin: 50% 100%; will-change: transform; }
+[data-ui="diretta"] .d-entra { animation: d-entra 300ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  [data-ui="diretta"] .d-fiamma { animation: none !important; }
+}
+
 /* ───────────────────────────────────────────────────────────────────────────
    Cornice Diretta dell'admin (ramo admin, PO 25/10/2026): barra e menu scuri.
    Da 25/10/2026 sera anche le pagine vecchie del menu admin sono scure (il

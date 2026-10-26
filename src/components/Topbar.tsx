@@ -29,6 +29,7 @@ import type { GamificationTargets } from "@/lib/diretta/config"
 import type { DirettaIo } from "@/lib/diretta/io"
 import { MENU_GDO_DIRETTA } from "@/components/diretta/menu"
 import { useOrologio } from "@/components/diretta/useOrologio"
+import { OraDiPunta } from "@/components/diretta/OraDiPunta"
 import { numeroIt } from "@/lib/diretta/formato"
 
 type TopbarProps = {
@@ -442,6 +443,10 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                             )}
                         </div>
                     </div>
+                )}
+
+                {direttaGdo && (
+                    <OraDiPunta userId={session?.user?.id ?? ''} adesso={adesso} obiettivi={obiettivi} classeFacoltativo={facoltativo} />
                 )}
 
                 <div className="hidden shrink-0 whitespace-nowrap text-[14px] tabular-nums text-[#BFBFBF] md:block">
