@@ -3,7 +3,7 @@
 // Home GDO "Diretta" (PO 25/10/2026, tavola B del canvas).
 // A sinistra la colonna arancione (io, squadra, ora di punta, pause), al
 // centro le code con le stesse card e gli stessi esiti di sempre, a destra la
-// cronaca della squadra e la scheda personale. Niente overlay della vecchia
+// scheda personale e la cronaca della squadra. Niente overlay della vecchia
 // gamification: il momento appuntamento è il contatore che avanza.
 
 import { useCallback, useMemo, useState } from "react"
@@ -20,6 +20,9 @@ import { DailyQuoteSlot } from "./DailyQuoteSlot"
 import type { TodayQuotes } from "@/lib/quotes/display"
 
 type LeadList = any[] // eslint-disable-line @typescript-eslint/no-explicit-any
+
+/** Ultimi appuntamenti della squadra in vista nella cronaca. */
+const CRONACA_IN_VISTA = 5
 
 type Props = {
     userId: string
@@ -95,9 +98,10 @@ export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fo
                     </div>
 
                     <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start xl:flex xl:w-[300px] xl:shrink-0 xl:flex-col xl:overflow-y-auto xl:pb-6">
-                        {frasi && <DailyQuoteSlot initial={frasi} compatta />}
-                        <Cronaca voci={live?.squadra.cronaca ?? []} mioId={live?.io.id ?? userId} caricato={!!live} />
+                        {/* Prima i risultati personali (PO 26/10/2026): la cronaca li spingeva fuori dallo schermo. */}
                         <SchedaPersonale mia={live?.mia ?? null} obiettivi={obiettivi} />
+                        {frasi && <DailyQuoteSlot initial={frasi} compatta />}
+                        <Cronaca voci={(live?.squadra.cronaca ?? []).slice(0, CRONACA_IN_VISTA)} mioId={live?.io.id ?? userId} caricato={!!live} />
                     </div>
                 </div>
             </div>

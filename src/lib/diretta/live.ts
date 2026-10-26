@@ -57,6 +57,13 @@ export interface DirettaMia {
     fissatiOggi: number
     fissatiSettimana: number
     presenzeSettimana: number
+    /**
+     * Conferme della settimana (PO 26/10/2026): appuntamenti del GDO che le
+     * Conferme hanno esitato "confermato" questa settimana, presenti o no.
+     */
+    confermeSettimana: number
+    /** Confermati con l'appuntamento da oggi in poi, non ancora esitati dal venditore: possibili presenze. */
+    confermeInAttesa: number
     euroSettimana: number
     migliorePresenze: { valore: number; settimana: string | null }
     miglioreFissati: { valore: number; settimana: string | null }
@@ -186,9 +193,17 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
     const settimana = weekBoundsRome(now)
     const daFissati = settimana.start > FISSATI_DAL ? settimana.start : FISSATI_DAL
 
-    const [righeSettimana, presenze, saldo, passate, serie, regole] = await Promise.all([
+    const [righeSettimana, presenze, conferme, saldo, passate, serie, regole] = await Promise.all([
         leggiFissati({ companyId, userIds: [userId], start: settimana.start, end: settimana.end }),
         countPresences(userId, settimana.start, settimana.end, companyId),
+        db.select({ at: leads.confirmationsTimestamp, appuntamento: leads.appointmentDate, presentato: leads.presentedAt, esito: leads.salespersonOutcome })
+            .from(leads)
+            .where(and(
+                eq(leads.companyId, companyId),
+                eq(leads.assignedToId, userId),
+                eq(leads.confirmationsOutcome, 'confermato'),
+                gte(leads.confirmationsTimestamp, new Date(Math.min(settimana.start.getTime(), giorno.start.getTime() - 7 * 86_400_000))),
+            )),
         db.select({ scintille: users.scintille, piume: users.piume }).from(users).where(eq(users.id, userId)).limit(1),
         miglioriInCache(userId, companyId, settimana.start.toISOString()),
         leggiSerie(db, userId, now),
@@ -209,6 +224,8 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
         fissatiOggi: contaFissati(righeSettimana, giorno.start, giorno.end).totale,
         fissatiSettimana,
         presenzeSettimana,
+        confermeSettimana: conferme.filter(c => c.at && c.at >= settimana.start && c.at < settimana.end).length,
+        confermeInAttesa: conferme.filter(c => !c.presentato && !c.esito && c.appuntamento && c.appuntamento >= giorno.start).length,
         euroSettimana: euroFromPresences(presenzeSettimana, obiettivi),
         migliorePresenze,
         miglioreFissati,

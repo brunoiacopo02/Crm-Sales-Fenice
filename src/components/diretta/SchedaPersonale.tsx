@@ -1,7 +1,7 @@
 "use client"
 
 // Scheda personale della home Diretta: la vede solo chi è collegato.
-// Binario delle presenze della settimana (le prime caselle sono la base,
+// Conferme della settimana (possibili presenze), binario delle presenze della settimana (le prime caselle sono la base,
 // dalla soglia in poi ogni presenza vale euro), salvadanaio, miglior
 // settimana e saldo di Scintille e Piume.
 
@@ -22,6 +22,19 @@ export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; ob
         <section aria-label="La tua settimana" className="rounded-2xl bg-[#262626] p-5 text-[#F2F2F2]">
             <h2 className="text-[16px] font-semibold">La tua settimana</h2>
             <div className="mt-0.5 text-[13px] text-[#BFBFBF]">La vedi solo tu.</div>
+
+            {/* Conferme prima delle presenze (PO 26/10/2026): ogni conferma è una possibile presenza. */}
+            <div className="mt-5 flex items-baseline justify-between gap-3 text-[14px]">
+                <span>Conferme</span>
+                <span className="text-[20px] font-semibold tabular-nums">{mia?.confermeSettimana ?? 0}</span>
+            </div>
+            <div className="mt-0.5 text-[12px] text-[#BFBFBF]">
+                {(mia?.confermeInAttesa ?? 0) === 0
+                    ? 'Appuntamenti confermati dalle Conferme questa settimana.'
+                    : (mia?.confermeInAttesa ?? 0) === 1
+                        ? '1 confermato deve ancora presentarsi: può diventare una presenza.'
+                        : `${mia?.confermeInAttesa} confermati devono ancora presentarsi: possono diventare presenze.`}
+            </div>
 
             <div className="mt-5 flex items-baseline justify-between gap-3 text-[14px]">
                 <span>Presenze</span>
