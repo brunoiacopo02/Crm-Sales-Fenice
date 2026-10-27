@@ -2480,6 +2480,12 @@ main .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   50% { transform: scale(1.04, 0.95) rotate(2deg); opacity: 1; }
   75% { transform: scale(0.97, 1.06) rotate(4deg); opacity: 0.9; }
 }
+/* Con la scheda contatto aperta (html[data-schede-aperte], PO 27/10/2026)
+   avvisi richiami e consigli si spostano alla sua sinistra: la scheda è larga
+   28rem: dove a sinistra c'è posto (da 1024 px) si spostano, sotto restano dove sono. */
+@media (min-width: 1024px) {
+  html[data-schede-aperte] .d-a-sinistra-della-scheda { right: calc(28rem + 1rem) !important; }
+}
 @keyframes d-entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 [data-ui="diretta"] .d-fiamma { animation: d-fiamma 1400ms ease-in-out infinite; transform-origin: 50% 100%; will-change: transform; }
 [data-ui="diretta"] .d-entra { animation: d-entra 300ms ease-out; }

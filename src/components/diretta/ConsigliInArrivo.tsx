@@ -55,7 +55,7 @@ export function ConsigliInArrivo() {
         <div
             role="status"
             aria-live="polite"
-            className="fixed right-4 top-20 z-[85] w-[min(26rem,calc(100vw-2rem))] rounded-2xl border-2 border-[#FF9330] bg-[#262626] p-5 text-[#F2F2F2] shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
+            className="d-a-sinistra-della-scheda fixed right-4 top-20 z-[85] w-[min(26rem,calc(100vw-2rem))] rounded-2xl border-2 border-[#FF9330] bg-[#262626] p-5 text-[#F2F2F2] shadow-[0_12px_32px_rgba(0,0,0,0.35)]"
             style={{ fontFamily: "var(--font-poppins), system-ui, sans-serif" }}
         >
             <div className="flex items-center gap-2 text-[14px] font-semibold text-[#FF9330]">

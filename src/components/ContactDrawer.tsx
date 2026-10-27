@@ -139,6 +139,20 @@ export function ContactDrawer({
         return () => document.removeEventListener("keydown", handleEsc)
     }, [isOpen, handleEsc])
 
+    // Scheda aperta segnata sulla pagina (PO 27/10/2026): avvisi richiami e
+    // consigli si spostano alla sua sinistra invece di coprire gli esiti.
+    // Un contatore, perché le schede montate sono più d'una.
+    useEffect(() => {
+        if (!isOpen) return
+        const html = document.documentElement
+        html.dataset.schedeAperte = String(Number(html.dataset.schedeAperte ?? 0) + 1)
+        return () => {
+            const n = Number(html.dataset.schedeAperte ?? 1) - 1
+            if (n > 0) html.dataset.schedeAperte = String(n)
+            else delete html.dataset.schedeAperte
+        }
+    }, [isOpen])
+
     useEffect(() => {
         if (!isOpen || !leadId) {
             setProfile(null)

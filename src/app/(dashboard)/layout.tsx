@@ -15,6 +15,7 @@ const ConfermeRecallBanner = dynamic(() => import("@/components/ConfermeRecallBa
 const ConfermeRecallBlockingAlert = dynamic(() => import("@/components/ConfermeRecallBlockingAlert").then(mod => ({ default: mod.ConfermeRecallBlockingAlert })))
 const ConsigliInArrivo = dynamic(() => import("@/components/diretta/ConsigliInArrivo").then(mod => ({ default: mod.ConsigliInArrivo })))
 const ConsigliFissi = dynamic(() => import("@/components/diretta/ConsigliFissi").then(mod => ({ default: mod.ConsigliFissi })))
+const RichiamiAvviso = dynamic(() => import("@/components/diretta/RichiamiAvviso").then(mod => ({ default: mod.RichiamiAvviso })))
 const ConsigliAdmin = dynamic(() => import("@/components/diretta/ConsigliAdmin").then(mod => ({ default: mod.ConsigliAdmin })))
 
 import { getEquippedSkinCss } from "@/app/actions/shopActions"
@@ -151,6 +152,10 @@ export default async function DashboardLayout({
                     )}
                     {session.user.role === 'ADMIN' && (
                         <SafeWrapper><ConsigliAdmin /></SafeWrapper>
+                    )}
+                    {/* Richiami del GDO (PO 27/10/2026): avviso 5 minuti prima e all'ora, su ogni pagina. */}
+                    {session.user.role === 'GDO' && (
+                        <SafeWrapper><RichiamiAvviso /></SafeWrapper>
                     )}
                     {session.user.role === 'CONFERME' && (
                         <>

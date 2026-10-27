@@ -6,7 +6,7 @@
 // della pagina admin richiedono ADMIN letto dalla tabella users.
 
 import { revalidatePath, updateTag } from 'next/cache'
-import { and, eq, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNotNull, lte, ne, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { leads, users } from '@/db/schema'
 import { assertSalesArea, currentTenant } from '@/lib/tenancy'
@@ -16,6 +16,7 @@ import {
     type DirettaMia, type DirettaSquadra,
 } from '@/lib/diretta/live'
 import { leggiFissati } from '@/lib/diretta/fissatiDb'
+import { dayBoundsRome } from '@/lib/dateUtils'
 import { giornoLavorativoPrecedente } from '@/lib/diretta/home'
 import { DIRETTA_FLAG_KEYS, GAMIFICATION_SETTINGS_KEY, RUOLI_DIRETTA, type GamificationTargets, type RuoloDiretta } from '@/lib/diretta/config'
 import { readDirettaFlags, readGamificationTargets, writeSetting } from '@/lib/diretta/settings'
@@ -70,6 +71,45 @@ export async function getDirettaRichiamiScaduti(): Promise<number> {
             lte(leads.recallDate, new Date()),
         ))
     return r?.n ?? 0
+}
+
+export interface RichiamoDaFare {
+    id: string
+    name: string
+    phone: string | null
+    recallDate: string
+}
+
+/** Preavviso dell'avviso richiami del GDO: compare qualche minuto prima dell'ora. */
+const PREAVVISO_RICHIAMO_MS = 5 * 60_000
+
+/**
+ * Avviso richiami del GDO (PO 27/10/2026): i suoi richiami di oggi già all'ora
+ * o entro 5 minuti, dal più vecchio. Da inizio giornata, come il banner delle
+ * Conferme: i richiami scaduti da giorni stanno nella coda, non nell'avviso.
+ */
+export async function getGdoRichiamiDaFare(): Promise<{ richiami: RichiamoDaFare[]; totale: number }> {
+    const ctx = await currentTenant()
+    assertSalesArea(ctx)
+    if (ctx.role !== 'GDO') return { richiami: [], totale: 0 }
+    const now = new Date()
+    const rows = await db.select({ id: leads.id, name: leads.name, phone: leads.phone, recallDate: leads.recallDate })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.assignedToId, ctx.userId),
+            ne(leads.status, 'REJECTED'),
+            ne(leads.status, 'APPOINTMENT'),
+            isNotNull(leads.recallDate),
+            gte(leads.recallDate, dayBoundsRome(now).start),
+            lte(leads.recallDate, new Date(now.getTime() + PREAVVISO_RICHIAMO_MS)),
+        ))
+        .orderBy(asc(leads.recallDate))
+        .limit(20)
+    return {
+        richiami: rows.slice(0, 3).map(r => ({ id: r.id, name: r.name, phone: r.phone, recallDate: (r.recallDate as Date).toISOString() })),
+        totale: rows.length,
+    }
 }
 
 /**
