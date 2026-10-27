@@ -49,7 +49,7 @@ export default async function CentroDirettaPage() {
             <div className="mt-8 grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col gap-4">
                     <SezioneOggi centro={centro} />
-                    <SezioneConfermati confermati={centro.confermati} oggi={centro.giorno} />
+                    <SezioneConfermati confermati={centro.confermati} />
                     <SezioneRegistro registro={centro.registro} oggi={centro.giorno} />
                     <SezioneObiettivi o={stato.obiettivi} />
                 </div>

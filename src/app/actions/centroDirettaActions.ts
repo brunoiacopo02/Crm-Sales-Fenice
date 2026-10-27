@@ -96,10 +96,12 @@ export interface RegistroCentro {
 export interface ConfermatoCentro {
     leadId: string
     lead: string
+    telefono: string | null
     funnel: string | null
+    nota: string | null
     confermatoAlle: string
     appuntamento: string | null
-    /** Il GDO che ha il lead (chi ha fissato l'appuntamento). */
+    /** Il GDO che ha il lead (chi ha fissato l'appuntamento), col codice. */
     gdo: string
     /** Chi delle Conferme l'ha confermato. */
     conferme: string
@@ -205,7 +207,9 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
     const righe = await db.select({
         leadId: leads.id,
         lead: leads.name,
+        telefono: leads.phone,
         funnel: leads.funnel,
+        nota: leads.appointmentNote,
         confermatoAlle: leads.confirmationsTimestamp,
         appuntamento: leads.appointmentDate,
         gdoId: leads.assignedToId,
@@ -221,28 +225,38 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
             gte(leads.confirmationsTimestamp, new Date(inizioGiorno)),
             lt(leads.confirmationsTimestamp, new Date(fineGiorno)),
         ))
-        .orderBy(desc(leads.confirmationsTimestamp))
+        // In ordine di appuntamento, come la lista di Monitor Vendite.
+        .orderBy(asc(leads.appointmentDate), desc(leads.confirmationsTimestamp))
         .limit(200)
 
     const ids = [...new Set(righe.flatMap(r => [r.gdoId, r.confermeId, r.venditoreId]).filter((x): x is string => !!x))]
     const persone = ids.length === 0 ? [] : await db.select({
-        id: users.id, firstName: users.firstName, displayName: users.displayName, name: users.name,
+        id: users.id, firstName: users.firstName, displayName: users.displayName, name: users.name, gdoCode: users.gdoCode,
     }).from(users).where(inArray(users.id, ids))
     const nome = new Map(persone.map(u => [u.id, personName(u)]))
     const di = (id: string | null) => (id ? nome.get(id) ?? '' : '')
+    // GDO col codice, come in Monitor Vendite: "Zora (106)".
+    const codice = new Map(persone.map(u => [u.id, u.gdoCode]))
+    const gdoDi = (id: string | null) => {
+        const n = di(id)
+        const c = id ? codice.get(id) : null
+        return n && c ? `${n} (${c})` : n || (c ? `GDO ${c}` : '')
+    }
 
     return righe.map(r => ({
         leadId: r.leadId,
         lead: r.lead ?? '',
+        telefono: r.telefono ?? null,
         funnel: r.funnel ?? null,
+        nota: r.nota ?? null,
         confermatoAlle: (r.confermatoAlle as Date).toISOString(),
         appuntamento: r.appuntamento?.toISOString() ?? null,
-        gdo: di(r.gdoId),
+        gdo: gdoDi(r.gdoId),
         conferme: di(r.confermeId),
         venditore: di(r.venditoreId),
         esitoVenditore: r.esitoVenditore ?? null,
     }))
-}, ['diretta-centro-confermati-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
+}, ['diretta-centro-confermati-v2'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
 
 async function forzieriDiOggi(giorno: string): Promise<ForziereOggi[]> {
     const forzieri = await db.select({

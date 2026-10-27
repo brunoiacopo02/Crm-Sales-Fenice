@@ -16,6 +16,7 @@ import {
     causaleTesto, euroTesto, giorniTesto, importoConSegno, maiuscola, riepilogoCalendario,
     statoVoce, statoVoceTesto, type StatoVoce, type Valuta,
 } from "@/lib/diretta/centro"
+import { ConfermatiOggi } from "./ConfermatiOggi"
 import { BarraScalini, NonDisponibile, Riga, Sezione, Vuoto, oraDi, quando } from "@/components/diretta/admin/ui"
 import { numeroIt } from "@/lib/diretta/formato"
 
@@ -136,61 +137,18 @@ export function SezioneOggi({ centro }: { centro: CentroDiretta }) {
 }
 
 // ── Confermati di oggi (al posto dei controlli anti-imbroglio, PO 27/10/2026) ──
+// Stessa lista di Monitor Vendite, con in più l'ora della conferma e chi l'ha
+// fatta. La lista è un componente client: il nome apre la scheda del lead.
 
-export function SezioneConfermati({ confermati, oggi }: { confermati: ConfermatoCentro[] | null; oggi: string }) {
+export function SezioneConfermati({ confermati }: { confermati: ConfermatoCentro[] | null }) {
     return (
-        <Sezione titolo="Confermati di oggi" href="/conferme" linkTesto="Pagina Conferme">
-            {!confermati ? <NonDisponibile /> : <ConfermatiCorpo righe={confermati} oggi={oggi} />}
+        <Sezione
+            titolo={`Confermati di oggi${confermati ? ` (${confermati.length})` : ''}`}
+            href="/monitor-vendite"
+            linkTesto="Monitor Vendite"
+        >
+            {!confermati ? <NonDisponibile /> : <ConfermatiOggi righe={confermati} />}
         </Sezione>
-    )
-}
-
-function ConfermatiCorpo({ righe, oggi }: { righe: ConfermatoCentro[]; oggi: string }) {
-    if (righe.length === 0) return <Vuoto>Oggi le Conferme non hanno ancora confermato appuntamenti.</Vuoto>
-    const perGdo = new Map<string, number>()
-    for (const r of righe) perGdo.set(r.gdo || 'Senza GDO', (perGdo.get(r.gdo || 'Senza GDO') ?? 0) + 1)
-    const classifica = [...perGdo.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'it'))
-    return (
-        <div className="min-w-0">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-[32px] font-semibold leading-none tabular-nums">{righe.length}</span>
-                <span className="text-[14px] text-[#BFBFBF]">{righe.length === 1 ? 'appuntamento confermato' : 'appuntamenti confermati'} oggi</span>
-            </div>
-            <div className="mt-2 text-[13px] leading-snug text-[#BFBFBF]">
-                Per GDO: {classifica.map(([n, k]) => `${n} ${k}`).join(', ')}.
-            </div>
-            <div className="mt-4 max-h-[28rem] overflow-auto">
-                <table className="w-full min-w-[560px] text-[14px]">
-                    <thead className="sticky top-0 bg-[#262626]">
-                        <tr className="text-left text-[13px] text-[#BFBFBF]">
-                            <th scope="col" className="pb-2 pr-3 font-normal">Confermato</th>
-                            <th scope="col" className="pb-2 pr-3 font-normal">Lead</th>
-                            <th scope="col" className="pb-2 pr-3 font-normal">GDO</th>
-                            <th scope="col" className="pb-2 pr-3 font-normal">Conferme</th>
-                            <th scope="col" className="pb-2 font-normal">Appuntamento</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {righe.map(r => (
-                            <tr key={r.leadId} className="border-t-2 border-[#2E2E2E] align-top">
-                                <td className="py-2 pr-3 tabular-nums text-[#BFBFBF]">{oraDi(r.confermatoAlle)}</td>
-                                <td className="py-2 pr-3">
-                                    <div className="font-medium">{r.lead || 'Senza nome'}</div>
-                                    {(r.funnel || r.venditore) && (
-                                        <div className="text-[12px] text-[#A6A6A6]">
-                                            {[r.funnel, r.venditore && `venditore ${r.venditore}${r.esitoVenditore ? `, ${r.esitoVenditore.toLowerCase()}` : ''}`].filter(Boolean).join(' · ')}
-                                        </div>
-                                    )}
-                                </td>
-                                <td className="py-2 pr-3">{r.gdo || '—'}</td>
-                                <td className="py-2 pr-3">{r.conferme || '—'}</td>
-                                <td className="py-2 tabular-nums">{r.appuntamento ? quando(r.appuntamento, oggi) : '—'}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
     )
 }
 
