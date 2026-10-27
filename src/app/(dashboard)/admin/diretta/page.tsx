@@ -9,7 +9,7 @@ import { PaginaAdmin, Sezione, TitoloAdmin, oraDi } from "@/components/diretta/a
 import { InterruttoriDiretta } from "./InterruttoriDiretta"
 import { AggiornaCentro } from "./AggiornaCentro"
 import {
-    LinkPremiSettimana, SezioneBonusConferme, SezioneCitazioni, SezioneControlli, SezioneNegozio,
+    LinkPremiSettimana, SezioneBonusConferme, SezioneCitazioni, SezioneConfermati, SezioneNegozio,
     SezioneObiettivi, SezioneOggi, SezioneRegistro,
 } from "./sezioni"
 
@@ -17,8 +17,8 @@ export const dynamic = "force-dynamic"
 
 // Centro di controllo della Diretta (PO 25/10/2026): in un colpo d'occhio
 // interruttori e obiettivi, la giornata della squadra, citazioni da approvare,
-// richieste del negozio, bonus Conferme, registro delle monete e controlli
-// anti-imbroglio, con i link alle pagine di dettaglio. Solo ADMIN, letto
+// richieste del negozio, bonus Conferme, registro delle monete e monitor
+// degli appuntamenti confermati oggi, con i link alle pagine di dettaglio. Solo ADMIN, letto
 // dalla tabella users; ogni action lo ricontrolla.
 export default async function CentroDirettaPage() {
     if (!(await conRuoloDb(["ADMIN"]))) redirect("/unauthorized")
@@ -49,7 +49,7 @@ export default async function CentroDirettaPage() {
             <div className="mt-8 grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col gap-4">
                     <SezioneOggi centro={centro} />
-                    <SezioneControlli controlli={centro.controlli} oggi={centro.giorno} />
+                    <SezioneConfermati confermati={centro.confermati} oggi={centro.giorno} />
                     <SezioneRegistro registro={centro.registro} oggi={centro.giorno} />
                     <SezioneObiettivi o={stato.obiettivi} />
                 </div>

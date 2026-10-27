@@ -7,7 +7,7 @@
 //
 // Solo ADMIN, letto dalla tabella users. Carico sul DB:
 // - squadra di oggi: la stessa cache di 15 secondi della home GDO;
-// - registro e controlli: unstable_cache di 30 secondi, con giorno e settimana
+// - registro e confermati di oggi: unstable_cache di 30 secondi, con giorno e settimana
 //   di Roma nella chiave (a mezzanotte e il lunedì ripartono da soli);
 // - forzieri e richieste del negozio: tabelle piccole, lette fresche, così
 //   dopo una consegna in /admin/premi il conto torna giusto subito.
@@ -22,16 +22,14 @@
 import { unstable_cache } from "next/cache"
 import { and, asc, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { callLogs, currencyLedger, leads, rewardItems, rewardPurchases, teamChestAwards, teamChests, users } from "@/db/schema"
+import { currencyLedger, leads, rewardItems, rewardPurchases, teamChestAwards, teamChests, users } from "@/db/schema"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { accountVero, nonDaAccountDiProva } from "@/lib/prova/sql"
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from "@/lib/dateUtils"
 import { personName } from "@/lib/diretta/config"
 import { leggiSquadra, type DirettaSquadra } from "@/lib/diretta/live"
-import { leggiMembriSquadra } from "@/lib/diretta/fissatiDb"
 import {
-    controlloFissati, esitoDopo, totaliRegistro,
-    type ControlloPersona, type TotaliValuta, type Valuta,
+    totaliRegistro, type TotaliValuta, type Valuta,
 } from "@/lib/diretta/centro"
 
 const FENICE = 'fenice'
@@ -95,14 +93,18 @@ export interface RegistroCentro {
     topPiume: SaldoCentro[]
 }
 
-export interface ControlliCentro {
-    persone: (ControlloPersona & { nome: string })[]
-    tolti: ToltoCentro[]
-    storni: {
-        righe: Record<Valuta, number>
-        totale: Record<Valuta, number>
-        ultimi: MovimentoCentro[]
-    }
+export interface ConfermatoCentro {
+    leadId: string
+    lead: string
+    funnel: string | null
+    confermatoAlle: string
+    appuntamento: string | null
+    /** Il GDO che ha il lead (chi ha fissato l'appuntamento). */
+    gdo: string
+    /** Chi delle Conferme l'ha confermato. */
+    conferme: string
+    venditore: string
+    esitoVenditore: string | null
 }
 
 export interface CentroDiretta {
@@ -113,7 +115,7 @@ export interface CentroDiretta {
     forzieri: ForziereOggi[] | null
     negozio: { daGestire: number; prime: RichiestaCentro[] } | null
     registro: RegistroCentro | null
-    controlli: ControlliCentro | null
+    confermati: ConfermatoCentro[] | null
 }
 
 const asValuta = (c: string): 'S' | 'P' => (c === 'P' ? 'P' : 'S')
@@ -193,85 +195,54 @@ const registroInCache = unstable_cache(async (inizioSettimana: string): Promise<
     return { totali: totaliRegistro(gruppi), ultimi, topScintille, topPiume }
 }, ['diretta-centro-registro-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
 
-const controlliInCache = unstable_cache(async (inizioGiorno: string, fineGiorno: string, inizioSettimana: string): Promise<ControlliCentro> => {
-    const start = new Date(inizioGiorno)
-    const end = new Date(fineGiorno)
-    const settimana = new Date(inizioSettimana)
-
-    const membri = await leggiMembriSquadra(FENICE)
-    const ids = membri.map(m => m.id)
-
-    // Appuntamenti fissati oggi dalla squadra, con lo stato attuale del lead:
-    // la stessa query dei fissati validi, senza scartare quelli tolti.
-    const righe = ids.length === 0 ? [] : await db.select({
-        userId: callLogs.userId,
-        leadId: callLogs.leadId,
-        createdAt: callLogs.createdAt,
-        stato: leads.status,
+/**
+ * Monitor degli appuntamenti confermati oggi (PO 27/10/2026, al posto dei
+ * controlli anti-imbroglio): ogni lead che le Conferme hanno esitato
+ * "confermato" oggi, dal più recente, con il GDO che l'ha fissato, chi l'ha
+ * confermato, quando e il giorno e l'ora dell'appuntamento. Fuori i lead di prova.
+ */
+const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno: string): Promise<ConfermatoCentro[]> => {
+    const righe = await db.select({
+        leadId: leads.id,
+        lead: leads.name,
+        funnel: leads.funnel,
+        confermatoAlle: leads.confirmationsTimestamp,
+        appuntamento: leads.appointmentDate,
+        gdoId: leads.assignedToId,
+        confermeId: leads.confirmationsUserId,
+        venditoreId: leads.salespersonUserId,
+        esitoVenditore: leads.salespersonOutcome,
     })
-        .from(callLogs)
-        .innerJoin(leads, eq(leads.id, callLogs.leadId))
+        .from(leads)
         .where(and(
-            eq(callLogs.companyId, FENICE),
-            inArray(callLogs.userId, ids),
-            eq(callLogs.outcome, 'APPUNTAMENTO'),
-            gte(callLogs.createdAt, start),
-            lt(callLogs.createdAt, end),
+            eq(leads.companyId, FENICE),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            eq(leads.isTest, false),
+            gte(leads.confirmationsTimestamp, new Date(inizioGiorno)),
+            lt(leads.confirmationsTimestamp, new Date(fineGiorno)),
         ))
-    const { persone, tolti } = controlloFissati(righe)
-    const ultimiTolti = tolti.slice(0, 8)
-    const leadIds = [...new Set(ultimiTolti.map(t => t.leadId))]
+        .orderBy(desc(leads.confirmationsTimestamp))
+        .limit(200)
 
-    const [dopo, nomiLead, storniPerValuta, ultimiStorni] = await Promise.all([
-        leadIds.length === 0 ? Promise.resolve([]) : db.select({
-            leadId: callLogs.leadId, outcome: callLogs.outcome, createdAt: callLogs.createdAt, userId: callLogs.userId,
-        }).from(callLogs).where(and(inArray(callLogs.leadId, leadIds), gte(callLogs.createdAt, start))),
-        leadIds.length === 0 ? Promise.resolve([]) : db.select({ id: leads.id, name: leads.name })
-            .from(leads).where(inArray(leads.id, leadIds)),
-        db.select({
-            currency: currencyLedger.currency,
-            righe: sql<number>`count(*)::int`,
-            totale: sql<number>`coalesce(sum(${currencyLedger.amount}), 0)::int`,
-        })
-            .from(currencyLedger)
-            .where(and(eq(currencyLedger.companyId, FENICE), gte(currencyLedger.createdAt, settimana), STORNO, nonDaAccountDiProva(currencyLedger.userId)))
-            .groupBy(currencyLedger.currency),
-        movimenti(and(gte(currencyLedger.createdAt, settimana), STORNO), 6),
-    ])
+    const ids = [...new Set(righe.flatMap(r => [r.gdoId, r.confermeId, r.venditoreId]).filter((x): x is string => !!x))]
+    const persone = ids.length === 0 ? [] : await db.select({
+        id: users.id, firstName: users.firstName, displayName: users.displayName, name: users.name,
+    }).from(users).where(inArray(users.id, ids))
+    const nome = new Map(persone.map(u => [u.id, personName(u)]))
+    const di = (id: string | null) => (id ? nome.get(id) ?? '' : '')
 
-    // Nomi di chi ha scritto gli esiti dopo l'appuntamento (di solito la squadra).
-    const nomi = new Map(membri.map(m => [m.id, personName(m)]))
-    const altri = [...new Set(dopo.map(d => d.userId).filter((u): u is string => !!u && !nomi.has(u)))]
-    if (altri.length > 0) {
-        const extra = await db.select({ id: users.id, firstName: users.firstName, displayName: users.displayName, name: users.name })
-            .from(users).where(inArray(users.id, altri))
-        for (const u of extra) nomi.set(u.id, personName(u))
-    }
-    const lead = new Map(nomiLead.map(l => [l.id, l.name]))
-
-    const storni = { righe: { S: 0, P: 0 }, totale: { S: 0, P: 0 }, ultimi: ultimiStorni }
-    for (const s of storniPerValuta) {
-        const v = asValuta(s.currency)
-        storni.righe[v] += s.righe
-        storni.totale[v] += -s.totale
-    }
-
-    return {
-        persone: persone.map(p => ({ ...p, nome: nomi.get(p.userId) ?? '' })),
-        tolti: ultimiTolti.map(t => {
-            const e = esitoDopo(t, dopo)
-            return {
-                leadId: t.leadId,
-                lead: lead.get(t.leadId) ?? '',
-                persona: nomi.get(t.userId) ?? '',
-                fissatoAlle: t.fissatoAlle,
-                stato: t.stato,
-                poi: e ? { outcome: e.outcome, at: new Date(e.createdAt).toISOString(), persona: e.userId ? nomi.get(e.userId) ?? null : null } : null,
-            }
-        }),
-        storni,
-    }
-}, ['diretta-centro-controlli-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
+    return righe.map(r => ({
+        leadId: r.leadId,
+        lead: r.lead ?? '',
+        funnel: r.funnel ?? null,
+        confermatoAlle: (r.confermatoAlle as Date).toISOString(),
+        appuntamento: r.appuntamento?.toISOString() ?? null,
+        gdo: di(r.gdoId),
+        conferme: di(r.confermeId),
+        venditore: di(r.venditoreId),
+        esitoVenditore: r.esitoVenditore ?? null,
+    }))
+}, ['diretta-centro-confermati-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
 
 async function forzieriDiOggi(giorno: string): Promise<ForziereOggi[]> {
     const forzieri = await db.select({
@@ -405,12 +376,12 @@ export async function getCentroDiretta(): Promise<CentroDiretta | null> {
     const oggi = dayBoundsRome(now)
     const settimana = weekBoundsRome(now)
 
-    const [squadra, forzieri, negozio, registro, controlli] = await Promise.all([
+    const [squadra, forzieri, negozio, registro, confermati] = await Promise.all([
         sezione('squadra', () => leggiSquadra(FENICE)),
         sezione('forzieri', () => forzieriDiOggi(giorno)),
         sezione('negozio', richiesteNegozio),
         sezione('registro', () => registroInCache(settimana.start.toISOString())),
-        sezione('controlli', () => controlliInCache(oggi.start.toISOString(), oggi.end.toISOString(), settimana.start.toISOString())),
+        sezione('confermati', () => confermatiInCache(oggi.start.toISOString(), oggi.end.toISOString())),
     ])
-    return { calcolatoAlle: now.toISOString(), giorno, squadra, forzieri, negozio, registro, controlli }
+    return { calcolatoAlle: now.toISOString(), giorno, squadra, forzieri, negozio, registro, confermati }
 }

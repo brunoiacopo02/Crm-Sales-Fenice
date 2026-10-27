@@ -5,7 +5,7 @@
 
 import Link from "next/link"
 import { ChevronRight } from "lucide-react"
-import type { CentroDiretta, ControlliCentro, MovimentoCentro, RegistroCentro } from "@/app/actions/centroDirettaActions"
+import type { CentroDiretta, ConfermatoCentro, MovimentoCentro, RegistroCentro } from "@/app/actions/centroDirettaActions"
 import type { ConfermeBonusSettings } from "@/app/actions/confermeDirettaActions"
 import type { GamificationTargets, Fascia } from "@/lib/diretta/config"
 import type { AdminCalendarDay } from "@/lib/quotes/adminTypes"
@@ -13,8 +13,8 @@ import { fraseCronaca, fraseSquadra, oraParlata, statoFinestra, traguardo } from
 import { progressoSquadra } from "@/lib/conferme/bonus"
 import { nomeValuta } from "@/lib/diretta/negozio"
 import {
-    causaleTesto, esitoTesto, euroTesto, giorniTesto, importoConSegno, maiuscola, riepilogoCalendario,
-    statoLeadTesto, statoVoce, statoVoceTesto, type StatoVoce, type Valuta,
+    causaleTesto, euroTesto, giorniTesto, importoConSegno, maiuscola, riepilogoCalendario,
+    statoVoce, statoVoceTesto, type StatoVoce, type Valuta,
 } from "@/lib/diretta/centro"
 import { BarraScalini, NonDisponibile, Riga, Sezione, Vuoto, oraDi, quando } from "@/components/diretta/admin/ui"
 import { numeroIt } from "@/lib/diretta/formato"
@@ -135,92 +135,60 @@ export function SezioneOggi({ centro }: { centro: CentroDiretta }) {
     )
 }
 
-// ── Controlli anti-imbroglio ─────────────────────────────────────────────
+// ── Confermati di oggi (al posto dei controlli anti-imbroglio, PO 27/10/2026) ──
 
-export function SezioneControlli({ controlli, oggi }: { controlli: ControlliCentro | null; oggi: string }) {
+export function SezioneConfermati({ confermati, oggi }: { confermati: ConfermatoCentro[] | null; oggi: string }) {
     return (
-        <Sezione titolo="Controlli anti-imbroglio" href="/admin/diretta/registro?storni=1" linkTesto="Tutti gli storni">
-            {!controlli ? <NonDisponibile /> : <ControlliCorpo c={controlli} oggi={oggi} />}
+        <Sezione titolo="Confermati di oggi" href="/conferme" linkTesto="Pagina Conferme">
+            {!confermati ? <NonDisponibile /> : <ConfermatiCorpo righe={confermati} oggi={oggi} />}
         </Sezione>
     )
 }
 
-function ControlliCorpo({ c, oggi }: { c: ControlliCentro; oggi: string }) {
-    const fissati = c.persone.reduce((a, p) => a + p.fissati, 0)
-    const tolti = c.persone.reduce((a, p) => a + p.tolti, 0)
+function ConfermatiCorpo({ righe, oggi }: { righe: ConfermatoCentro[]; oggi: string }) {
+    if (righe.length === 0) return <Vuoto>Oggi le Conferme non hanno ancora confermato appuntamenti.</Vuoto>
+    const perGdo = new Map<string, number>()
+    for (const r of righe) perGdo.set(r.gdo || 'Senza GDO', (perGdo.get(r.gdo || 'Senza GDO') ?? 0) + 1)
+    const classifica = [...perGdo.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'it'))
     return (
-        <div className="grid gap-x-10 gap-y-8 lg:grid-cols-2">
-            <div className="min-w-0">
-                <Sottotitolo>Fissati di oggi, persona per persona</Sottotitolo>
-                {c.persone.length === 0 ? (
-                    <Vuoto>Oggi la squadra non ha ancora fissato appuntamenti.</Vuoto>
-                ) : (
-                    <>
-                        <table className="w-full text-[14px]">
-                            <thead>
-                                <tr className="text-left text-[13px] text-[#BFBFBF]">
-                                    <th scope="col" className="pb-2 font-normal">Persona</th>
-                                    <th scope="col" className="pb-2 text-right font-normal">Fissati</th>
-                                    <th scope="col" className="pb-2 text-right font-normal">Validi</th>
-                                    <th scope="col" className="pb-2 text-right font-normal">Tolti</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {c.persone.map(p => (
-                                    <tr key={p.userId} className="border-t-2 border-[#2E2E2E]">
-                                        <td className="py-2 pr-2">{p.nome || 'Senza nome'}</td>
-                                        <td className="py-2 text-right tabular-nums">{p.fissati}</td>
-                                        <td className="py-2 text-right tabular-nums">{p.validi}</td>
-                                        <td className={`py-2 text-right tabular-nums ${p.tolti > 0 ? 'font-semibold text-[#FF9330]' : 'text-[#BFBFBF]'}`}>{p.tolti}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">
-                            Contano solo i validi, cioè ancora in appuntamento: {fissati - tolti} su {fissati}.
-                        </div>
-                    </>
-                )}
-
-                {c.tolti.length > 0 && (
-                    <div className="mt-6">
-                        <Sottotitolo>Gli ultimi tolti</Sottotitolo>
-                        <ol>
-                            {c.tolti.slice(0, 5).map(t => (
-                                <li key={`${t.leadId}-${t.fissatoAlle}`} className="border-t-2 border-[#2E2E2E] py-2 text-[14px] leading-snug first:border-t-0 first:pt-0">
-                                    <div>
-                                        <span className="tabular-nums text-[#BFBFBF]">{oraDi(t.fissatoAlle)}</span>{' '}
-                                        {t.persona || 'Qualcuno'} fissa {t.lead || 'un lead'}
-                                    </div>
-                                    <div className="text-[13px] text-[#BFBFBF]">
-                                        {t.poi
-                                            ? `Poi ${esitoTesto(t.poi.outcome)} alle ${oraDi(t.poi.at)}${t.poi.persona ? `, da ${t.poi.persona}` : ''}.`
-                                            : `Adesso è ${statoLeadTesto(t.stato)}.`}
-                                    </div>
-                                </li>
-                            ))}
-                        </ol>
-                    </div>
-                )}
+        <div className="min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-[32px] font-semibold leading-none tabular-nums">{righe.length}</span>
+                <span className="text-[14px] text-[#BFBFBF]">{righe.length === 1 ? 'appuntamento confermato' : 'appuntamenti confermati'} oggi</span>
             </div>
-
-            <div className="min-w-0">
-                <Sottotitolo>Storni della settimana</Sottotitolo>
-                <Riga
-                    etichetta="Scintille"
-                    nota={c.storni.righe.S === 1 ? '1 storno' : `${c.storni.righe.S} storni`}
-                    valore={numero(c.storni.totale.S)}
-                />
-                <Riga
-                    etichetta="Piume"
-                    nota={c.storni.righe.P === 1 ? '1 storno' : `${c.storni.righe.P} storni`}
-                    valore={numero(c.storni.totale.P)}
-                />
-                {c.storni.ultimi.length > 0 && (
-                    <div className="mt-5">
-                        <Movimenti righe={c.storni.ultimi.slice(0, 4)} oggi={oggi} />
-                    </div>
-                )}
+            <div className="mt-2 text-[13px] leading-snug text-[#BFBFBF]">
+                Per GDO: {classifica.map(([n, k]) => `${n} ${k}`).join(', ')}.
+            </div>
+            <div className="mt-4 max-h-[28rem] overflow-auto">
+                <table className="w-full min-w-[560px] text-[14px]">
+                    <thead className="sticky top-0 bg-[#262626]">
+                        <tr className="text-left text-[13px] text-[#BFBFBF]">
+                            <th scope="col" className="pb-2 pr-3 font-normal">Confermato</th>
+                            <th scope="col" className="pb-2 pr-3 font-normal">Lead</th>
+                            <th scope="col" className="pb-2 pr-3 font-normal">GDO</th>
+                            <th scope="col" className="pb-2 pr-3 font-normal">Conferme</th>
+                            <th scope="col" className="pb-2 font-normal">Appuntamento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {righe.map(r => (
+                            <tr key={r.leadId} className="border-t-2 border-[#2E2E2E] align-top">
+                                <td className="py-2 pr-3 tabular-nums text-[#BFBFBF]">{oraDi(r.confermatoAlle)}</td>
+                                <td className="py-2 pr-3">
+                                    <div className="font-medium">{r.lead || 'Senza nome'}</div>
+                                    {(r.funnel || r.venditore) && (
+                                        <div className="text-[12px] text-[#A6A6A6]">
+                                            {[r.funnel, r.venditore && `venditore ${r.venditore}${r.esitoVenditore ? `, ${r.esitoVenditore.toLowerCase()}` : ''}`].filter(Boolean).join(' · ')}
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="py-2 pr-3">{r.gdo || '—'}</td>
+                                <td className="py-2 pr-3">{r.conferme || '—'}</td>
+                                <td className="py-2 tabular-nums">{r.appuntamento ? quando(r.appuntamento, oggi) : '—'}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     )
