@@ -21,6 +21,7 @@ import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
+import { filtroVistaDa } from "@/lib/diretta/vistaDa"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
 
 /**
@@ -117,6 +118,10 @@ export async function getPipelineLeads() {
     }
     const cercatiIds = [...cercati.keys()]
 
+    // Account passato a una persona nuova (src/lib/diretta/vistaDa.ts): vede
+    // solo i lead presi in carico o fissati da quando lo usa.
+    const vistaDa = isGdo ? await filtroVistaDa(userId) : undefined
+
     // 1. Pipeline Calls (1, 2, 3) — tenant-scoped
     const pipelineBaseConditions = [
         eq(leads.companyId, ctx.companyId),
@@ -133,6 +138,7 @@ export async function getPipelineLeads() {
             : lt(leads.callCount, 3),
     ]
     if (isGdo) pipelineBaseConditions.push(eq(leads.assignedToId, userId))
+    if (vistaDa) pipelineBaseConditions.push(vistaDa)
 
     const pipelineLeads = await db.select()
         .from(leads)
@@ -173,6 +179,7 @@ export async function getPipelineLeads() {
         isNotNull(leads.recallDate)
     ]
     if (isGdo) recallBaseConditions.push(eq(leads.assignedToId, userId))
+    if (vistaDa) recallBaseConditions.push(vistaDa)
 
     const recallsLeads = await db.select()
         .from(leads)

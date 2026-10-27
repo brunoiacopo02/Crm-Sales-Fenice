@@ -9,6 +9,7 @@ import crypto from "crypto"
 import { enqueueMarketingWebhook } from "@/lib/marketing-webhooks/enqueue"
 import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
+import { filtroVistaDa } from "@/lib/diretta/vistaDa"
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 import { releaseFollowUpBlock } from "@/lib/venditore/calendarBlocks"
 import { deleteGoogleCalendarEvent } from "@/lib/googleCalendar"
@@ -35,6 +36,9 @@ export async function getAppointments() {
         leadDelMondoDiAccount(userId),
     ]
     if (isGdo) conditions.push(eq(leads.assignedToId, userId))
+    // Account passato a una persona nuova: niente archivio di chi c'era prima.
+    const vistaDa = isGdo ? await filtroVistaDa(userId) : undefined
+    if (vistaDa) conditions.push(vistaDa)
 
     // Fetch only leads with status = APPOINTMENT
     const allAppointments = await db.select()
