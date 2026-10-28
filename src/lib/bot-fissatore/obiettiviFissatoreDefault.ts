@@ -8,7 +8,7 @@ import type { ObiettiviDefault } from './obiettiviFissatore'
 
 export const OBIETTIVI_FISSATORE_DEFAULT: ObiettiviDefault = {
     /** Appuntamenti fissati dal bot nel mese. Piano Direzione Commerciale §8.2: mix della base, 457 bot al mese. */
-    appuntamenti: { valore: 457, fonte: 'piano', dettaglio: '§8.2' },
+    appuntamenti: { valore: 457, fonte: 'piano' },
     /** % dei lead ricevuti che risponde al bot. Base del piano (1/8-14/9/2026). */
     risposta: { valore: 61.6, fonte: 'base_piano' },
     /** % fissaggio sul totale dei ricevuti. Base del piano (1/8-14/9/2026). */

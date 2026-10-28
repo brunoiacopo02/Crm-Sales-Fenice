@@ -26,7 +26,8 @@ function meseDopo(mese: string): string {
     return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`
 }
 
-const num = (n: number) => n.toLocaleString('it-IT')
+// Punto delle migliaia anche a 4 cifre (it-IT da solo scrive 5745).
+const num = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 const pct = (v: number | null) => v === null ? '-' : `${v.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
 
 type Riga = {

@@ -7,7 +7,7 @@ import {
 import { OBIETTIVI_FISSATORE_DEFAULT } from './obiettiviFissatoreDefault'
 
 const DEFAULT_DI_PROVA: ObiettiviDefault = {
-    appuntamenti: { valore: 457, fonte: 'piano', dettaglio: '§8.2' },
+    appuntamenti: { valore: 457, fonte: 'piano' },
     risposta: { valore: 40, fonte: 'miglior_mese' },
     fissaggioTotale: { valore: 9, fonte: 'base_piano' },
     fissaggioRisposti: { valore: null, fonte: 'miglior_mese' },
@@ -22,7 +22,7 @@ test('il default copre tutti gli obiettivi', () => {
 
 test('i default decisi dal PO il 28/10/2026', () => {
     const d = OBIETTIVI_FISSATORE_DEFAULT
-    assert.deepEqual(d.appuntamenti, { valore: 457, fonte: 'piano', dettaglio: '§8.2' })
+    assert.deepEqual(d.appuntamenti, { valore: 457, fonte: 'piano' })
     assert.deepEqual(d.risposta, { valore: 61.6, fonte: 'base_piano' })
     assert.deepEqual(d.fissaggioTotale, { valore: 10, fonte: 'base_piano' })
     assert.deepEqual(d.fissaggioRisposti, { valore: 16.3, fonte: 'base_piano' })
