@@ -9,11 +9,11 @@ import {
 } from '@/lib/bot-fissatore/obiettiviFissatore'
 
 const SPIEGAZIONE: Record<ChiaveObiettivo, string> = {
-    appuntamenti: 'al mese, più alto è meglio',
-    risposta: 'più alto è meglio',
-    fissaggioTotale: 'più alto è meglio',
-    fissaggioRisposti: 'più alto è meglio',
-    restituzione: 'più basso è meglio',
+    appuntamenti: 'numero intero',
+    risposta: 'in %',
+    fissaggioTotale: 'in %',
+    fissaggioRisposti: 'in %',
+    restituzione: 'in %, più basso è meglio',
 }
 
 function testoIniziale(salvati: ObiettiviSalvati): Record<ChiaveObiettivo, string> {
@@ -53,20 +53,20 @@ export function ObiettiviFissatoreForm({ salvati, obiettivi }: { salvati: Obiett
                     const unita = OBIETTIVI_PERCENTUALI.includes(k) ? '%' : ''
                     return (
                         <label key={k} className="block">
-                            <div className="text-xs font-semibold uppercase tracking-wider text-ash-500">{ETICHETTE_OBIETTIVI[k]}</div>
+                            <div className="text-sm font-medium text-brand-charcoal">{ETICHETTE_OBIETTIVI[k]}</div>
                             <div className="mt-1 flex items-center gap-1.5">
                                 <input
                                     type="text"
                                     inputMode="decimal"
                                     value={valori[k]}
                                     onChange={e => setValori(v => ({ ...v, [k]: e.target.value }))}
-                                    placeholder="vuoto = predefinito"
+                                    placeholder="vuoto = quello di partenza"
                                     className="h-9 w-full rounded-lg border border-ash-200/60 bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/30"
                                 />
                                 {unita ? <div className="text-sm text-ash-500">{unita}</div> : null}
                             </div>
                             <div className="mt-1 text-xs text-ash-400">
-                                {SPIEGAZIONE[k]} · oggi {o.valore === null ? 'da impostare' : `${String(o.valore).replace('.', ',')}${unita} (${testoFonte(o)})`}
+                                {SPIEGAZIONE[k]} · adesso {o.valore === null ? 'non impostato' : `${String(o.valore).replace('.', ',')}${unita}, ${testoFonte(o)}`}
                             </div>
                         </label>
                     )
@@ -80,7 +80,7 @@ export function ObiettiviFissatoreForm({ salvati, obiettivi }: { salvati: Obiett
                 >
                     {inCorso ? 'Salvo…' : 'Salva obiettivi'}
                 </button>
-                <div className="text-xs text-ash-500">Lascia vuoto un campo per tornare al valore predefinito.</div>
+                <div className="text-xs text-ash-500">Se svuoti una casella torna l'obiettivo di partenza.</div>
                 {errore ? <div className="text-sm text-red-600">{errore}</div> : null}
                 {fatto && !errore ? <div className="text-sm text-emerald-600">Salvato</div> : null}
             </div>

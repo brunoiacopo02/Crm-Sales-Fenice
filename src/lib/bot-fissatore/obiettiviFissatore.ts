@@ -24,11 +24,11 @@ export type ChiaveObiettivo = typeof CHIAVI_OBIETTIVI[number]
 export const OBIETTIVI_PERCENTUALI: readonly ChiaveObiettivo[] = ['risposta', 'fissaggioTotale', 'fissaggioRisposti', 'restituzione']
 
 export const ETICHETTE_OBIETTIVI: Record<ChiaveObiettivo, string> = {
-    appuntamenti: 'Appuntamenti del bot nel mese',
-    risposta: '% che risponde',
-    fissaggioTotale: '% fissaggio sul totale',
-    fissaggioRisposti: '% fissaggio su chi risponde',
-    restituzione: '% restituzioni',
+    appuntamenti: 'Appuntamenti fissati dal bot (al mese)',
+    risposta: 'Lead che rispondono al bot',
+    fissaggioTotale: 'Lead fissati, su tutti quelli ricevuti',
+    fissaggioRisposti: 'Lead fissati, su quelli che rispondono',
+    restituzione: 'Lead che il bot ridà ai GDO',
 }
 
 export const DIREZIONE_OBIETTIVI: Record<ChiaveObiettivo, Direzione> = {
@@ -52,7 +52,7 @@ export type ObiettiviRisolti = Record<ChiaveObiettivo, ObiettivoRisolto>
 
 export const TESTO_FONTE: Record<FonteObiettivo, string> = {
     piano: 'dal piano',
-    base_piano: 'base del piano (1/8-14/9)',
+    base_piano: 'come nel periodo base del piano (1/8-14/9)',
     miglior_mese: 'miglior mese del bot',
     admin: "scritto dall'admin",
 }

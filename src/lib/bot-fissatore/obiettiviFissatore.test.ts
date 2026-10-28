@@ -57,7 +57,7 @@ test('default senza numero e niente di salvato: da impostare', () => {
 
 test('testoFonte: etichetta più dettaglio', () => {
     assert.equal(testoFonte({ valore: 457, fonte: 'piano', dettaglio: '§8.2' }), 'dal piano (§8.2)')
-    assert.equal(testoFonte({ valore: 61.6, fonte: 'base_piano' }), 'base del piano (1/8-14/9)')
+    assert.equal(testoFonte({ valore: 61.6, fonte: 'base_piano' }), 'come nel periodo base del piano (1/8-14/9)')
     assert.equal(testoFonte({ valore: 64.6, fonte: 'miglior_mese', dettaglio: 'agosto' }), 'miglior mese del bot (agosto)')
     assert.equal(testoFonte({ valore: 3, fonte: 'admin' }), "scritto dall'admin")
 })
