@@ -4,7 +4,7 @@
 // src/app/actions/fissatoreStatsActions.ts dopo il controllo del ruolo.
 // Tutte le letture stanno nel mese scelto e nel mese prima (Disk IO).
 
-import { aliasedTable, and, eq, exists, gte, inArray, isNull, lt, notExists, sql } from "drizzle-orm"
+import { aliasedTable, and, eq, exists, gte, inArray, isNull, lt, notExists, or, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { callLogs, leadEvents, leads } from "@/db/schema"
 import { monthBoundsRome } from "@/lib/dateUtils"
@@ -16,7 +16,6 @@ import {
 } from "./statisticheFissatore"
 
 const FENICE = 'fenice'
-const ROUTING_BOT = ['bot_first', 'bot_only']
 /** Eventi che dicono che il lead ha scritto o parlato col bot. */
 const EVENTI_SEGNALE = ['BOT_REPORT', 'INBOUND_MESSAGE', 'BOT_CONTACT_REQUEST']
 const EVENTO_RESTITUZIONE = 'REASSIGNED_FROM_BOT'
@@ -30,55 +29,66 @@ export interface NumeriDelMese {
 type Evento = { leadId: string; eventType: string; metadata: unknown; timestamp: Date }
 
 /**
- * Coorte A dei due mesi in una lettura: lead col PRIMO evento ASSIGNED con
- * routing bot_first/bot_only nel periodo. Gli ASSIGNED del routing li scrive
- * il sistema (userId nullo): con userId IS NULL la lettura resta sull'indice
- * (companyId, userId, eventType, timestamp).
+ * ASSIGNED che dà il lead all'account del bot, nel periodo.
+ *
+ * L'assegnatario sta nei metadata: `assignedToUser` per l'intake (webhook AC,
+ * import, lancio), `a` per i passaggi fatti a mano o in blocco (riequilibrio,
+ * riscaldamento). Non si usa l'etichetta `routing`: esiste solo dal 27/08/2026
+ * e `bot_first` vuol dire "va ai GDO, il bot passa avanti finché è sotto il
+ * minimo", quindi molti bot_first al bot non ci sono mai arrivati
+ * (coordinatore 28/10/2026).
+ *
+ * Gli ASSIGNED verso il bot li scrive il sistema (userId nullo) o il bot
+ * stesso: col filtro su userId la lettura resta sull'indice
+ * (companyId, userId, eventType, timestamp) invece di scorrere tutti gli
+ * ASSIGNED del periodo.
+ */
+function assegnatoAlBot(t: typeof leadEvents, botId: string, da: Date, a: Date) {
+    return and(
+        eq(t.companyId, FENICE),
+        or(isNull(t.userId), eq(t.userId, botId)),
+        eq(t.eventType, 'ASSIGNED'),
+        gte(t.timestamp, da),
+        lt(t.timestamp, a),
+        sql`coalesce(${t.metadata}->>'assignedToUser', ${t.metadata}->>'a') = ${botId}`,
+    )
+}
+
+/**
+ * Coorte A dei due mesi in una lettura: lead il cui PRIMO evento ASSIGNED li
+ * dà al bot e cade nel periodo.
  */
 async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
     const prima = aliasedTable(leadEvents, 'ass_prima')
     const ass = aliasedTable(leadEvents, 'ass_bot')
-    const assegnatiAlBot = and(
-        eq(leadEvents.companyId, FENICE),
-        isNull(leadEvents.userId),
-        eq(leadEvents.eventType, 'ASSIGNED'),
-        gte(leadEvents.timestamp, da),
-        lt(leadEvents.timestamp, a),
-        inArray(sql<string>`${leadEvents.metadata}->>'routing'`, ROUTING_BOT),
-    )
     // Stessa lettura come sottoquery (alias diverso) per restituzioni e segnali:
-    // un viaggio solo invece di uno per blocco di id. Prende qualche lead in più
-    // (prova, lancio, non-primi): li scarta il filtro su perLead.
-    const leadAssegnatiAlBot = db.select({ id: ass.leadId }).from(ass).where(and(
-        eq(ass.companyId, FENICE),
-        isNull(ass.userId),
-        eq(ass.eventType, 'ASSIGNED'),
-        gte(ass.timestamp, da),
-        lt(ass.timestamp, a),
-        inArray(sql<string>`${ass.metadata}->>'routing'`, ROUTING_BOT),
-    ))
-    const [coorte, logRows, eventi] = await Promise.all([db.select({
-        leadId: leadEvents.leadId,
-        at: leadEvents.timestamp,
-        assignedToId: leads.assignedToId,
-        launchBucket: leads.launchBucket,
-        funnel: leads.funnel,
-        lancioPool: leads.lancioPool,
-        humanTestCohort: leads.humanTestCohort,
-    })
-        .from(leadEvents)
-        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
-        .where(and(
-            assegnatiAlBot,
-            notExists(db.select({ x: sql`1` }).from(prima).where(and(
-                eq(prima.leadId, leadEvents.leadId),
-                eq(prima.eventType, 'ASSIGNED'),
-                lt(prima.timestamp, leadEvents.timestamp),
-            ))),
-            leadVero(),
-        )),
+    // un viaggio solo. Prende qualche lead in più (prova, lancio, non-primi):
+    // li scarta il filtro su perLead.
+    const leadAssegnatiAlBot = db.select({ id: ass.leadId }).from(ass).where(assegnatoAlBot(ass, botId, da, a))
+
+    const [coorte, logRows, eventi] = await Promise.all([
+        db.select({
+            leadId: leadEvents.leadId,
+            at: leadEvents.timestamp,
+            assignedToId: leads.assignedToId,
+            launchBucket: leads.launchBucket,
+            funnel: leads.funnel,
+            lancioPool: leads.lancioPool,
+            humanTestCohort: leads.humanTestCohort,
+        })
+            .from(leadEvents)
+            .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+            .where(and(
+                assegnatoAlBot(leadEvents, botId, da, a),
+                notExists(db.select({ x: sql`1` }).from(prima).where(and(
+                    eq(prima.leadId, leadEvents.leadId),
+                    eq(prima.eventType, 'ASSIGNED'),
+                    lt(prima.timestamp, leadEvents.timestamp),
+                ))),
+                leadVero(),
+            )),
         // Log del bot dal primo giorno del periodo: indice (userId, createdAt).
-        db.select({ leadId: callLogs.leadId, outcome: callLogs.outcome, discardReason: callLogs.discardReason })
+        db.select({ leadId: callLogs.leadId, outcome: callLogs.outcome, discardReason: callLogs.discardReason, at: callLogs.createdAt })
             .from(callLogs)
             .where(and(
                 eq(callLogs.userId, botId),
@@ -100,11 +110,11 @@ async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
     const perLead = new Map<string, typeof coorte[number]>()
     for (const l of coorte) if (!eLeadDelLancio(l) && !perLead.has(l.leadId)) perLead.set(l.leadId, l)
 
-    const log = new Map<string, { outcome: string; discardReason: string | null }[]>()
+    const log = new Map<string, LeadDelBot['logDelBot']>()
     for (const r of logRows) {
         if (!perLead.has(r.leadId)) continue
         const arr = log.get(r.leadId) ?? []
-        arr.push({ outcome: r.outcome, discardReason: r.discardReason })
+        arr.push({ outcome: r.outcome, discardReason: r.discardReason, at: r.at })
         log.set(r.leadId, arr)
     }
     const eventiCoorte: Evento[] = eventi.filter(e => perLead.has(e.leadId))
@@ -116,8 +126,8 @@ function funnelDelMese(
     start: Date, end: Date,
 ): FunnelDelBot {
     // Prima restituzione per lead (oggi nessun lead ne ha più di una, audit 28/10).
-    const restituzione = new Map<string, { reason: string | null; toGdo: string | null; at: Date }>()
-    const segnali = new Set<string>()
+    const restituzione = new Map<string, NonNullable<LeadDelBot['restituzione']>>()
+    const segnali = new Map<string, Date[]>()
     for (const e of dati.eventi) {
         if (e.eventType === EVENTO_RESTITUZIONE) {
             const m = (e.metadata ?? {}) as { reason?: unknown; toGdo?: unknown }
@@ -130,17 +140,19 @@ function funnelDelMese(
                 })
             }
         } else {
-            segnali.add(e.leadId)
+            const arr = segnali.get(e.leadId) ?? []
+            arr.push(e.timestamp)
+            segnali.set(e.leadId, arr)
         }
     }
     const coorte: LeadDelBot[] = []
     for (const l of dati.perLead.values()) {
         if (l.at < start || l.at >= end) continue
-        const r = restituzione.get(l.leadId)
         coorte.push({
+            assegnatoIl: l.at,
             logDelBot: dati.log.get(l.leadId) ?? [],
-            restituzione: r ? { reason: r.reason, toGdo: r.toGdo } : null,
-            segnaliDiRisposta: segnali.has(l.leadId),
+            restituzione: restituzione.get(l.leadId) ?? null,
+            segnali: segnali.get(l.leadId) ?? [],
             assignedToId: l.assignedToId,
         })
     }

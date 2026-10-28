@@ -64,39 +64,63 @@ test('mesePrecedente: anche a cavallo dell\'anno', () => {
 
 // ------------------------------------------------------------- risposta
 
+const T0 = new Date('2026-10-05T10:00:00Z')            // assegnato al bot
+const T1 = new Date('2026-10-06T10:00:00Z')            // mentre è del bot
+const TR = new Date('2026-10-09T10:00:00Z')            // prima restituzione
+const T2 = new Date('2026-10-10T10:00:00Z')            // dopo la restituzione
+const PRIMA = new Date('2026-10-04T10:00:00Z')         // prima dell'assegnazione
+
+function lead(p: Partial<LeadDelBot>): LeadDelBot {
+    return { assegnatoIl: T0, logDelBot: [], restituzione: null, segnali: [], assignedToId: 'bot', ...p }
+}
+const log = (outcome: string, at: Date, discardReason: string | null = null) => ({ outcome, discardReason, at })
+
 test('haRisposto: appuntamento o scarto del bot contano', () => {
-    assert.equal(haRisposto({ logDelBot: [{ outcome: 'APPUNTAMENTO', discardReason: null }], restituzione: null, segnaliDiRisposta: false }), true)
-    assert.equal(haRisposto({ logDelBot: [{ outcome: 'DA_SCARTARE', discardReason: 'non interessato' }], restituzione: null, segnaliDiRisposta: false }), true)
+    assert.equal(haRisposto(lead({ logDelBot: [log('APPUNTAMENTO', T1)] })), true)
+    assert.equal(haRisposto(lead({ logDelBot: [log('DA_SCARTARE', T1, 'non interessato')] })), true)
 })
 
 test('haRisposto: scarto "numero inesistente" non è una risposta', () => {
-    assert.equal(haRisposto({ logDelBot: [{ outcome: 'DA_SCARTARE', discardReason: 'Numero inesistente' }], restituzione: null, segnaliDiRisposta: false }), false)
+    assert.equal(haRisposto(lead({ logDelBot: [log('DA_SCARTARE', T1, 'Numero inesistente')] })), false)
 })
 
 test('haRisposto: chat interrotta e segnali (report, messaggi, richiesta contatto) contano', () => {
-    assert.equal(haRisposto({ logDelBot: [], restituzione: { reason: 'chat_interrotta', toGdo: 'g' }, segnaliDiRisposta: false }), true)
-    assert.equal(haRisposto({ logDelBot: [], restituzione: null, segnaliDiRisposta: true }), true)
+    assert.equal(haRisposto(lead({ restituzione: { reason: 'chat_interrotta', toGdo: 'g', at: TR } })), true)
+    assert.equal(haRisposto(lead({ segnali: [T1] })), true)
 })
 
 test('haRisposto: mai risposto restituito e nessun segnale = non ha risposto', () => {
-    assert.equal(haRisposto({ logDelBot: [{ outcome: 'NON_RISPOSTO', discardReason: null }], restituzione: { reason: 'mai_risposto', toGdo: null }, segnaliDiRisposta: false }), false)
+    assert.equal(haRisposto(lead({ logDelBot: [log('NON_RISPOSTO', T1)], restituzione: { reason: 'mai_risposto', toGdo: null, at: TR } })), false)
+})
+
+test('haRisposto: contano solo i segnali mentre il lead è del bot (fra assegnazione e prima restituzione)', () => {
+    const mai = { reason: 'mai_risposto', toGdo: null, at: TR }
+    // dopo la restituzione: agenda e riscaldamento dei GDO passano dai numeri del bot
+    assert.equal(haRisposto(lead({ restituzione: mai, segnali: [T2] })), false)
+    assert.equal(haRisposto(lead({ restituzione: mai, logDelBot: [log('APPUNTAMENTO', T2)] })), false)
+    // nello stesso istante della restituzione: già fuori
+    assert.equal(haRisposto(lead({ restituzione: mai, segnali: [TR] })), false)
+    // prima dell'assegnazione: non è una risposta al bot
+    assert.equal(haRisposto(lead({ segnali: [PRIMA] })), false)
+    // dentro la finestra
+    assert.equal(haRisposto(lead({ restituzione: mai, segnali: [T1] })), true)
+    // senza restituzione la finestra resta aperta
+    assert.equal(haRisposto(lead({ segnali: [T2] })), true)
 })
 
 // ------------------------------------------------------------- funnel del bot
 
-function lead(p: Partial<LeadDelBot>): LeadDelBot {
-    return { logDelBot: [], restituzione: null, segnaliDiRisposta: false, assignedToId: 'bot', ...p }
-}
-
 test('funnelDelBot: conteggi e tassi sulla coorte', () => {
+    const ci = (toGdo: string) => ({ reason: 'chat_interrotta', toGdo, at: TR })
+    const mr = (toGdo: string | null) => ({ reason: 'mai_risposto', toGdo, at: TR })
     const f = funnelDelBot([
-        lead({ logDelBot: [{ outcome: 'APPUNTAMENTO', discardReason: null }] }),
-        lead({ segnaliDiRisposta: true }),
-        lead({ restituzione: { reason: 'chat_interrotta', toGdo: 'gdo-1' }, assignedToId: 'gdo-1' }),
-        lead({ restituzione: { reason: 'chat_interrotta', toGdo: 'gdo-2' }, assignedToId: null }),
-        lead({ restituzione: { reason: 'mai_risposto', toGdo: null }, assignedToId: null }),
-        lead({ restituzione: { reason: 'mai_risposto', toGdo: null }, assignedToId: 'gdo-3' }),
-        lead({ restituzione: { reason: 'mai_risposto', toGdo: 'gdo-4' }, assignedToId: 'gdo-4' }),
+        lead({ logDelBot: [log('APPUNTAMENTO', T1)] }),
+        lead({ segnali: [T1] }),
+        lead({ restituzione: ci('gdo-1'), assignedToId: 'gdo-1' }),
+        lead({ restituzione: ci('gdo-2'), assignedToId: null }),
+        lead({ restituzione: mr(null), assignedToId: null }),
+        lead({ restituzione: mr(null), assignedToId: 'gdo-3' }),
+        lead({ restituzione: mr('gdo-4'), assignedToId: 'gdo-4' }),
         lead({}),
     ])
     assert.equal(f.ricevuti, 8)

@@ -1,7 +1,7 @@
 // Conti puri della pagina /statistiche-fissatore (rifatta il 28/10/2026, PO).
 //
 // Due coorti, tutte e due per mese di Roma:
-//  A. funnel del bot: lead il cui primo ASSIGNED con routing bot_first/bot_only
+//  A. funnel del bot: lead il cui primo ASSIGNED li dà all'account del bot e
 //     cade nel mese (prova e lancio esclusi a monte);
 //  B. linea del piano: appuntamenti fissati dal bot con appointmentDate nel
 //     mese e già passati.
@@ -54,12 +54,14 @@ export function mesePrecedente(mese: string): string {
 export type MotivoRestituzione = 'mai_risposto' | 'chat_interrotta'
 
 export interface LeadDelBot {
+    /** Primo ASSIGNED, quello che lo ha dato al bot. */
+    assegnatoIl: Date
     /** callLogs scritti dal bot sul lead. */
-    logDelBot: { outcome: string; discardReason: string | null }[]
+    logDelBot: { outcome: string; discardReason: string | null; at: Date }[]
     /** Prima restituzione dal bot (REASSIGNED_FROM_BOT), se c'è. */
-    restituzione: { reason: string | null; toGdo: string | null } | null
-    /** Il lead ha eventi BOT_REPORT, INBOUND_MESSAGE o BOT_CONTACT_REQUEST. */
-    segnaliDiRisposta: boolean
+    restituzione: { reason: string | null; toGdo: string | null; at: Date } | null
+    /** Istanti degli eventi BOT_REPORT, INBOUND_MESSAGE e BOT_CONTACT_REQUEST del lead. */
+    segnali: Date[]
     /** Assegnatario di oggi: null = nessuno lo ha in carico. */
     assignedToId: string | null
 }
@@ -69,13 +71,19 @@ export interface LeadDelBot {
  * appuntamento o scarto del bot (non "numero inesistente"), restituzione per
  * chat interrotta, oppure un report, un messaggio in entrata o una richiesta
  * di contatto.
+ *
+ * Contano solo i segnali mentre il lead è del bot, cioè da `assegnatoIl` fino
+ * alla prima restituzione esclusa: dopo, agenda e riscaldamento dei GDO
+ * passano dai numeri del bot e gonfierebbero il dato (coordinatore 28/10/2026).
  */
-export function haRisposto(l: Pick<LeadDelBot, 'logDelBot' | 'restituzione' | 'segnaliDiRisposta'>): boolean {
-    if (l.segnaliDiRisposta) return true
+export function haRisposto(l: Pick<LeadDelBot, 'assegnatoIl' | 'logDelBot' | 'restituzione' | 'segnali'>): boolean {
     if (l.restituzione?.reason === 'chat_interrotta') return true
-    return l.logDelBot.some(c =>
+    const fine = l.restituzione?.at ?? null
+    const dentro = (d: Date) => d >= l.assegnatoIl && (fine === null || d < fine)
+    if (l.segnali.some(dentro)) return true
+    return l.logDelBot.some(c => dentro(c.at) && (
         c.outcome === 'APPUNTAMENTO'
-        || (c.outcome === 'DA_SCARTARE' && !isNeverAnsweredLog(c.outcome, c.discardReason)))
+        || (c.outcome === 'DA_SCARTARE' && !isNeverAnsweredLog(c.outcome, c.discardReason))))
 }
 
 export interface RestituzioniPerMotivo {

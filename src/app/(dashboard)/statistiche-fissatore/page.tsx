@@ -165,6 +165,7 @@ export default async function StatisticheFissatorePage({
                 </h2>
                 <p className="mb-3 text-xs text-ash-500">
                     I lead dati al bot nel mese (prima assegnazione). Lead di prova e del lancio esclusi.
+                    La risposta conta solo finché il lead è del bot, prima che lo restituisca.
                     I lead degli ultimi giorni sono ancora in lavorazione: i loro tassi crescono nei giorni dopo.
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
