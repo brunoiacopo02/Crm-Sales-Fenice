@@ -99,6 +99,22 @@ export type SendAgendaOptions = {
     haFamiglia: boolean
     offertaDelMese?: boolean // If true, sends OFF1 tag only (skips Lavora/Famiglia)
     emailOverride?: string // Solo per il fallback ActiveCampaign: il modale non la chiede più
+    /**
+     * Numero WhatsApp del lead quando è diverso da quello del CRM (chiamato dal GDO).
+     * Vale solo per questo invio: il bot lega la chat al lead per id, quindi video,
+     * appuntamento e solleciti seguono questo numero senza toccare `leads.phone`.
+     */
+    whatsappPhone?: string
+}
+
+/** Cifre di un numero inserito a mano; null se non sembra un cellulare. */
+function normalizzaWhatsapp(raw: string | undefined): string | null | undefined {
+    const v = (raw ?? '').trim()
+    if (!v) return undefined
+    const pulito = v.replace(/[\s().\-\/]/g, '')
+    if (!/^\+?\d+$/.test(pulito)) return null
+    const cifre = pulito.replace(/^\+/, '').replace(/^00/, '')
+    return cifre.length >= 9 && cifre.length <= 13 ? pulito : null
 }
 
 export type SendAgendaResult = {
@@ -164,8 +180,11 @@ export async function sendAgendaToLead(
         return { success: true, alreadySent: lead.agendaSentAt !== null, esito: 'consegnato' }
     }
 
+    const whatsappPhone = normalizzaWhatsapp(options.whatsappPhone)
+    if (whatsappPhone === null) return { success: false, error: 'Numero WhatsApp non valido: scrivilo solo con le cifre, es. 3281234567.' }
+
     if (process.env.AGENDA_CHANNEL === 'bot') {
-        return sendAgendaViaBotChannel(lead, options, supabaseUser.id, ctx.companyId)
+        return sendAgendaViaBotChannel(lead, { ...options, whatsappPhone }, supabaseUser.id, ctx.companyId)
     }
     return sendAgendaViaActiveCampaign(lead, options, supabaseUser.id, ctx.companyId)
 }
@@ -186,7 +205,7 @@ async function sendAgendaViaBotChannel(
 
     const r = await sendAgendaViaBot({
         leadId: lead.id,
-        phone: lead.phone,
+        phone: options.whatsappPhone || lead.phone,
         name: lead.name,
         email: lead.email,
         funnel: lead.funnel,
@@ -241,6 +260,7 @@ async function sendAgendaViaBotChannel(
             lavora: options.offertaDelMese ? null : options.lavora,
             haFamiglia: options.offertaDelMese ? null : options.haFamiglia,
             resend: wasSent,
+            whatsappPhone: options.whatsappPhone || null,
         },
         companyId,
     })

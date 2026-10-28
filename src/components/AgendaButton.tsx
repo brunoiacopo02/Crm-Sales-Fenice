@@ -33,6 +33,8 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
     const [lavora, setLavora] = useState<boolean | null>(null)
     const [haFamiglia, setHaFamiglia] = useState<boolean | null>(null)
     const [offertaDelMese, setOffertaDelMese] = useState(false)
+    // WhatsApp diverso dal numero del CRM: vale solo per questo invio.
+    const [whatsapp, setWhatsapp] = useState("")
     const [loading, setLoading] = useState(false)
     const [successMsg, setSuccessMsg] = useState<string | null>(null)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -59,6 +61,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
         setLavora(null)
         setHaFamiglia(null)
         setOffertaDelMese(false)
+        setWhatsapp("")
         setSuccessMsg(null)
         setErrorMsg(null)
     }
@@ -113,6 +116,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                 lavora: lavora ?? false,
                 haFamiglia: haFamiglia ?? false,
                 offertaDelMese,
+                whatsappPhone: whatsapp.trim() || undefined,
             })
             if (result.success) {
                 const esito = (result.esito ?? 'consegnato') as AgendaStatus
@@ -209,6 +213,8 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                     setHaFamiglia={setHaFamiglia}
                     offertaDelMese={offertaDelMese}
                     toggleOffertaDelMese={toggleOffertaDelMese}
+                    whatsapp={whatsapp}
+                    setWhatsapp={setWhatsapp}
                     loading={loading}
                     successMsg={successMsg}
                     errorMsg={errorMsg}
@@ -353,6 +359,23 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                                         </div>
                                     </div>
 
+                                    <div>
+                                        <label htmlFor={`agenda-wa-${leadId}`} className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ash-500 mb-2">
+                                            <MessageCircle className="w-3.5 h-3.5" /> WhatsApp su un altro numero?
+                                        </label>
+                                        <input
+                                            id={`agenda-wa-${leadId}`}
+                                            type="tel"
+                                            inputMode="tel"
+                                            value={whatsapp}
+                                            onChange={(e) => setWhatsapp(e.target.value)}
+                                            disabled={loading}
+                                            placeholder={`Vuoto = ${leadPhone}`}
+                                            className="w-full rounded-lg border border-ash-200 px-3 py-2 text-sm text-ash-900 placeholder:text-ash-400 focus:border-blue-400 focus:outline-none disabled:opacity-50"
+                                        />
+                                        <div className="mt-1 text-[11px] text-ash-500">Scrivilo solo se il lead ha WhatsApp su un numero diverso da quello che hai chiamato.</div>
+                                    </div>
+
                                     {/* Promemoria operativo: senza una risposta del lead il video non parte.
                                         TESTO DA APPROVARE DAL PO prima del go-live. */}
                                     <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5">
@@ -480,6 +503,8 @@ function AgendaModalDiretta(p: {
     setHaFamiglia: (v: boolean) => void
     offertaDelMese: boolean
     toggleOffertaDelMese: () => void
+    whatsapp: string
+    setWhatsapp: (v: string) => void
     loading: boolean
     successMsg: string | null
     errorMsg: string | null
@@ -586,6 +611,23 @@ function AgendaModalDiretta(p: {
                                     <SceltaDiretta attiva={p.haFamiglia === true} onClick={() => p.setHaFamiglia(true)} disabled={loading || offertaDelMese}>Ha famiglia</SceltaDiretta>
                                     <SceltaDiretta attiva={p.haFamiglia === false} onClick={() => p.setHaFamiglia(false)} disabled={loading || offertaDelMese}>Non ha figli</SceltaDiretta>
                                 </div>
+                            </div>
+
+                            <div>
+                                <label htmlFor="agenda-wa-diretta" className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-[#BFBFBF]">
+                                    <MessageCircle className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /> WhatsApp su un altro numero?
+                                </label>
+                                <input
+                                    id="agenda-wa-diretta"
+                                    type="tel"
+                                    inputMode="tel"
+                                    value={p.whatsapp}
+                                    onChange={(e) => p.setWhatsapp(e.target.value)}
+                                    disabled={loading}
+                                    placeholder={`Vuoto = ${p.leadPhone}`}
+                                    className="min-h-11 w-full rounded-lg border-2 border-[#3D3D3D] bg-transparent px-3 py-2 text-[14px] text-[#F2F2F2] placeholder:text-[#8C8C8C] focus:border-[#FF9330] focus:outline-none disabled:opacity-50"
+                                />
+                                <div className="mt-1 text-[12px] text-[#8C8C8C]">Scrivilo solo se il lead ha WhatsApp su un numero diverso da quello che hai chiamato.</div>
                             </div>
 
                             <div className="flex items-start gap-2 rounded-lg bg-[#262626] px-3 py-2.5">
