@@ -360,6 +360,9 @@ export async function saveVenditoreOutcome(leadId: string, payload: {
                         : null
                 ),
                 version: oldLead.version + 1,
+                // Il feed /api/bot/lead-status pagina su updatedAt: senza questo
+                // bump esito e presenza non arrivavano mai al bot (fix 28/10/2026).
+                updatedAt: new Date(),
             })
             .where(and(
                 eq(leads.companyId, ctx.companyId),

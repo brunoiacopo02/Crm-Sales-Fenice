@@ -644,7 +644,10 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                     after: { lead: leadAfter, attempt: attemptAfter },
                 });
 
-                await tx.update(leads).set(leadSet)
+                // updatedAt fuori da leadSet: leadSet finisce nello storico per
+                // l'annullamento, e lì un timestamp di servizio bloccherebbe il
+                // confronto. Il bump serve al feed /api/bot/lead-status.
+                await tx.update(leads).set({ ...leadSet, updatedAt: new Date() })
                     .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, leadId)));
 
                 if (write.mode === 'update') {
@@ -939,7 +942,7 @@ export async function annullaRunCome(adminUserId: string, runId: string): Promis
                 // da applicaCorrezioni, mai l'intera riga) + bump di version, come da
                 // convenzione di ogni write path su `leads`.
                 await tx.update(leads)
-                    .set({ ...reviveLeadSnapshot(before.lead), version: currentLead.version + 1 })
+                    .set({ ...reviveLeadSnapshot(before.lead), version: currentLead.version + 1, updatedAt: new Date() })
                     .where(and(eq(leads.companyId, COMPANY_ID), eq(leads.id, entry.leadId)));
 
                 // Ripristino letterale di salesAttempts: before.attempt/after.attempt
