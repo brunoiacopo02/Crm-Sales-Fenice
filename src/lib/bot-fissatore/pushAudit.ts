@@ -13,11 +13,11 @@ import type { LancioPayloadField } from '@/lib/lancio/intake';
  *                  2026-09-09): è la risposta a un nostro ritento andato a segno,
  *                  quindi il lead è da lui esattamente come un `sent`.
  *
- * ⚠️ Questa nozione è usata in tre posti che DEVONO restare allineati: la prova
+ * ⚠️ Questa nozione è usata in due posti che DEVONO restare allineati: la prova
  * di appartenenza di `/api/bot/outcome` (senza la quale il bot si vede rifiutare
- * l'appuntamento con un 403), la coorte di `/api/bot/lead-status` e i conteggi di
- * `botStatsActions`. Se divergono, le percentuali di /statistiche-fissatore non
- * tornano più con il proprio numeratore. Da qui la costante unica.
+ * l'appuntamento con un 403) e la coorte di `/api/bot/lead-status`. Da qui la
+ * costante unica. (/statistiche-fissatore dal 28/10/2026 conta sul primo
+ * ASSIGNED con routing del bot, non sui push.)
  */
 
 /** Esiti di push che provano la consegna al bot. */

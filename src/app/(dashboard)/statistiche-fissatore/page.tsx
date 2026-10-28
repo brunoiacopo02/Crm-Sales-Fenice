@@ -1,344 +1,304 @@
-import { getBotFissatoreStats, getBotFissatoreCutoverComparison } from '@/app/actions/botStatsActions';
-import { redirect } from 'next/navigation';
-import { createClient } from "@/utils/supabase/server";
-import Link from 'next/link';
-import { Activity, ArrowRightLeft, CalendarCheck, CalendarDays, TrendingUp, Undo2 } from 'lucide-react';
+import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { Activity, CalendarCheck, ChevronLeft, ChevronRight, Target, Undo2 } from 'lucide-react'
+import { getStatisticheFissatore } from '@/app/actions/fissatoreStatsActions'
+import { conRuoloDb } from '@/lib/auth/ruoloDb'
+import { confronto, mesePrecedente, percentuale, semaforo, type Direzione, type RestituzioniPerMotivo, type Semaforo } from '@/lib/bot-fissatore/statisticheFissatore'
+import {
+    PIANO_CONFERMA_BOT, PIANO_PRESENZA_CONFERMATI, TESTO_FONTE, DIREZIONE_OBIETTIVI,
+    type ChiaveObiettivo, type ObiettivoRisolto,
+} from '@/lib/bot-fissatore/obiettiviFissatore'
+import { ObiettiviFissatoreForm } from './ObiettiviFissatoreForm'
 
-const PRESETS = [7, 14, 30, 60, 90];
+// --------------------------------------------------------------- formato
 
-/** "2026-07-24" → "gio 24/07". Mezzogiorno per non farsi sfasare dal fuso. */
-function dayLabel(day: string): string {
-    const d = new Date(`${day}T12:00:00`);
-    const wd = d.toLocaleDateString('it-IT', { weekday: 'short' });
-    return `${wd} ${d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}`;
+function nomeMese(mese: string): string {
+    const [a, m] = mese.split('-').map(Number)
+    return new Date(Date.UTC(a, m - 1, 15, 12)).toLocaleDateString('it-IT', { month: 'long', year: 'numeric', timeZone: 'Europe/Rome' })
 }
 
-function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: string }) {
+function meseDopo(mese: string): string {
+    const [a, m] = mese.split('-').map(Number)
+    return m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, '0')}`
+}
+
+const num = (n: number) => n.toLocaleString('it-IT')
+const pct = (v: number | null) => v === null ? '-' : `${v.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+const punti = (v: number) => v.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+
+/** "+1,2 punti" / "+120" rispetto al mese prima. */
+function Delta({ d, tasso, mesePrima, direzione = 'alto' }: { d: number | null; tasso: boolean; mesePrima: string; direzione?: Direzione }) {
+    if (d === null) return <div className="mt-0.5 text-xs text-ash-400">{nomeMese(mesePrima)}: -</div>
+    const meglio = direzione === 'alto' ? d > 0 : d < 0
+    const colore = d === 0 ? 'text-ash-500' : meglio ? 'text-emerald-600' : 'text-red-500'
+    const segno = d > 0 ? '+' : d < 0 ? '−' : ''
+    const valore = tasso ? `${punti(Math.abs(d))} punti` : num(Math.abs(d))
     return (
-        <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft p-4">
-            <div className="text-xs font-semibold text-ash-500 uppercase tracking-wider">{label}</div>
-            <div className={`mt-1 text-2xl font-bold tracking-tight ${accent || 'text-brand-charcoal'}`}>{value}</div>
-            {sub && <div className="mt-0.5 text-xs text-ash-500">{sub}</div>}
+        <div className="mt-0.5 text-xs text-ash-500">
+            <span className={`font-semibold ${colore}`}>{segno}{valore}</span> rispetto a {nomeMese(mesePrima)}
         </div>
-    );
+    )
 }
+
+function Pallino({ s }: { s: Semaforo | null }) {
+    if (!s) return null
+    return (
+        <div
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${s === 'verde' ? 'bg-emerald-500' : 'bg-red-500'}`}
+            title={s === 'verde' ? 'In linea' : 'Sotto'}
+        />
+    )
+}
+
+function Card({ label, value, children, s }: { label: string; value: string; children?: React.ReactNode; s?: Semaforo | null }) {
+    return (
+        <div className="rounded-xl border border-ash-200/60 bg-white p-4 shadow-soft">
+            <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-semibold uppercase tracking-wider text-ash-500">{label}</div>
+                <Pallino s={s ?? null} />
+            </div>
+            <div className="mt-1 text-2xl font-bold tracking-tight text-brand-charcoal">{value}</div>
+            {children}
+        </div>
+    )
+}
+
+function RigaObiettivo({ o }: { o: ObiettivoRisolto }) {
+    if (o.valore === null) return <div className="mt-2 text-xs text-ash-400">Obiettivo: da impostare</div>
+    return (
+        <div className="mt-2 text-xs text-ash-600">
+            Obiettivo <span className="font-semibold text-brand-charcoal">{pct(o.valore)}</span>
+            <span className="text-ash-400"> · {TESTO_FONTE[o.fonte]}</span>
+        </div>
+    )
+}
+
+function RigaPiano({ linea, base }: { linea: number; base: number }) {
+    return (
+        <div className="mt-2 text-xs text-ash-600">
+            Linea del piano <span className="font-semibold text-brand-charcoal">{pct(linea)}</span>
+            <span className="text-ash-400"> · base {pct(base)} · dal piano</span>
+        </div>
+    )
+}
+
+// --------------------------------------------------------------- pagina
 
 export default async function StatisticheFissatorePage({
-    searchParams
+    searchParams,
 }: {
-    searchParams: Promise<{ days?: string }>
+    searchParams: Promise<{ mese?: string }>
 }) {
-    const supabase = await createClient();
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+    const utente = await conRuoloDb(['MANAGER', 'ADMIN', 'TL'])
+    if (!utente) redirect('/unauthorized')
 
-    const role = supabaseUser?.user_metadata?.role;
-    if (!supabaseUser || !['MANAGER', 'ADMIN', 'TL'].includes(role)) {
-        redirect('/unauthorized');
-    }
-
-    const sp = await searchParams;
-    const days = Math.min(Math.max(parseInt(sp.days || '30', 10) || 30, 1), 365);
-    const [stats, cutover] = await Promise.all([
-        getBotFissatoreStats(days),
-        getBotFissatoreCutoverComparison(),
-    ]);
+    const sp = await searchParams
+    const stats = await getStatisticheFissatore(sp.mese)
 
     if (!stats) {
         return (
             <div className="p-6 lg:p-8">
                 <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal">Statistiche Fissatore</h1>
-                <div className="mt-6 text-center p-12 bg-white rounded-xl border border-dashed border-ash-300 text-ash-400">
-                    Nessun account fissatore attivo per questa azienda.
+                <div className="mt-6 rounded-xl border border-dashed border-ash-300 bg-white p-12 text-center text-ash-400">
+                    Account del fissatore non trovato.
                 </div>
             </div>
-        );
+        )
     }
 
-    const fmt = (iso: string) => new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const pct = (num: number, den: number) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '-';
-    const eur = (v: number) => '€ ' + Math.round(v).toLocaleString('it-IT');
+    const { questo: q, prima: p, mesePrima, obiettivi: ob } = stats
+    const fq = q.funnel, fp = p.funnel
+    const lq = q.linea, lp = p.linea
+    const meseSucc = meseDopo(stats.mese)
+    const puoAvanti = meseSucc <= stats.meseCorrente
+
+    const sem = (k: ChiaveObiettivo, v: number | null) => semaforo(v, ob[k].valore, DIREZIONE_OBIETTIVI[k])
 
     return (
-        <div className="p-6 lg:p-8 space-y-8">
-            {/* Header + selettore periodo */}
-            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+        <div className="space-y-8 p-6 lg:p-8">
+            {/* Intestazione + mese */}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal flex items-center gap-2">
-                        <Activity className="w-6 h-6 text-brand-orange" /> Statistiche Fissatore
+                    <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-brand-charcoal">
+                        <Activity className="h-6 w-6 text-brand-orange" /> Statistiche Fissatore
                     </h1>
                     <p className="mt-1 text-sm text-ash-500">
-                        {stats.botName} · finestra mobile {fmt(stats.from)} → {fmt(stats.to)} · coorte per data di presa in carico
+                        <span className="font-semibold capitalize text-brand-charcoal">{nomeMese(stats.mese)}</span>
+                        {' '}· accanto a ogni numero il confronto con {nomeMese(mesePrima)}
                     </p>
                 </div>
-                <div className="lg:ml-auto flex flex-wrap items-center gap-2">
-                    {PRESETS.map(p => (
-                        <Link
-                            key={p}
-                            href={`/statistiche-fissatore?days=${p}`}
-                            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${p === stats.days
-                                ? 'bg-brand-charcoal text-white border-brand-charcoal'
-                                : 'bg-white text-ash-600 border-ash-200/60 hover:border-brand-orange/50 hover:text-brand-charcoal'}`}
-                        >
-                            {p} gg
-                        </Link>
-                    ))}
+                <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+                    <Link
+                        href={`/statistiche-fissatore?mese=${mesePrecedente(stats.mese)}`}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-ash-200/60 bg-white text-ash-600 transition-colors hover:border-brand-orange/50 hover:text-brand-charcoal"
+                        aria-label="Mese prima"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </Link>
                     <form method="GET" className="flex items-center gap-1.5">
                         <input
-                            type="number"
-                            name="days"
-                            min={1}
-                            max={365}
-                            defaultValue={stats.days}
-                            className="h-9 w-20 rounded-lg border border-ash-200/60 bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/30"
+                            type="month"
+                            name="mese"
+                            defaultValue={stats.mese}
+                            className="h-9 rounded-lg border border-ash-200/60 bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/30"
                         />
-                        <button type="submit" className="h-9 px-3 rounded-lg bg-brand-orange text-white text-sm font-medium hover:bg-brand-orange-600 transition-colors">
-                            Applica
+                        <button type="submit" className="h-9 rounded-lg bg-brand-orange px-3 text-sm font-medium text-white transition-colors hover:bg-brand-orange-600">
+                            Vai
                         </button>
                     </form>
+                    {puoAvanti ? (
+                        <Link
+                            href={`/statistiche-fissatore?mese=${meseSucc}`}
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-ash-200/60 bg-white text-ash-600 transition-colors hover:border-brand-orange/50 hover:text-brand-charcoal"
+                            aria-label="Mese dopo"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Link>
+                    ) : null}
                 </div>
             </div>
 
-            {/* Flusso lead */}
+            {/* A. Funnel del bot */}
             <section>
-                <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <ArrowRightLeft className="w-4 h-4 text-brand-orange" /> Flusso lead ({stats.days} giorni)
+                <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-ash-700">
+                    <Target className="h-4 w-4 text-brand-orange" /> Funnel del bot
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                    <StatCard label="Ricevuti" value={stats.ricevuti} sub="entrati in carico nel periodo" />
-                    <StatCard label="Ridati ai GDO" value={stats.ridati} sub={`${stats.percRidati} dei ricevuti`} accent="text-amber-500" />
-                    <StatCard label="Tenuti" value={stats.tenuti} sub="mai ridistribuiti" />
-                    <StatCard label="Fissati" value={stats.fissati} sub={`${stats.percFissRicevuti} dei ricevuti`} accent="text-emerald-600" />
-                    <StatCard label="Scartati" value={stats.scartati} sub={`obiezione ferrea · ${stats.percScartati}`} accent="text-red-500" />
-                    <StatCard label="In lavorazione" value={stats.inLavorazione} sub="nessun esito, ancora al bot" accent="text-sky-600" />
+                <p className="mb-3 text-xs text-ash-500">
+                    I lead dati al bot nel mese (prima assegnazione). Lead di prova e del lancio esclusi.
+                    I lead degli ultimi giorni sono ancora in lavorazione: i loro tassi crescono nei giorni dopo.
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                    <Card label="Lead ricevuti" value={num(fq.ricevuti)}>
+                        <Delta d={confronto(fq.ricevuti, fp.ricevuti)} tasso={false} mesePrima={mesePrima} />
+                    </Card>
+                    <Card label="% che risponde" value={pct(fq.pctRisposta)} s={sem('risposta', fq.pctRisposta)}>
+                        <Delta d={confronto(fq.pctRisposta, fp.pctRisposta)} tasso mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">{num(fq.risposti)} su {num(fq.ricevuti)} · stimato dal CRM</div>
+                        <RigaObiettivo o={ob.risposta} />
+                    </Card>
+                    <Card label="% fissaggio sul totale" value={pct(fq.pctFissaggioTotale)} s={sem('fissaggioTotale', fq.pctFissaggioTotale)}>
+                        <Delta d={confronto(fq.pctFissaggioTotale, fp.pctFissaggioTotale)} tasso mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">{num(fq.fissati)} fissati su {num(fq.ricevuti)}</div>
+                        <RigaObiettivo o={ob.fissaggioTotale} />
+                    </Card>
+                    <Card label="% fissaggio su chi risponde" value={pct(fq.pctFissaggioRisposti)} s={sem('fissaggioRisposti', fq.pctFissaggioRisposti)}>
+                        <Delta d={confronto(fq.pctFissaggioRisposti, fp.pctFissaggioRisposti)} tasso mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">{num(fq.fissati)} fissati su {num(fq.risposti)}</div>
+                        <RigaObiettivo o={ob.fissaggioRisposti} />
+                    </Card>
+                    <Card label="% restituzioni" value={pct(fq.pctRestituzione)} s={sem('restituzione', fq.pctRestituzione)}>
+                        <Delta d={confronto(fq.pctRestituzione, fp.pctRestituzione)} tasso mesePrima={mesePrima} direzione="basso" />
+                        <div className="mt-0.5 text-xs text-ash-400">{num(fq.restituiti)} ridati dal bot su {num(fq.ricevuti)}</div>
+                        <RigaObiettivo o={ob.restituzione} />
+                    </Card>
+                </div>
+
+                {/* Restituzioni per motivo */}
+                <div className="mt-4 overflow-x-auto rounded-xl border border-ash-200/60 bg-white shadow-soft">
+                    <div className="flex items-center gap-2 border-b border-ash-100 px-4 py-3 text-sm font-semibold text-ash-700">
+                        <Undo2 className="h-4 w-4 text-brand-orange" /> Restituzioni del bot
+                    </div>
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="text-left text-xs uppercase tracking-wider text-ash-500">
+                                <th className="px-4 py-2 font-semibold">Motivo</th>
+                                <th className="px-4 py-2 text-right font-semibold">Restituiti</th>
+                                <th className="px-4 py-2 text-right font-semibold">% sui ricevuti</th>
+                                <th className="px-4 py-2 text-right font-semibold">Dati a un GDO</th>
+                                <th className="px-4 py-2 text-right font-semibold">Parcheggiati</th>
+                                <th className="px-4 py-2 text-right font-semibold">Ancora da chiamare</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-ash-100">
+                            <RigaRestituzioni nome="Mai risposto" q={fq.maiRisposto} p={fp.maiRisposto} ricevuti={fq.ricevuti} ricevutiPrima={fp.ricevuti} mesePrima={mesePrima} />
+                            <RigaRestituzioni nome="Chat interrotta" q={fq.chatInterrotta} p={fp.chatInterrotta} ricevuti={fq.ricevuti} ricevutiPrima={fp.ricevuti} mesePrima={mesePrima} />
+                        </tbody>
+                    </table>
+                    <div className="border-t border-ash-100 px-4 py-2 text-xs text-ash-500">
+                        Parcheggiati = restituiti senza darli a nessun GDO. Ancora da chiamare = oggi non ce l&apos;ha in carico nessuno.
+                        Tra parentesi {nomeMese(mesePrima)}.
+                    </div>
                 </div>
             </section>
 
-            {/* Drill-down della coorte: quanto ci mette il bot a smaltire ogni giornata.
-                È la lettura corretta di "in lavorazione", che è un residuo e non un conteggio. */}
+            {/* B. Linea del piano */}
             <section>
-                <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-brand-orange" /> Smaltimento per giorno di presa in carico
+                <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-ash-700">
+                    <CalendarCheck className="h-4 w-4 text-brand-orange" /> Linea del piano
                 </h2>
-                <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft overflow-hidden">
-                    <div className="max-h-[26rem] overflow-y-auto overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="sticky top-0 z-10 bg-white">
-                                <tr className="border-b border-ash-100 text-xs font-semibold text-ash-500 uppercase tracking-wider">
-                                    <th className="text-left p-3">Giorno</th>
-                                    <th className="text-right p-3">Ricevuti</th>
-                                    <th className="text-right p-3">Ridati</th>
-                                    <th className="text-right p-3">Fissati</th>
-                                    <th className="text-right p-3">Scartati</th>
-                                    <th className="text-right p-3">In lavorazione</th>
-                                    <th className="text-right p-3">% aperta</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-ash-100">
-                                {stats.dailyCohort.map(r => (
-                                    <tr key={r.day} className="hover:bg-ash-50/50">
-                                        <td className="p-3 font-medium text-brand-charcoal whitespace-nowrap">{dayLabel(r.day)}</td>
-                                        <td className="p-3 text-right text-ash-600">{r.ricevuti}</td>
-                                        <td className="p-3 text-right font-medium text-amber-500">{r.ridati}</td>
-                                        <td className="p-3 text-right font-medium text-emerald-600">{r.fissati}</td>
-                                        <td className="p-3 text-right font-medium text-red-500">{r.scartati}</td>
-                                        <td className="p-3 text-right font-bold text-sky-600">{r.inLavorazione}</td>
-                                        <td className="p-3 text-right text-ash-500">{pct(r.inLavorazione, r.ricevuti)}</td>
-                                    </tr>
-                                ))}
-                                {stats.dailyCohort.length === 0 && (
-                                    <tr><td colSpan={7} className="p-8 text-center text-ash-400">Nessun lead preso in carico nel periodo.</td></tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                <div className="mt-2 text-xs text-ash-500 bg-ash-50/60 border border-ash-200/60 rounded-lg px-3 py-2">
-                    Come leggerla: <strong>&ldquo;in lavorazione&rdquo; è un residuo</strong> (ricevuti meno fissati, ridati e scartati), non un
-                    conteggio di chat attive. Le giornate recenti hanno per forza una % aperta alta: con la sequenza da 12 giorni
-                    introdotta il 24/07 il bot non restituisce più i lead entro 24-48h come faceva prima, quindi il magazzino
-                    si riempie prima di svuotarsi. Una % aperta alta su giornate <strong>più vecchie di 12 giorni</strong> è invece
-                    un&apos;anomalia: sono lead che il fissatore non ha mai né chiuso né ridato.
+                <p className="mb-3 text-xs text-ash-500">
+                    Gli appuntamenti fissati dal bot con data nel mese e già passati. Lanci esclusi.
+                    Verde = alla linea del piano o sopra, rosso = sotto.
+                </p>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Card
+                        label="% confermati sugli appuntamenti"
+                        value={pct(lq.pctConferma)}
+                        s={semaforo(lq.pctConferma, PIANO_CONFERMA_BOT.linea, 'alto')}
+                    >
+                        <Delta d={confronto(lq.pctConferma, lp.pctConferma)} tasso mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">{num(lq.confermati)} confermati su {num(lq.appuntamenti)} appuntamenti</div>
+                        <RigaPiano linea={PIANO_CONFERMA_BOT.linea} base={PIANO_CONFERMA_BOT.base} />
+                    </Card>
+                    <Card
+                        label="% presenza sui confermati"
+                        value={pct(lq.pctPresenza)}
+                        s={semaforo(lq.pctPresenza, PIANO_PRESENZA_CONFERMATI.linea, 'alto')}
+                    >
+                        <Delta d={confronto(lq.pctPresenza, lp.pctPresenza)} tasso mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">{num(lq.presentatiConfermati)} presentati su {num(lq.confermati)} confermati</div>
+                        <RigaPiano linea={PIANO_PRESENZA_CONFERMATI.linea} base={PIANO_PRESENZA_CONFERMATI.base} />
+                    </Card>
+                    <Card label="Chiusi sui presentati" value={pct(lq.pctClosing)}>
+                        <Delta d={confronto(lq.pctClosing, lp.pctClosing)} tasso mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">
+                            {num(lq.chiusi)} chiusi su {num(lq.presentati)} presentati
+                            {lq.inLavorazione > 0 ? ` · ${num(lq.inLavorazione)} ancora senza esito` : ''}
+                        </div>
+                        <div className="mt-2 text-xs text-ash-400">Nessun obiettivo nel piano</div>
+                    </Card>
                 </div>
             </section>
 
-            {/* Conversione fissaggio */}
+            {/* C. Obiettivi */}
             <section>
-                <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <CalendarCheck className="w-4 h-4 text-brand-orange" /> Conversione fissaggio
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-ash-700">
+                    <Target className="h-4 w-4 text-brand-orange" /> Obiettivi del funnel
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <StatCard
-                        label="% Fissaggio su tutti i ricevuti"
-                        value={stats.percFissRicevuti}
-                        sub={`${stats.fissati} fissati su ${stats.ricevuti} ricevuti`}
-                        accent="text-brand-orange"
-                    />
-                    <StatCard
-                        label="% Fissaggio sui tenuti"
-                        value={stats.percFissTenuti}
-                        sub={`${stats.fissatiTenuti} fissati su ${stats.tenuti} lead non ridistribuiti`}
-                        accent="text-emerald-600"
-                    />
-                    <StatCard
-                        label="Ridati poi fissati dai GDO"
-                        value={`${stats.fissatiRidatiGdo} (${stats.percRidatiFissati})`}
-                        sub={`${stats.fissatiRidatiMaiRisposto} da mai risposto · ${stats.fissatiRidatiChatInterrotta} da chat interrotta`}
-                        accent="text-amber-500"
-                    />
-                </div>
+                {stats.isAdmin ? (
+                    <ObiettiviFissatoreForm salvati={stats.obiettiviSalvati} obiettivi={ob} />
+                ) : (
+                    <div className="rounded-xl border border-ash-200/60 bg-white p-4 text-sm text-ash-500 shadow-soft">
+                        Gli obiettivi del funnel li cambia l&apos;admin.
+                    </div>
+                )}
             </section>
-
-            {/* Dettaglio ridati + esiti a valle */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <section>
-                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Undo2 className="w-4 h-4 text-brand-orange" /> Motivo dei ridati
-                    </h2>
-                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft divide-y divide-ash-100">
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Mai risposto</div>
-                            <div className="font-bold text-brand-charcoal">{stats.ridatiMaiRisposto}</div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Chat interrotta</div>
-                            <div className="font-bold text-brand-charcoal">{stats.ridatiChatInterrotta}</div>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-ash-50/50">
-                            <div className="text-sm font-semibold text-ash-700">Totale ridati</div>
-                            <div className="font-bold text-amber-500">{stats.ridati}</div>
-                        </div>
-                    </div>
-                </section>
-
-                <section>
-                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <CalendarCheck className="w-4 h-4 text-brand-orange" /> A valle dei fissati ({stats.fissati})
-                    </h2>
-                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft divide-y divide-ash-100">
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Confermati (Conferme)</div>
-                            <div className="font-bold text-sky-600">{stats.confermati} <span className="text-ash-400 font-normal text-sm">({stats.percConfermati})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Presenziati (Venditore)</div>
-                            <div className="font-bold text-brand-charcoal">{stats.presenziati} <span className="text-ash-400 font-normal text-sm">({stats.percPresenziati})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Chiusi</div>
-                            <div className="font-bold text-emerald-600">{stats.chiusi} <span className="text-ash-400 font-normal text-sm">({stats.percChiusi})</span></div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            {/* Funnel dei ridati: quanto costano e quanto rendono i lead restituiti ai GDO */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <section>
-                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Undo2 className="w-4 h-4 text-brand-orange" /> Lavorazione GDO sui ridati ({stats.ridati})
-                    </h2>
-                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft divide-y divide-ash-100">
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Lavorati (almeno 1 chiamata)</div>
-                            <div className="font-bold text-brand-charcoal">{stats.ridatiLavoratiGdo} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiLavoratiGdo, stats.ridati)})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Chiamate GDO spese</div>
-                            <div className="font-bold text-brand-charcoal">{stats.ridatiChiamateGdo} <span className="text-ash-400 font-normal text-sm">({stats.ridatiLavoratiGdo > 0 ? (stats.ridatiChiamateGdo / stats.ridatiLavoratiGdo).toFixed(1) : '-'} per lead)</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Fissati dai GDO</div>
-                            <div className="font-bold text-amber-500">{stats.fissatiRidatiGdo} <span className="text-ash-400 font-normal text-sm">({stats.percRidatiFissati})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Scartati dai GDO</div>
-                            <div className="font-bold text-red-500">{stats.ridatiScartatiGdo} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiScartatiGdo, stats.ridati)})</span></div>
-                        </div>
-                    </div>
-                </section>
-
-                <section>
-                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <CalendarCheck className="w-4 h-4 text-brand-orange" /> A valle dei ridati fissati ({stats.fissatiRidatiGdo})
-                    </h2>
-                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft divide-y divide-ash-100">
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Confermati (Conferme)</div>
-                            <div className="font-bold text-sky-600">{stats.ridatiConfermati} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiConfermati, stats.fissatiRidatiGdo)})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Presenziati (Venditore)</div>
-                            <div className="font-bold text-brand-charcoal">{stats.ridatiPresenziati} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiPresenziati, stats.fissatiRidatiGdo)})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4">
-                            <div className="text-sm text-ash-600">Chiusi</div>
-                            <div className="font-bold text-emerald-600">{stats.ridatiChiusi} <span className="text-ash-400 font-normal text-sm">({pct(stats.ridatiChiusi, stats.fissatiRidatiGdo)})</span></div>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-ash-50/50">
-                            <div className="text-sm font-semibold text-ash-700">Fatturato dai ridati</div>
-                            <div className="font-bold text-emerald-600">{eur(stats.ridatiFatturatoEur)}</div>
-                        </div>
-                    </div>
-                </section>
-            </div>
-
-            {/* Confronto coorti pre/post modifiche fornitore del 24/07 (report quindicinale) */}
-            {cutover && (
-                <section>
-                    <h2 className="text-sm font-semibold text-ash-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-brand-orange" /> Pre/post modifiche fissatore (24/07) — target ridati ≤50%, fissati ≥8%
-                    </h2>
-                    <div className="rounded-xl border border-ash-200/60 bg-white shadow-soft overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-ash-100 text-xs font-semibold text-ash-500 uppercase tracking-wider">
-                                    <th className="text-left p-4">Metrica</th>
-                                    <th className="text-right p-4">Pre (30gg fino al 23/07)</th>
-                                    <th className="text-right p-4">Post (dal 24/07 · {cutover.postDays} gg)</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-ash-100">
-                                <tr>
-                                    <td className="p-4 text-ash-600">Ricevuti</td>
-                                    <td className="p-4 text-right font-bold text-brand-charcoal">{cutover.pre.ricevuti}</td>
-                                    <td className="p-4 text-right font-bold text-brand-charcoal">{cutover.post.ricevuti}</td>
-                                </tr>
-                                <tr>
-                                    <td className="p-4 text-ash-600">Ridati ai GDO</td>
-                                    <td className="p-4 text-right font-bold text-amber-500">{cutover.pre.ridati} <span className="text-ash-400 font-normal text-xs">({cutover.pre.percRidati})</span></td>
-                                    <td className="p-4 text-right font-bold text-amber-500">{cutover.post.ridati} <span className="text-ash-400 font-normal text-xs">({cutover.post.percRidati})</span></td>
-                                </tr>
-                                <tr>
-                                    <td className="p-4 text-ash-600">Fissati dal fissatore</td>
-                                    <td className="p-4 text-right font-bold text-emerald-600">{cutover.pre.fissati} <span className="text-ash-400 font-normal text-xs">({cutover.pre.percFissRicevuti})</span></td>
-                                    <td className="p-4 text-right font-bold text-emerald-600">{cutover.post.fissati} <span className="text-ash-400 font-normal text-xs">({cutover.post.percFissRicevuti})</span></td>
-                                </tr>
-                                <tr>
-                                    <td className="p-4 text-ash-600">Scartati (obiezione ferrea)</td>
-                                    <td className="p-4 text-right font-bold text-red-500">{cutover.pre.scartati} <span className="text-ash-400 font-normal text-xs">({cutover.pre.percScartati})</span></td>
-                                    <td className="p-4 text-right font-bold text-red-500">{cutover.post.scartati} <span className="text-ash-400 font-normal text-xs">({cutover.post.percScartati})</span></td>
-                                </tr>
-                                <tr>
-                                    <td className="p-4 text-ash-600">In lavorazione</td>
-                                    <td className="p-4 text-right font-bold text-sky-600">{cutover.pre.inLavorazione}</td>
-                                    <td className="p-4 text-right font-bold text-sky-600">{cutover.post.inLavorazione}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    {cutover.postDays < 14 && (
-                        <div className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200/60 rounded-lg px-3 py-2">
-                            ⚠️ Con le sequenze da 12 giorni la coorte post matura in ~14 giorni: molti lead post-24/07 sono
-                            ancora in lavorazione e le percentuali di ridati/fissati sono provvisorie (attesi numeri stabili da metà agosto).
-                        </div>
-                    )}
-                </section>
-            )}
-
-            <p className="text-xs text-ash-400">
-                Nota: la coorte è per data di presa in carico (primo push riuscito, riassegnazione o chiamata registrata).
-                I fissati sono contati dagli esiti registrati, quindi restano conteggiati anche se il lead viene poi scartato o riassegnato.
-            </p>
         </div>
-    );
+    )
+}
+
+function RigaRestituzioni({ nome, q, p, ricevuti, ricevutiPrima, mesePrima }: {
+    nome: string
+    q: RestituzioniPerMotivo
+    p: RestituzioniPerMotivo
+    ricevuti: number
+    ricevutiPrima: number
+    mesePrima: string
+}) {
+    const cella = (a: string, b: string) => (
+        <td className="px-4 py-2.5 text-right">
+            <span className="font-semibold text-brand-charcoal">{a}</span>
+            <span className="ml-1 text-xs text-ash-400" title={nomeMese(mesePrima)}>({b})</span>
+        </td>
+    )
+    return (
+        <tr>
+            <td className="px-4 py-2.5 text-ash-700">{nome}</td>
+            {cella(num(q.totale), num(p.totale))}
+            {cella(pct(percentuale(q.totale, ricevuti)), pct(percentuale(p.totale, ricevutiPrima)))}
+            {cella(num(q.aUnGdo), num(p.aUnGdo))}
+            {cella(num(q.parcheggiati), num(p.parcheggiati))}
+            {cella(num(q.ancoraDaChiamare), num(p.ancoraDaChiamare))}
+        </tr>
+    )
 }

@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
         // network_error (vedi lib/bot-fissatore/push.ts), cioè per lead che al bot
         // non sono mai arrivati. `duplicate` invece SI': e' il lead che il fornitore
         // aveva gia' quando abbiamo ritentato. Nozione unica in pushAudit.ts, usata
-        // anche da /api/bot/lead-status e da botStatsActions.
+        // anche da /api/bot/lead-status.
         const [pushed] = await db.select({ id: leadEvents.id })
             .from(leadEvents)
             .where(and(

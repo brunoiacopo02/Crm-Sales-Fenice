@@ -1,0 +1,176 @@
+// Conti puri della pagina /statistiche-fissatore (rifatta il 28/10/2026, PO).
+//
+// Due coorti, tutte e due per mese di Roma:
+//  A. funnel del bot: lead il cui primo ASSIGNED con routing bot_first/bot_only
+//     cade nel mese (prova e lancio esclusi a monte);
+//  B. linea del piano: appuntamenti fissati dal bot con appointmentDate nel
+//     mese e già passati.
+// La lettura dal database è in src/app/actions/fissatoreStatsActions.ts: qui
+// solo regole, così i test le fissano.
+
+import { isNeverAnsweredLog, isFunnelClosure } from '@/lib/kpi/canon'
+import { toRomeDateStr } from '@/lib/dateUtils'
+
+export type Semaforo = 'verde' | 'rosso'
+/** 'alto' = più alto è meglio; 'basso' = più basso è meglio (restituzioni). */
+export type Direzione = 'alto' | 'basso'
+
+/** num/den in percentuale (0-100), null se il denominatore è zero. */
+export function percentuale(num: number, den: number): number | null {
+    return den > 0 ? (num / den) * 100 : null
+}
+
+/** Verde alla soglia o meglio, rosso sotto; nessun colore se manca qualcosa. */
+export function semaforo(valore: number | null, soglia: number | null, direzione: Direzione): Semaforo | null {
+    if (valore === null || soglia === null) return null
+    const ok = direzione === 'alto' ? valore >= soglia : valore <= soglia
+    return ok ? 'verde' : 'rosso'
+}
+
+/** Differenza col mese prima (punti per i tassi, unità per i conteggi). */
+export function confronto(questo: number | null, prima: number | null): number | null {
+    if (questo === null || prima === null) return null
+    return questo - prima
+}
+
+// ------------------------------------------------------------------ mesi
+
+const RE_MESE = /^(\d{4})-(0[1-9]|1[0-2])$/
+
+/** Il mese del parametro se valido e non futuro, altrimenti il mese corrente di Roma. */
+export function meseDaParametro(param: string | undefined | null, ora: Date): string {
+    const corrente = toRomeDateStr(ora).slice(0, 7)
+    if (!param || !RE_MESE.test(param)) return corrente
+    return param > corrente ? corrente : param
+}
+
+export function mesePrecedente(mese: string): string {
+    const [a, m] = mese.split('-').map(Number)
+    return m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`
+}
+
+// ------------------------------------------------------------------ A. funnel del bot
+
+export type MotivoRestituzione = 'mai_risposto' | 'chat_interrotta'
+
+export interface LeadDelBot {
+    /** callLogs scritti dal bot sul lead. */
+    logDelBot: { outcome: string; discardReason: string | null }[]
+    /** Prima restituzione dal bot (REASSIGNED_FROM_BOT), se c'è. */
+    restituzione: { reason: string | null; toGdo: string | null } | null
+    /** Il lead ha eventi BOT_REPORT, INBOUND_MESSAGE o BOT_CONTACT_REQUEST. */
+    segnaliDiRisposta: boolean
+    /** Assegnatario di oggi: null = nessuno lo ha in carico. */
+    assignedToId: string | null
+}
+
+/**
+ * Il lead ha risposto al bot (stima del CRM, il bot non ci manda la chat):
+ * appuntamento o scarto del bot (non "numero inesistente"), restituzione per
+ * chat interrotta, oppure un report, un messaggio in entrata o una richiesta
+ * di contatto.
+ */
+export function haRisposto(l: Pick<LeadDelBot, 'logDelBot' | 'restituzione' | 'segnaliDiRisposta'>): boolean {
+    if (l.segnaliDiRisposta) return true
+    if (l.restituzione?.reason === 'chat_interrotta') return true
+    return l.logDelBot.some(c =>
+        c.outcome === 'APPUNTAMENTO'
+        || (c.outcome === 'DA_SCARTARE' && !isNeverAnsweredLog(c.outcome, c.discardReason)))
+}
+
+export interface RestituzioniPerMotivo {
+    totale: number
+    /** Date a un GDO (metadata.toGdo non nullo). */
+    aUnGdo: number
+    /** Non date a nessuno (toGdo nullo: parcheggiati, IA vocale). */
+    parcheggiati: number
+    /** Oggi senza assegnatario. */
+    ancoraDaChiamare: number
+}
+
+export interface FunnelDelBot {
+    ricevuti: number
+    risposti: number
+    fissati: number
+    restituiti: number
+    pctRisposta: number | null
+    pctFissaggioTotale: number | null
+    pctFissaggioRisposti: number | null
+    pctRestituzione: number | null
+    maiRisposto: RestituzioniPerMotivo
+    chatInterrotta: RestituzioniPerMotivo
+}
+
+function perMotivo(leads: LeadDelBot[], motivo: MotivoRestituzione): RestituzioniPerMotivo {
+    const r = leads.filter(l => l.restituzione?.reason === motivo)
+    const aUnGdo = r.filter(l => !!l.restituzione?.toGdo).length
+    return {
+        totale: r.length,
+        aUnGdo,
+        parcheggiati: r.length - aUnGdo,
+        ancoraDaChiamare: r.filter(l => l.assignedToId === null).length,
+    }
+}
+
+export function funnelDelBot(leads: LeadDelBot[]): FunnelDelBot {
+    const ricevuti = leads.length
+    const risposti = leads.filter(haRisposto).length
+    const fissati = leads.filter(l => l.logDelBot.some(c => c.outcome === 'APPUNTAMENTO')).length
+    const restituiti = leads.filter(l => l.restituzione !== null).length
+    return {
+        ricevuti,
+        risposti,
+        fissati,
+        restituiti,
+        pctRisposta: percentuale(risposti, ricevuti),
+        pctFissaggioTotale: percentuale(fissati, ricevuti),
+        pctFissaggioRisposti: percentuale(fissati, risposti),
+        pctRestituzione: percentuale(restituiti, ricevuti),
+        maiRisposto: perMotivo(leads, 'mai_risposto'),
+        chatInterrotta: perMotivo(leads, 'chat_interrotta'),
+    }
+}
+
+// ------------------------------------------------------------------ B. linea del piano
+
+export interface AppuntamentoDelBot {
+    confirmationsOutcome: string | null
+    /** Latch della presenza (PO 2026-07-17). */
+    presentedAt: Date | null
+    salespersonOutcome: string | null
+}
+
+export interface LineaDelPiano {
+    appuntamenti: number
+    confermati: number
+    /** Confermati che si sono presentati. */
+    presentatiConfermati: number
+    /** Tutti i presentati della coorte: base del closing. */
+    presentati: number
+    /** Chiusi con presenza (isFunnelClosure). */
+    chiusi: number
+    /** Presentati ancora senza esito del venditore. */
+    inLavorazione: number
+    pctConferma: number | null
+    pctPresenza: number | null
+    pctClosing: number | null
+}
+
+export function lineaDelPiano(app: AppuntamentoDelBot[]): LineaDelPiano {
+    const confermati = app.filter(a => a.confirmationsOutcome === 'confermato')
+    const presentatiConfermati = confermati.filter(a => a.presentedAt !== null).length
+    const presentati = app.filter(a => a.presentedAt !== null)
+    const chiusi = presentati.filter(isFunnelClosure).length
+    const inLavorazione = presentati.filter(a => !a.salespersonOutcome).length
+    return {
+        appuntamenti: app.length,
+        confermati: confermati.length,
+        presentatiConfermati,
+        presentati: presentati.length,
+        chiusi,
+        inLavorazione,
+        pctConferma: percentuale(confermati.length, app.length),
+        pctPresenza: percentuale(presentatiConfermati, confermati.length),
+        pctClosing: percentuale(chiusi, presentati.length),
+    }
+}
