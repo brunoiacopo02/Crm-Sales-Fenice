@@ -75,9 +75,14 @@ export interface LeadDelBot {
  * Contano solo i segnali mentre il lead è del bot, cioè da `assegnatoIl` fino
  * alla prima restituzione esclusa: dopo, agenda e riscaldamento dei GDO
  * passano dai numeri del bot e gonfierebbero il dato (coordinatore 28/10/2026).
+ *
+ * Eccezione: un lead fissato dal bot ha sempre risposto, anche se il bot lo
+ * ha fissato dopo averlo restituito. I fissati contano tutti gli appuntamenti
+ * del bot (come il piano), e così il fissaggio su chi risponde resta coerente.
  */
 export function haRisposto(l: Pick<LeadDelBot, 'assegnatoIl' | 'logDelBot' | 'restituzione' | 'segnali'>): boolean {
     if (l.restituzione?.reason === 'chat_interrotta') return true
+    if (l.logDelBot.some(c => c.outcome === 'APPUNTAMENTO')) return true
     const fine = l.restituzione?.at ?? null
     const dentro = (d: Date) => d >= l.assegnatoIl && (fine === null || d < fine)
     if (l.segnali.some(dentro)) return true

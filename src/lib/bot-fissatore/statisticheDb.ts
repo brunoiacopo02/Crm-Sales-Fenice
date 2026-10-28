@@ -10,6 +10,7 @@ import { callLogs, leadEvents, leads } from "@/db/schema"
 import { monthBoundsRome } from "@/lib/dateUtils"
 import { leadVero } from "@/lib/prova/sql"
 import { eLeadDelLancio } from "@/lib/diretta/instradamento"
+import { contaNeiKpi } from "@/lib/intakeBatch"
 import {
     funnelDelBot, lineaDelPiano, mesePrecedente,
     type FunnelDelBot, type LeadDelBot, type LineaDelPiano,
@@ -75,6 +76,8 @@ async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
             funnel: leads.funnel,
             lancioPool: leads.lancioPool,
             humanTestCohort: leads.humanTestCohort,
+            intakeBatch: leads.intakeBatch,
+            isTest: leads.isTest,
         })
             .from(leadEvents)
             .innerJoin(leads, eq(leads.id, leadEvents.leadId))
@@ -106,9 +109,16 @@ async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
                 gte(leadEvents.timestamp, da),
             )),
     ])
+    // Infornata anomala (flood lista 133 del 15/09/2026): conta solo chi il bot
+    // ha davvero contattato, con la regola canonica `contaNeiKpi` (la stessa di
+    // marketingActions per i lead acquisiti). Si applica ai ricevuti e non agli
+    // appuntamenti: un appuntamento nato dall'infornata è vero.
     // Un lead ha un solo primo ASSIGNED; due eventi nello stesso istante esatto passerebbero entrambi.
     const perLead = new Map<string, typeof coorte[number]>()
-    for (const l of coorte) if (!eLeadDelLancio(l) && !perLead.has(l.leadId)) perLead.set(l.leadId, l)
+    for (const l of coorte) {
+        if (eLeadDelLancio(l) || !contaNeiKpi(l) || perLead.has(l.leadId)) continue
+        perLead.set(l.leadId, l)
+    }
 
     const log = new Map<string, LeadDelBot['logDelBot']>()
     for (const r of logRows) {

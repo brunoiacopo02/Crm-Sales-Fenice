@@ -97,7 +97,7 @@ test('haRisposto: contano solo i segnali mentre il lead è del bot (fra assegnaz
     const mai = { reason: 'mai_risposto', toGdo: null, at: TR }
     // dopo la restituzione: agenda e riscaldamento dei GDO passano dai numeri del bot
     assert.equal(haRisposto(lead({ restituzione: mai, segnali: [T2] })), false)
-    assert.equal(haRisposto(lead({ restituzione: mai, logDelBot: [log('APPUNTAMENTO', T2)] })), false)
+    assert.equal(haRisposto(lead({ restituzione: mai, logDelBot: [log('DA_SCARTARE', T2, 'non interessato')] })), false)
     // nello stesso istante della restituzione: già fuori
     assert.equal(haRisposto(lead({ restituzione: mai, segnali: [TR] })), false)
     // prima dell'assegnazione: non è una risposta al bot
@@ -106,6 +106,23 @@ test('haRisposto: contano solo i segnali mentre il lead è del bot (fra assegnaz
     assert.equal(haRisposto(lead({ restituzione: mai, segnali: [T1] })), true)
     // senza restituzione la finestra resta aperta
     assert.equal(haRisposto(lead({ segnali: [T2] })), true)
+})
+
+test('haRisposto: un lead fissato dal bot ha sempre risposto, anche se fissato dopo la restituzione', () => {
+    const mai = { reason: 'mai_risposto', toGdo: null, at: TR }
+    assert.equal(haRisposto(lead({ restituzione: mai, logDelBot: [log('APPUNTAMENTO', T2)] })), true)
+    assert.equal(haRisposto(lead({ logDelBot: [log('APPUNTAMENTO', PRIMA)] })), true)
+})
+
+test('funnelDelBot: i fissati dopo la restituzione stanno nei fissati e fra chi risponde', () => {
+    const mai = { reason: 'mai_risposto', toGdo: null, at: TR }
+    const f = funnelDelBot([
+        lead({ restituzione: mai, logDelBot: [log('APPUNTAMENTO', T2)] }),
+        lead({ restituzione: mai }),
+    ])
+    assert.equal(f.fissati, 1)
+    assert.equal(f.risposti, 1)
+    assert.equal(f.pctFissaggioRisposti, 100)
 })
 
 // ------------------------------------------------------------- funnel del bot
