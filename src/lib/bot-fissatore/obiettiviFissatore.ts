@@ -16,6 +16,13 @@ export const OBIETTIVI_FISSATORE_KEY = 'fissatore_obiettivi'
 export const PIANO_CONFERMA_BOT = { linea: 18.6, base: 19.1 } as const
 /** Confermati presentati ÷ confermati con appuntamento passato (nel piano vale per tutti i confermati). */
 export const PIANO_PRESENZA_CONFERMATI = { linea: 85, base: 88.6 } as const
+/** Confermati ÷ appuntamenti dei GDO. Piano §2 (base 10,7%) e §8.3 (rientro R0-CONF: tasso GDO ≥ 10,2%). */
+export const PIANO_CONFERMA_GDO = { linea: 10.2, base: 10.7 } as const
+/**
+ * Chiusi ÷ presentati. Piano §1, §3.2 e §12: chiusura sulle presenze al 38%,
+ * soglia di sicurezza 27,5%. Il piano non la divide fra bot e GDO.
+ */
+export const PIANO_CHIUSURA_PRESENTATI = { obiettivo: 38, sicurezza: 27.5 } as const
 
 export const CHIAVI_OBIETTIVI = ['appuntamenti', 'risposta', 'fissaggioTotale', 'fissaggioRisposti', 'restituzione'] as const
 export type ChiaveObiettivo = typeof CHIAVI_OBIETTIVI[number]

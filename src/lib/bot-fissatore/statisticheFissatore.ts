@@ -5,6 +5,7 @@
 //     cade nel mese (prova e lancio esclusi a monte);
 //  B. linea del piano: appuntamenti fissati dal bot con appointmentDate nel
 //     mese e già passati.
+// C. è un pezzo della A: i lead ridati dal bot e come li lavorano i GDO.
 // La lettura dal database è in src/app/actions/fissatoreStatsActions.ts: qui
 // solo regole, così i test le fissano.
 
@@ -205,5 +206,77 @@ export function lineaDelPiano(app: AppuntamentoDelBot[]): LineaDelPiano {
         pctConferma: percentuale(confermati.length, app.length),
         pctPresenza: percentuale(presentatiConfermati, confermati.length),
         pctClosing: percentuale(chiusi, presentati.length),
+    }
+}
+
+// ------------------------------------------------------------------ C. i ridati nelle mani dei GDO
+
+/**
+ * Lead della coorte A ridato dal bot (PO 28/10/2026). `fissaggi` sono le
+ * chiamate APPUNTAMENTO sul lead, del bot e dei GDO, dall'inizio del periodo.
+ * I campi dell'appuntamento sono quelli di oggi sul lead.
+ */
+export interface LeadRidato extends AppuntamentoDelBot {
+    restituzione: { reason: string | null; toGdo: string | null; at: Date }
+    assignedToId: string | null
+    fissaggi: { at: Date; delBot: boolean }[]
+    appointmentDate: Date | null
+}
+
+export interface LavoroGdo extends LineaDelPiano {
+    /** Ridati dal bot con questo motivo. */
+    ridati: number
+    /** Dati a un GDO (metadata.toGdo non nullo): la base del gruppo. */
+    aUnGdo: number
+    /** Ridati che oggi non ha in carico nessuno. */
+    ancoraDaChiamare: number
+    /** Passati a un GDO con un appuntamento di un GDO dopo la restituzione. */
+    fissati: number
+    pctFissati: number | null
+    /** Appuntamenti dei GDO già passati: la base delle conferme. */
+    appuntamentiPassati: number
+}
+
+export interface LavoroDeiGdo {
+    chatInterrotta: LavoroGdo
+    maiRisposto: LavoroGdo
+    /** I due gruppi insieme (altri motivi di restituzione fuori). */
+    totale: LavoroGdo
+}
+
+/**
+ * Fissati dai GDO: almeno un APPUNTAMENTO di un GDO (non il bot) dopo la
+ * restituzione; un appuntamento del bot, prima o dopo, non conta.
+ * Conferme, presenze e chiusure guardano l'appuntamento di oggi sul lead, solo
+ * se è ancora quello di un GDO (l'ultimo fissaggio dopo la restituzione non è
+ * del bot) e se è già passato.
+ */
+function gruppo(leads: LeadRidato[], ora: Date): LavoroGdo {
+    const aUnGdo = leads.filter(l => !!l.restituzione.toGdo)
+    const dopo = (l: LeadRidato) => l.fissaggi.filter(f => f.at >= l.restituzione.at)
+    const fissati = aUnGdo.filter(l => dopo(l).some(f => !f.delBot))
+    const passati = fissati.filter(l => {
+        const ultimo = dopo(l).reduce((a, b) => (b.at > a.at ? b : a))
+        return !ultimo.delBot && l.appointmentDate !== null && l.appointmentDate < ora
+    })
+    return {
+        ...lineaDelPiano(passati),
+        ridati: leads.length,
+        aUnGdo: aUnGdo.length,
+        ancoraDaChiamare: leads.filter(l => l.assignedToId === null).length,
+        fissati: fissati.length,
+        pctFissati: percentuale(fissati.length, aUnGdo.length),
+        appuntamentiPassati: passati.length,
+    }
+}
+
+/** Ridati dal bot nelle mani dei GDO, per motivo: "chat interrotta" e "mai risposto", più il totale dei due. */
+export function lavoroDeiGdo(leads: LeadRidato[], ora: Date): LavoroDeiGdo {
+    const chat = leads.filter(l => l.restituzione.reason === 'chat_interrotta')
+    const mai = leads.filter(l => l.restituzione.reason === 'mai_risposto')
+    return {
+        chatInterrotta: gruppo(chat, ora),
+        maiRisposto: gruppo(mai, ora),
+        totale: gruppo([...chat, ...mai], ora),
     }
 }

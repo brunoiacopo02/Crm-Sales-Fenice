@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     leggiObiettiviSalvati, risolviObiettivi, validaObiettivi, obiettivoInProporzione, testoFonte,
-    CHIAVI_OBIETTIVI, type ObiettiviDefault,
+    CHIAVI_OBIETTIVI, PIANO_CONFERMA_BOT, PIANO_CONFERMA_GDO, PIANO_PRESENZA_CONFERMATI, PIANO_CHIUSURA_PRESENTATI,
+    type ObiettiviDefault,
 } from './obiettiviFissatore'
 import { OBIETTIVI_FISSATORE_DEFAULT } from './obiettiviFissatoreDefault'
 
@@ -18,6 +19,13 @@ const vuoto = { appuntamenti: '', risposta: '', fissaggioTotale: '', fissaggioRi
 
 test('il default copre tutti gli obiettivi', () => {
     assert.deepEqual(Object.keys(OBIETTIVI_FISSATORE_DEFAULT).sort(), [...CHIAVI_OBIETTIVI].sort())
+})
+
+test('linea del piano: conferma bot e GDO, presenza, chiusura sui presentati', () => {
+    assert.deepEqual(PIANO_CONFERMA_BOT, { linea: 18.6, base: 19.1 })
+    assert.deepEqual(PIANO_CONFERMA_GDO, { linea: 10.2, base: 10.7 })
+    assert.deepEqual(PIANO_PRESENZA_CONFERMATI, { linea: 85, base: 88.6 })
+    assert.deepEqual(PIANO_CHIUSURA_PRESENTATI, { obiettivo: 38, sicurezza: 27.5 })
 })
 
 test('i default decisi dal PO il 28/10/2026', () => {

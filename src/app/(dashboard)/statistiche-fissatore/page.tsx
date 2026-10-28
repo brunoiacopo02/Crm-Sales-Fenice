@@ -3,9 +3,10 @@ import Link from 'next/link'
 import { Activity, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getStatisticheFissatore } from '@/app/actions/fissatoreStatsActions'
 import { conRuoloDb } from '@/lib/auth/ruoloDb'
-import { mesePrecedente, percentuale, semaforo, type Direzione, type RestituzioniPerMotivo, type Semaforo } from '@/lib/bot-fissatore/statisticheFissatore'
+import { mesePrecedente, percentuale, semaforo, type Direzione, type LavoroDeiGdo, type LavoroGdo, type Semaforo } from '@/lib/bot-fissatore/statisticheFissatore'
 import {
-    PIANO_CONFERMA_BOT, PIANO_PRESENZA_CONFERMATI, DIREZIONE_OBIETTIVI, obiettivoInProporzione, testoFonte,
+    PIANO_CONFERMA_BOT, PIANO_CONFERMA_GDO, PIANO_PRESENZA_CONFERMATI, PIANO_CHIUSURA_PRESENTATI,
+    DIREZIONE_OBIETTIVI, obiettivoInProporzione, testoFonte,
     type ChiaveObiettivo,
 } from '@/lib/bot-fissatore/obiettiviFissatore'
 import { ObiettiviFissatoreForm } from './ObiettiviFissatoreForm'
@@ -13,6 +14,11 @@ import { ObiettiviFissatoreForm } from './ObiettiviFissatoreForm'
 // Pagella del bot (PO 2026-10-28): una riga per numero, in parole semplici,
 // con questo mese, obiettivo, esito e mese prima. I conti stanno in
 // src/lib/bot-fissatore/statisticheFissatore.ts.
+
+// Tutto dal database a ogni apertura (PO 28/10/2026): niente cache, così gli
+// esiti mandati dal bot (/api/bot/outcome e gli altri endpoint) si vedono alla
+// prima ricarica.
+export const dynamic = 'force-dynamic'
 
 // --------------------------------------------------------------- formato
 
@@ -172,9 +178,9 @@ export default async function StatisticheFissatorePage({
             spiegazione: 'Fra chi si è presentato, quanti hanno firmato.',
             valore: pct(lq.pctClosing),
             dettaglio: `${num(lq.chiusi)} su ${num(lq.presentati)}${lq.inLavorazione > 0 ? ` · ${num(lq.inLavorazione)} senza esito` : ''}`,
-            obiettivo: null,
-            fonte: 'il piano non lo fissa per il bot',
-            esito: null,
+            obiettivo: pct(PIANO_CHIUSURA_PRESENTATI.obiettivo),
+            fonte: `dal piano (soglia di sicurezza ${pct(PIANO_CHIUSURA_PRESENTATI.sicurezza)})`,
+            esito: semaforo(lq.pctClosing, PIANO_CHIUSURA_PRESENTATI.obiettivo, 'alto'),
             prima: pct(lp.pctClosing),
         },
     ]
@@ -285,37 +291,14 @@ export default async function StatisticheFissatorePage({
                 </div>
             </section>
 
-            {/* Lead ridati */}
-            <section>
-                <h2 className="mb-1 text-lg font-semibold text-brand-charcoal">I lead che il bot ha ridato ai GDO</h2>
-                <p className="mb-3 text-sm text-ash-500">Divisi per motivo. Tra parentesi {nomeMese(mesePrima)}.</p>
-                <div className="overflow-x-auto rounded-xl border border-ash-200/60 bg-white shadow-soft">
-                    <table className="w-full text-sm">
-                        <thead>
-                            <tr className="border-b border-ash-100 text-left text-xs uppercase tracking-wider text-ash-500">
-                                <th className="px-4 py-3 font-semibold">Perché li ha ridati</th>
-                                <th className="px-4 py-3 text-right font-semibold">Quanti</th>
-                                <th className="px-4 py-3 text-right font-semibold">Su tutti i lead del bot</th>
-                                <th className="px-4 py-3 text-right font-semibold">Passati a un GDO</th>
-                                <th className="px-4 py-3 text-right font-semibold">Oggi senza nessun GDO</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-ash-100">
-                            <RigaRidati nome="Non hanno mai risposto" q={fq.maiRisposto} p={fp.maiRisposto} ricevuti={fq.ricevuti} ricevutiPrima={fp.ricevuti} />
-                            <RigaRidati nome="Hanno smesso di rispondere" q={fq.chatInterrotta} p={fp.chatInterrotta} ricevuti={fq.ricevuti} ricevutiPrima={fp.ricevuti} />
-                        </tbody>
-                    </table>
-                </div>
-                <p className="mt-2 text-sm text-ash-500">
-                    &quot;Oggi senza nessun GDO&quot; sono i lead ridati che in questo momento nessuno ha da chiamare.
-                </p>
-            </section>
+            {/* Lead ridati: come li lavorano i GDO */}
+            <RidatiAiGdo q={q.ridatiAiGdo} p={p.ridatiAiGdo} ricevuti={fq.ricevuti} ricevutiPrima={fp.ricevuti} mesePrima={mesePrima} />
 
             {/* Obiettivi */}
             <section>
                 <h2 className="mb-1 text-lg font-semibold text-brand-charcoal">Cambia gli obiettivi</h2>
                 <p className="mb-3 text-sm text-ash-500">
-                    Confermati e presenze hanno il minimo fissato dal piano e non si cambiano da qui.
+                    Confermati, presenze e chiusura vengono dal piano e non si cambiano da qui.
                 </p>
                 {stats.isAdmin ? (
                     <ObiettiviFissatoreForm salvati={stats.obiettiviSalvati} obiettivi={ob} />
@@ -339,26 +322,156 @@ function Passo({ titolo, n, sotto, evidenza = false }: { titolo: string; n: numb
     )
 }
 
-function RigaRidati({ nome, q, p, ricevuti, ricevutiPrima }: {
-    nome: string
-    q: RestituzioniPerMotivo
-    p: RestituzioniPerMotivo
+// --------------------------------------------------------------- ridati ai GDO
+
+type Gruppo = 'chatInterrotta' | 'maiRisposto' | 'totale'
+const GRUPPI: { k: Gruppo; nome: string; spiegazione: string }[] = [
+    { k: 'chatInterrotta', nome: 'Hanno smesso di rispondere', spiegazione: 'hanno scritto al bot, poi più niente' },
+    { k: 'maiRisposto', nome: 'Non hanno mai risposto', spiegazione: 'al bot non hanno mai scritto' },
+    { k: 'totale', nome: 'Totale', spiegazione: 'i due gruppi insieme' },
+]
+
+type Valore = { valore: string; dettaglio: string; prima: string; esito: Semaforo | null }
+type RigaRidati = {
+    cosa: string
+    spiegazione: string
+    cella: (g: LavoroGdo, gp: LavoroGdo) => Valore
+    obiettivo: string | null
+    fonte: string
+}
+
+function RidatiAiGdo({ q, p, ricevuti, ricevutiPrima, mesePrima }: {
+    q: LavoroDeiGdo
+    p: LavoroDeiGdo
     ricevuti: number
     ricevutiPrima: number
+    mesePrima: string
 }) {
-    const cella = (a: string, b: string) => (
-        <td className="px-4 py-3 text-right">
-            <span className="font-semibold text-brand-charcoal">{a}</span>
-            <span className="ml-1 text-xs text-ash-400">({b})</span>
-        </td>
-    )
+    const tasso = (
+        v: (g: LavoroGdo) => number | null, n: (g: LavoroGdo) => number, d: (g: LavoroGdo) => number, soglia: number | null,
+    ) => (g: LavoroGdo, gp: LavoroGdo): Valore => ({
+        valore: pct(v(g)),
+        dettaglio: `${num(n(g))} su ${num(d(g))}`,
+        prima: pct(v(gp)),
+        esito: semaforo(v(g), soglia, 'alto'),
+    })
+    const righe: RigaRidati[] = [
+        {
+            cosa: 'Ridati dal bot',
+            spiegazione: 'Lead del bot di questo mese che il bot non ha fissato e ha restituito.',
+            cella: (g, gp) => ({
+                valore: num(g.ridati),
+                dettaglio: `${pct(percentuale(g.ridati, ricevuti))} dei lead del bot`,
+                prima: `${num(gp.ridati)} (${pct(percentuale(gp.ridati, ricevutiPrima))})`,
+                esito: null,
+            }),
+            obiettivo: null,
+            fonte: '',
+        },
+        {
+            cosa: 'Passati a un GDO',
+            spiegazione: 'Ridati e dati da chiamare a un GDO. Gli altri il bot li ha parcheggiati.',
+            cella: (g, gp) => ({ valore: num(g.aUnGdo), dettaglio: `su ${num(g.ridati)} ridati`, prima: num(gp.aUnGdo), esito: null }),
+            obiettivo: null,
+            fonte: '',
+        },
+        {
+            cosa: 'Oggi senza nessun GDO',
+            spiegazione: 'Ridati che in questo momento nessuno ha da chiamare.',
+            cella: (g, gp) => ({ valore: num(g.ancoraDaChiamare), dettaglio: '', prima: num(gp.ancoraDaChiamare), esito: null }),
+            obiettivo: null,
+            fonte: '',
+        },
+        {
+            cosa: 'Fissati dai GDO',
+            spiegazione: 'Fra i passati a un GDO, quanti hanno preso un appuntamento con un GDO.',
+            cella: tasso(g => g.pctFissati, g => g.fissati, g => g.aUnGdo, null),
+            obiettivo: null,
+            fonte: 'il piano misura i GDO in appuntamenti al giorno',
+        },
+        {
+            cosa: 'Appuntamenti confermati',
+            spiegazione: 'Fra gli appuntamenti dei GDO già passati, quanti le Conferme hanno confermato.',
+            cella: tasso(g => g.pctConferma, g => g.confermati, g => g.appuntamentiPassati, PIANO_CONFERMA_GDO.linea),
+            obiettivo: pct(PIANO_CONFERMA_GDO.linea),
+            fonte: `minimo del piano per i GDO (base ${pct(PIANO_CONFERMA_GDO.base)})`,
+        },
+        {
+            cosa: 'Confermati che si presentano',
+            spiegazione: 'Fra i confermati, quanti si sono presentati alla call col venditore.',
+            cella: tasso(g => g.pctPresenza, g => g.presentatiConfermati, g => g.confermati, PIANO_PRESENZA_CONFERMATI.linea),
+            obiettivo: pct(PIANO_PRESENZA_CONFERMATI.linea),
+            fonte: `minimo del piano (base ${pct(PIANO_PRESENZA_CONFERMATI.base)})`,
+        },
+        {
+            cosa: 'Presentati che comprano',
+            spiegazione: 'Fra chi si è presentato, quanti hanno firmato.',
+            cella: (g, gp) => ({
+                ...tasso(x => x.pctClosing, x => x.chiusi, x => x.presentati, PIANO_CHIUSURA_PRESENTATI.obiettivo)(g, gp),
+                dettaglio: `${num(g.chiusi)} su ${num(g.presentati)}${g.inLavorazione > 0 ? ` · ${num(g.inLavorazione)} senza esito` : ''}`,
+            }),
+            obiettivo: pct(PIANO_CHIUSURA_PRESENTATI.obiettivo),
+            fonte: `dal piano (soglia di sicurezza ${pct(PIANO_CHIUSURA_PRESENTATI.sicurezza)})`,
+        },
+    ]
+
     return (
-        <tr>
-            <td className="px-4 py-3 font-medium text-brand-charcoal">{nome}</td>
-            {cella(num(q.totale), num(p.totale))}
-            {cella(pct(percentuale(q.totale, ricevuti)), pct(percentuale(p.totale, ricevutiPrima)))}
-            {cella(num(q.aUnGdo), num(p.aUnGdo))}
-            {cella(num(q.ancoraDaChiamare), num(p.ancoraDaChiamare))}
-        </tr>
+        <section>
+            <h2 className="mb-1 text-lg font-semibold text-brand-charcoal">I lead ridati ai GDO: come li lavorano</h2>
+            <p className="mb-3 text-sm text-ash-500">
+                Divisi per perché il bot li ha ridati. Sotto ogni numero, {nomeMese(mesePrima)}.
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-ash-200/60 bg-white shadow-soft">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-ash-100 text-left text-xs uppercase tracking-wider text-ash-500">
+                            <th className="px-4 py-3 font-semibold">Cosa misuriamo</th>
+                            {GRUPPI.map(g => (
+                                <th key={g.k} className={`px-4 py-3 text-right font-semibold ${g.k === 'totale' ? 'bg-ash-50 text-brand-charcoal' : ''}`}>
+                                    <div>{g.nome}</div>
+                                    <div className="mt-0.5 text-[11px] font-normal normal-case tracking-normal text-ash-400">{g.spiegazione}</div>
+                                </th>
+                            ))}
+                            <th className="px-4 py-3 text-right font-semibold">Obiettivo</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-ash-100">
+                        {righe.map(r => (
+                            <tr key={r.cosa} className="align-top">
+                                <td className="px-4 py-3">
+                                    <div className="font-medium text-brand-charcoal">{r.cosa}</div>
+                                    <div className="mt-0.5 text-xs text-ash-500">{r.spiegazione}</div>
+                                </td>
+                                {GRUPPI.map(g => {
+                                    const c = r.cella(q[g.k], p[g.k])
+                                    return (
+                                        <td key={g.k} className={`px-4 py-3 text-right ${g.k === 'totale' ? 'bg-ash-50' : ''}`}>
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                {c.esito ? <div className={`h-2 w-2 rounded-full ${c.esito === 'verde' ? 'bg-emerald-500' : 'bg-red-500'}`} title={c.esito === 'verde' ? 'Ok' : 'Sotto'} /> : null}
+                                                <div className={`font-bold text-brand-charcoal ${g.k === 'totale' ? 'text-lg' : 'text-base'}`}>{c.valore}</div>
+                                            </div>
+                                            {c.dettaglio ? <div className="text-xs text-ash-500">{c.dettaglio}</div> : null}
+                                            <div className="text-xs text-ash-400">{nomeMese(mesePrima)}: {c.prima}</div>
+                                        </td>
+                                    )
+                                })}
+                                <td className="px-4 py-3 text-right">
+                                    <div className="font-semibold text-brand-charcoal">{r.obiettivo ?? '-'}</div>
+                                    {r.fonte ? <div className="text-xs text-ash-400">{r.fonte}</div> : null}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="mt-2 space-y-1 text-sm text-ash-500">
+                <p>
+                    Un pallino verde vuol dire in linea con l&apos;obiettivo, rosso sotto. Se il bot aveva già fissato il lead prima di ridarlo, qui conta solo l&apos;appuntamento preso dal GDO dopo.
+                </p>
+                <p>
+                    I lead ridati negli ultimi giorni i GDO li stanno ancora chiamando, e un appuntamento entra nelle conferme solo quando la sua data è passata: questi numeri salgono nei prossimi giorni.
+                </p>
+            </div>
+        </section>
     )
 }

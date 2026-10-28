@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     percentuale, semaforo, confronto, meseDaParametro, mesePrecedente,
-    haRisposto, funnelDelBot, lineaDelPiano, eLeadEvergreen, type LeadDelBot,
+    haRisposto, funnelDelBot, lineaDelPiano, eLeadEvergreen, lavoroDeiGdo, type LeadDelBot, type LeadRidato,
 } from './statisticheFissatore'
 
 // ------------------------------------------------------------- percentuale
@@ -205,4 +205,100 @@ test('lineaDelPiano: conferme sugli appuntamenti, presenze sui confermati, chius
     assert.equal(l.chiusi, 1)
     assert.equal(l.inLavorazione, 1)
     assert.ok(Math.abs((l.pctClosing ?? 0) - 100 / 3) < 1e-9)
+})
+
+// ------------------------------------------------------------- lavoro dei GDO sui ridati
+
+const ORA = new Date('2026-10-28T12:00:00Z')
+const RIDATO_IL = new Date('2026-10-05T10:00:00Z')
+const PASSATO = new Date('2026-10-20T15:00:00Z')
+const FUTURO = new Date('2026-11-03T15:00:00Z')
+
+function ridato(over: Partial<LeadRidato> & { reason?: string | null; toGdo?: string | null } = {}): LeadRidato {
+    const { reason = 'mai_risposto', toGdo = 'gdo-1', ...resto } = over
+    return {
+        restituzione: { reason, toGdo, at: RIDATO_IL },
+        assignedToId: toGdo,
+        fissaggi: [],
+        appointmentDate: null,
+        confirmationsOutcome: null,
+        presentedAt: null,
+        salespersonOutcome: null,
+        ...resto,
+    }
+}
+const gdo = (at: Date) => ({ at, delBot: false })
+const bot = (at: Date) => ({ at, delBot: true })
+const dopo = new Date('2026-10-06T10:00:00Z')
+
+test('lavoroDeiGdo: due gruppi per motivo e totale; ridati, passati a un GDO, senza nessuno oggi', () => {
+    const r = lavoroDeiGdo([
+        ridato({ reason: 'chat_interrotta' }),
+        ridato({ reason: 'chat_interrotta', toGdo: null }),
+        ridato({ reason: 'mai_risposto' }),
+        ridato({ reason: 'mai_risposto', assignedToId: null }),
+        ridato({ reason: 'mai_risposto', toGdo: null }),
+        ridato({ reason: 'altro' }),
+    ], ORA)
+    assert.equal(r.chatInterrotta.ridati, 2)
+    assert.equal(r.chatInterrotta.aUnGdo, 1)
+    assert.equal(r.chatInterrotta.ancoraDaChiamare, 1)
+    assert.equal(r.maiRisposto.ridati, 3)
+    assert.equal(r.maiRisposto.aUnGdo, 2)
+    assert.equal(r.maiRisposto.ancoraDaChiamare, 2)
+    // Il totale è la somma dei due gruppi: altri motivi fuori.
+    assert.equal(r.totale.ridati, 5)
+    assert.equal(r.totale.aUnGdo, 3)
+    assert.equal(r.totale.ancoraDaChiamare, 3)
+})
+
+test('lavoroDeiGdo: fissati = appuntamento di un GDO dopo la restituzione, sui passati a un GDO', () => {
+    const r = lavoroDeiGdo([
+        ridato({ fissaggi: [gdo(dopo)] }),
+        // appuntamento del bot prima della restituzione: non conta
+        ridato({ fissaggi: [bot(new Date('2026-10-02T10:00:00Z'))] }),
+        // appuntamento di un GDO prima della restituzione: non conta
+        ridato({ fissaggi: [gdo(new Date('2026-10-01T10:00:00Z'))] }),
+        // fissato dal bot dopo la restituzione: non è dei GDO
+        ridato({ fissaggi: [bot(dopo)] }),
+        ridato(),
+        // non passato a un GDO: fuori dal denominatore anche se fissato
+        ridato({ toGdo: null, fissaggi: [gdo(dopo)] }),
+    ], ORA)
+    assert.equal(r.maiRisposto.aUnGdo, 5)
+    assert.equal(r.maiRisposto.fissati, 1)
+    assert.equal(r.maiRisposto.pctFissati, 20)
+})
+
+test('lavoroDeiGdo: conferme, presenze e chiusure sugli appuntamenti dei GDO già passati', () => {
+    const r = lavoroDeiGdo([
+        ridato({ fissaggi: [gdo(dopo)], appointmentDate: PASSATO, confirmationsOutcome: 'confermato', presentedAt: PASSATO, salespersonOutcome: 'Chiuso' }),
+        ridato({ fissaggi: [gdo(dopo)], appointmentDate: PASSATO, confirmationsOutcome: 'confermato', presentedAt: PASSATO, salespersonOutcome: 'Non chiuso' }),
+        ridato({ fissaggi: [gdo(dopo)], appointmentDate: PASSATO, confirmationsOutcome: 'confermato' }),
+        ridato({ fissaggi: [gdo(dopo)], appointmentDate: PASSATO, confirmationsOutcome: 'scartato' }),
+        // appuntamento non ancora passato: fissato sì, nel resto no
+        ridato({ fissaggi: [gdo(dopo)], appointmentDate: FUTURO, confirmationsOutcome: 'confermato' }),
+        // il bot lo ha rifissato dopo il GDO: l'appuntamento di oggi è del bot
+        ridato({ fissaggi: [gdo(dopo), bot(new Date('2026-10-08T10:00:00Z'))], appointmentDate: PASSATO, confirmationsOutcome: 'confermato' }),
+    ], ORA)
+    const g = r.maiRisposto
+    assert.equal(g.fissati, 6)
+    assert.equal(g.appuntamentiPassati, 4)
+    assert.equal(g.confermati, 3)
+    assert.equal(g.pctConferma, 75)
+    assert.equal(g.presentatiConfermati, 2)
+    assert.ok(Math.abs((g.pctPresenza ?? 0) - 200 / 3) < 1e-9)
+    assert.equal(g.presentati, 2)
+    assert.equal(g.chiusi, 1)
+    assert.equal(g.pctClosing, 50)
+    assert.equal(r.totale.appuntamentiPassati, 4)
+})
+
+test('lavoroDeiGdo: nessun lead, tutti i tassi null', () => {
+    const r = lavoroDeiGdo([], ORA)
+    assert.equal(r.totale.ridati, 0)
+    assert.equal(r.totale.pctFissati, null)
+    assert.equal(r.totale.pctConferma, null)
+    assert.equal(r.totale.pctPresenza, null)
+    assert.equal(r.totale.pctClosing, null)
 })

@@ -4,14 +4,14 @@
 // src/app/actions/fissatoreStatsActions.ts dopo il controllo del ruolo.
 // Tutte le letture stanno nel mese scelto e nel mese prima (Disk IO).
 
-import { aliasedTable, and, eq, exists, gte, inArray, isNull, lt, notExists, or, sql } from "drizzle-orm"
+import { aliasedTable, and, eq, exists, gte, inArray, isNotNull, isNull, lt, ne, notExists, or, sql } from "drizzle-orm"
 import { db } from "@/db"
 import { callLogs, leadEvents, leads } from "@/db/schema"
 import { monthBoundsRome } from "@/lib/dateUtils"
 import { leadVero } from "@/lib/prova/sql"
 import {
-    eLeadEvergreen, funnelDelBot, lineaDelPiano, mesePrecedente,
-    type FunnelDelBot, type LeadDelBot, type LineaDelPiano,
+    eLeadEvergreen, funnelDelBot, lavoroDeiGdo, lineaDelPiano, mesePrecedente,
+    type FunnelDelBot, type LavoroDeiGdo, type LeadDelBot, type LeadRidato, type LineaDelPiano,
 } from "./statisticheFissatore"
 
 const FENICE = 'fenice'
@@ -25,6 +25,8 @@ export interface NumeriDelMese {
     linea: LineaDelPiano
     /** Lead fissati dal bot nel mese, per data di fissaggio (evergreen). */
     appuntamentiDelMese: number
+    /** Lead della coorte A ridati dal bot e come li lavorano i GDO. */
+    ridatiAiGdo: LavoroDeiGdo
 }
 
 type Evento = { leadId: string; eventType: string; metadata: unknown; timestamp: Date }
@@ -128,14 +130,14 @@ async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
     return { perLead, log, eventi: eventiCoorte }
 }
 
-function funnelDelMese(
-    dati: Awaited<ReturnType<typeof leggiCoorteFunnel>>,
-    start: Date, end: Date,
-): FunnelDelBot {
-    // Prima restituzione per lead (oggi nessun lead ne ha più di una, audit 28/10).
-    const restituzione = new Map<string, NonNullable<LeadDelBot['restituzione']>>()
+type Coorte = Awaited<ReturnType<typeof leggiCoorteFunnel>>
+type Restituzione = NonNullable<LeadDelBot['restituzione']>
+
+/** Prima restituzione e segnali per lead (oggi nessun lead ha più di una restituzione, audit 28/10). */
+function restituzioniESegnali(eventi: Evento[]) {
+    const restituzione = new Map<string, Restituzione>()
     const segnali = new Map<string, Date[]>()
-    for (const e of dati.eventi) {
+    for (const e of eventi) {
         if (e.eventType === EVENTO_RESTITUZIONE) {
             const m = (e.metadata ?? {}) as { reason?: unknown; toGdo?: unknown }
             const cur = restituzione.get(e.leadId)
@@ -152,18 +154,102 @@ function funnelDelMese(
             segnali.set(e.leadId, arr)
         }
     }
+    return { restituzione, segnali }
+}
+
+function funnelDelMese(
+    dati: Coorte, ev: ReturnType<typeof restituzioniESegnali>,
+    start: Date, end: Date,
+): FunnelDelBot {
     const coorte: LeadDelBot[] = []
     for (const l of dati.perLead.values()) {
         if (l.at < start || l.at >= end) continue
         coorte.push({
             assegnatoIl: l.at,
             logDelBot: dati.log.get(l.leadId) ?? [],
-            restituzione: restituzione.get(l.leadId) ?? null,
-            segnali: segnali.get(l.leadId) ?? [],
+            restituzione: ev.restituzione.get(l.leadId) ?? null,
+            segnali: ev.segnali.get(l.leadId) ?? [],
             assignedToId: l.assignedToId,
         })
     }
     return funnelDelBot(coorte)
+}
+
+const BLOCCO_ID = 2000
+
+/**
+ * Per i lead della coorte ridati a un GDO: gli APPUNTAMENTO scritti da un
+ * utente che non è il bot dal primo giorno del periodo (indice leadId,
+ * createdAt) e i campi di oggi dell'appuntamento (chiave primaria). Solo i
+ * lead già trovati nella coorte, niente storico.
+ */
+async function leggiLavoroGdo(botId: string, ids: string[], da: Date) {
+    const blocchi: string[][] = []
+    for (let i = 0; i < ids.length; i += BLOCCO_ID) blocchi.push(ids.slice(i, i + BLOCCO_ID))
+    const risultati = await Promise.all(blocchi.map(b => Promise.all([
+        db.select({ leadId: callLogs.leadId, at: callLogs.createdAt })
+            .from(callLogs)
+            .where(and(
+                inArray(callLogs.leadId, b),
+                eq(callLogs.outcome, 'APPUNTAMENTO'),
+                gte(callLogs.createdAt, da),
+                isNotNull(callLogs.userId),
+                ne(callLogs.userId, botId),
+            )),
+        db.select({
+            id: leads.id,
+            appointmentDate: leads.appointmentDate,
+            confirmationsOutcome: leads.confirmationsOutcome,
+            presentedAt: leads.presentedAt,
+            salespersonOutcome: leads.salespersonOutcome,
+        })
+            .from(leads)
+            .where(inArray(leads.id, b)),
+    ])))
+    const logGdo = new Map<string, Date[]>()
+    const appuntamento = new Map<string, Omit<LeadRidato, 'restituzione' | 'assignedToId' | 'fissaggi'>>()
+    for (const [logRows, leadRows] of risultati) {
+        for (const r of logRows) {
+            const arr = logGdo.get(r.leadId) ?? []
+            arr.push(r.at)
+            logGdo.set(r.leadId, arr)
+        }
+        for (const l of leadRows) {
+            appuntamento.set(l.id, {
+                appointmentDate: l.appointmentDate,
+                confirmationsOutcome: l.confirmationsOutcome,
+                presentedAt: l.presentedAt,
+                salespersonOutcome: l.salespersonOutcome,
+            })
+        }
+    }
+    return { logGdo, appuntamento }
+}
+
+function lavoroDelMese(
+    dati: Coorte, ev: ReturnType<typeof restituzioniESegnali>, gdo: Awaited<ReturnType<typeof leggiLavoroGdo>>,
+    start: Date, end: Date, ora: Date,
+): LavoroDeiGdo {
+    const ridati: LeadRidato[] = []
+    for (const l of dati.perLead.values()) {
+        if (l.at < start || l.at >= end) continue
+        const restituzione = ev.restituzione.get(l.leadId)
+        if (!restituzione) continue
+        const app = gdo.appuntamento.get(l.leadId)
+        ridati.push({
+            restituzione,
+            assignedToId: l.assignedToId,
+            fissaggi: [
+                ...(dati.log.get(l.leadId) ?? []).filter(c => c.outcome === 'APPUNTAMENTO').map(c => ({ at: c.at, delBot: true })),
+                ...(gdo.logGdo.get(l.leadId) ?? []).map(at => ({ at, delBot: false })),
+            ],
+            appointmentDate: app?.appointmentDate ?? null,
+            confirmationsOutcome: app?.confirmationsOutcome ?? null,
+            presentedAt: app?.presentedAt ?? null,
+            salespersonOutcome: app?.salespersonOutcome ?? null,
+        })
+    }
+    return lavoroDeiGdo(ridati, ora)
 }
 
 /**
@@ -241,16 +327,18 @@ export async function calcolaNumeriFissatore(
         leggiAppuntamentiDelBot(botId, p.start, fineAppuntamenti),
         leggiFissaggiDelBot(botId, p.start, b.end),
     ])
+    const ev = restituzioniESegnali(coorte.eventi)
+    const idsAUnGdo = [...coorte.perLead.keys()].filter(id => !!ev.restituzione.get(id)?.toGdo)
+    const gdo = await leggiLavoroGdo(botId, idsAUnGdo, p.start)
+
     const linea = (start: Date, end: Date) => lineaDelPiano(appuntamenti.filter(a =>
         a.appointmentDate !== null && a.appointmentDate >= start && a.appointmentDate < end))
-    return {
-        questo: {
-            mese, funnel: funnelDelMese(coorte, b.start, b.end), linea: linea(b.start, b.end),
-            appuntamentiDelMese: appuntamentiNelPeriodo(fissaggi, b.start, b.end),
-        },
-        prima: {
-            mese: mesePrima, funnel: funnelDelMese(coorte, p.start, p.end), linea: linea(p.start, p.end),
-            appuntamentiDelMese: appuntamentiNelPeriodo(fissaggi, p.start, p.end),
-        },
-    }
+    const delMese = (m: string, x: { start: Date; end: Date }): NumeriDelMese => ({
+        mese: m,
+        funnel: funnelDelMese(coorte, ev, x.start, x.end),
+        linea: linea(x.start, x.end),
+        appuntamentiDelMese: appuntamentiNelPeriodo(fissaggi, x.start, x.end),
+        ridatiAiGdo: lavoroDelMese(coorte, ev, gdo, x.start, x.end, ora),
+    })
+    return { questo: delMese(mese, b), prima: delMese(mesePrima, p) }
 }
