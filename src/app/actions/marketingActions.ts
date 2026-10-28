@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { leadEvents, leads, marketingBudgets } from "@/db/schema";
-import { and, eq, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, gte, lte, or, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { leadIntakeAt } from '@/lib/kpi/canon';
 import { contaNeiKpi } from '@/lib/intakeBatch';
@@ -114,6 +114,7 @@ export async function getMarketingStats(monthString: string) {
         funnel: string;
         leads: number;
         leadAssegnati: number;
+        ridatiDaChiamare: number;
         apps: number;
         conferme: number;
         trattative: number;
@@ -125,6 +126,7 @@ export async function getMarketingStats(monthString: string) {
         funnel: f,
         leads: 0,
         leadAssegnati: 0,
+        ridatiDaChiamare: 0,
         apps: 0,
         conferme: 0,
         trattative: 0,
@@ -143,6 +145,11 @@ export async function getMarketingStats(monthString: string) {
         if (key && !grouped[key]) grouped[key] = rigaVuota(key);
     }
 
+    // Presi in carico = tutti i lead acquisiti (PO 2026-10-28): anche quelli
+    // che il bot ha restituito e che restano senza assegnatario in attesa di
+    // un GDO. Quelli li conta a parte "di cui ridati dal bot, da chiamare".
+    const senzaAssegnatario: { id: string; funnel: string }[] = [];
+
     for (const l of allLeads) {
         // Elenco derivato dai dati: un funnel mai visto prima crea la sua riga
         // invece di far sparire i lead (vecchia whitelist OFFICIAL_FUNNELS).
@@ -155,7 +162,8 @@ export async function getMarketingStats(monthString: string) {
         const leadAcquisitoNelMese = inMonth(leadIntakeAt(l)) && contaNeiKpi(l);
         if (leadAcquisitoNelMese) {
             g.leads++;
-            if (l.assignedToId) g.leadAssegnati++;
+            g.leadAssegnati++;
+            if (!l.assignedToId) senzaAssegnatario.push({ id: l.id, funnel: rawFunnel });
         }
 
         // App fissati: data dell'azione = appointmentCreatedAt (fallback appointmentDate per dati legacy)
@@ -180,6 +188,22 @@ export async function getMarketingStats(monthString: string) {
         if (l.appointmentDate && l.salespersonOutcome === 'Chiuso' && inMonth(l.salespersonOutcomeAt)) {
             g.close++;
             g.fatturato += l.closeAmountEur || 0;
+        }
+    }
+
+    // Ridato dal bot = evento REASSIGNED_FROM_BOT (unico modo di separarli dai
+    // lead mai toccati: il ritorno azzera callCount e status). Senza
+    // assegnatario = nessun GDO lo ha ancora in pipeline.
+    if (senzaAssegnatario.length > 0) {
+        const ridati = await db.selectDistinct({ leadId: leadEvents.leadId }).from(leadEvents).where(
+            and(
+                eq(leadEvents.eventType, 'REASSIGNED_FROM_BOT'),
+                inArray(leadEvents.leadId, senzaAssegnatario.map(s => s.id)),
+            )
+        );
+        const ridatiIds = new Set(ridati.map(r => r.leadId));
+        for (const s of senzaAssegnatario) {
+            if (ridatiIds.has(s.id)) grouped[s.funnel].ridatiDaChiamare++;
         }
     }
 

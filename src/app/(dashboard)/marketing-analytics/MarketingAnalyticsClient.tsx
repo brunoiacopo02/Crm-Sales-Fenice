@@ -9,6 +9,7 @@ type Stat = {
     funnel: string;
     leads: number;
     leadAssegnati: number;
+    ridatiDaChiamare: number;
     apps: number;
     conferme: number;
     trattative: number;
@@ -287,11 +288,10 @@ export default function MarketingAnalyticsClient({
                                 <thead className="bg-ash-50 text-ash-700 border-b border-ash-200">
                                     <tr>
                                         <th className="px-4 py-4 font-semibold">Funnel Globali</th>
-                                        <th className="px-4 py-4 font-semibold text-right" title="Tutti i lead importati nel periodo, anche quelli mai assegnati a un GDO">Lead totali</th>
-                                        <th className="px-4 py-4 font-semibold text-right" title="Lead effettivamente assegnati a un GDO per il follow-up">Presi in carico</th>
+                                        <th className="px-4 py-4 font-semibold text-right" title="Tutti i lead entrati nel periodo, al bot o ai GDO">Presi in carico</th>
+                                        <th className="px-4 py-4 font-semibold text-right" title="Lead che il bot ha restituito e che nessun GDO ha ancora in pipeline">di cui ridati dal bot, da chiamare</th>
                                         <th className="px-4 py-4 font-semibold text-right" title="Appuntamenti fissati dal team">App fissati</th>
-                                        <th className="px-4 py-4 font-semibold text-right text-orange-600" title="App fissati / Lead presi in carico — efficienza del team sui lead lavorati">% Fiss su presi</th>
-                                        <th className="px-4 py-4 font-semibold text-right text-ash-500" title="App fissati / Lead totali — conversione globale (include lead non gestiti)">% Fiss su totali</th>
+                                        <th className="px-4 py-4 font-semibold text-right text-orange-600" title="App fissati / Lead presi in carico">% Fiss su presi</th>
                                         <th className="px-4 py-4 font-semibold text-right">Conferme</th>
                                         <th className="px-4 py-4 font-semibold text-right text-ash-500">Conf %</th>
                                         <th className="px-4 py-4 font-semibold text-right">Trattative</th>
@@ -307,11 +307,10 @@ export default function MarketingAnalyticsClient({
                                     {stats.map((row) => (
                                         <tr key={row.funnel} className="hover:bg-ash-50 transition-colors">
                                             <td className="px-4 py-3 font-medium text-ash-900">{row.funnel}</td>
-                                            <td className="px-4 py-3 text-right">{row.leads}</td>
                                             <td className="px-4 py-3 text-right font-medium">{row.leadAssegnati}</td>
+                                            <td className="px-4 py-3 text-right text-ash-500">{row.ridatiDaChiamare}</td>
                                             <td className="px-4 py-3 text-right">{row.apps}</td>
                                             <td className="px-4 py-3 text-right font-semibold text-orange-600 bg-orange-50/30">{formatPercent(row.fissaggioPerc)}</td>
-                                            <td className="px-4 py-3 text-right text-ash-500 bg-ash-50/50">{formatPercent(row.appsPerc)}</td>
                                             <td className="px-4 py-3 text-right font-medium">{row.conferme}</td>
                                             <td className="px-4 py-3 text-right text-ash-500 bg-ash-50/50">{formatPercent(row.confermePerc)}</td>
                                             <td className="px-4 py-3 text-right">{row.trattative}</td>
