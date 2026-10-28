@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import { db } from '@/db';
 import { leads, users, leadEvents, notifications, botContactRequests } from '@/db/schema';
@@ -17,6 +17,7 @@ import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
 import { readSalesPipelineConfig } from '@/app/actions/salesPipelineConfigActions';
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
+import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento } from '@/lib/bot-fissatore/spostamentoGdo';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -24,7 +25,10 @@ import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 // spostamenti comunicati in chat su lead già appuntati, che il bot non può declassare.
 // CONTATTO_UMANO: il lead ha chiesto di parlare con una persona. Segnalazione
 // agli admin, nessuna transizione di stato: decide un umano a chi darla.
-const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO'] as const;
+// SPOSTAMENTO (contratto v1.8, PO 28/10/2026): il bot sposta la call di un lead GDO a
+// giorno e ora scelti dal lead in chat. Solo lead GDO, una volta sola, prossimi 3 giorni
+// lavorativi, 9-21. Regole in `lib/bot-fissatore/spostamentoGdo.ts`.
+const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO', 'SPOSTAMENTO'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
 
 interface BotOutcomeBody {
@@ -80,13 +84,13 @@ export async function POST(req: NextRequest) {
     // già `recallDate` nullo e mette il lead IN_PROGRESS.
     const recallPeriod = (body.periodo ?? '').trim();
     let date: Date | undefined;
-    if (typedOutcome === 'APPUNTAMENTO' || (typedOutcome === 'RICHIAMO' && !recallPeriod)) {
+    if (typedOutcome === 'APPUNTAMENTO' || typedOutcome === 'SPOSTAMENTO' || (typedOutcome === 'RICHIAMO' && !recallPeriod)) {
         if (!body.date) {
             return NextResponse.json({
                 error: 'bad_request',
                 detail: typedOutcome === 'RICHIAMO'
                     ? 'per RICHIAMO serve `date` (ISO con offset) oppure `periodo` (testo libero, es. "a settembre")'
-                    : 'date richiesta per APPUNTAMENTO',
+                    : `date richiesta per ${typedOutcome}`,
             }, { status: 400 });
         }
         date = new Date(body.date);
@@ -119,6 +123,11 @@ export async function POST(req: NextRequest) {
         // non saprebbe di dover riaprire lo scarto.
         confirmationsOutcome: leads.confirmationsOutcome,
         confirmationsDiscardReason: leads.confirmationsDiscardReason,
+        // SPOSTAMENTO: un lead confermato ha un venditore in calendario e non si tocca.
+        salespersonUserId: leads.salespersonUserId,
+        salespersonAssigned: leads.salespersonAssigned,
+        salespersonOutcome: leads.salespersonOutcome,
+        version: leads.version,
     }).from(leads).where(eq(leads.id, leadId)).limit(1);
 
     if (!lead) {
@@ -210,7 +219,8 @@ export async function POST(req: NextRequest) {
         // Il lead è di un GDO umano. NOTA annota e basta — bastano push o sola agenda.
         // Tutto il resto no — uno scarto o un richiamo dal bot sovrascriverebbe il
         // lavoro di chi ce l'ha in mano.
-        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO' && typedOutcome !== 'CONTATTO_UMANO') {
+        // SPOSTAMENTO passa: è fatto apposta per i lead dei GDO, con le sue regole sotto.
+        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO' && typedOutcome !== 'CONTATTO_UMANO' && typedOutcome !== 'SPOSTAMENTO') {
             return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
         }
         // APPUNTAMENTO torna al bot (vedi sotto): un appuntamento fissato è troppo
@@ -234,6 +244,98 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'not_configured', detail: 'account bot assente' }, { status: 503 });
         }
         actorUserId = botAccount.id;
+    }
+
+    // SPOSTAMENTO (contratto v1.8): il bot sposta la call di un lead GDO. A ogni rifiuto
+    // rispondiamo 409 con un `motivo`: il bot ripiega sulla nota "SPOSTAMENTO CHIESTO" di
+    // sempre, quindi un rifiuto non perde niente. Non si passa da `updateLeadOutcome`
+    // (ritimbrerebbe `appointmentCreatedAt` e l'attribuzione) e non si avvisa il bot con
+    // `notifyAppointmentToBot`: la data nuova l'ha appena decisa lui, e la callback gli
+    // arriverebbe in mezzo al turno.
+    if (typedOutcome === 'SPOSTAMENTO') {
+        const now = new Date();
+        const [giaSpostato] = await db.select({ id: leadEvents.id })
+            .from(leadEvents)
+            .where(and(
+                eq(leadEvents.leadId, leadId),
+                eq(leadEvents.eventType, 'BOT_APPOINTMENT_RESCHEDULED'),
+                sql`${leadEvents.metadata}->>'trigger' = ${SPOSTAMENTO_TRIGGER}`,
+            ))
+            .limit(1);
+        const leadCheck = checkLeadSpostabile({ ...lead, assigneeIsBot }, !!giaSpostato, now);
+        const dataCheck = leadCheck.ok ? checkDataSpostamento(date!, lead.appointmentDate, now) : leadCheck;
+        if (!dataCheck.ok) {
+            console.warn(`[bot-fissatore] SPOSTAMENTO rifiutato su lead ${leadId}: ${dataCheck.motivo}`);
+            return NextResponse.json({ error: 'spostamento_rifiutato', motivo: dataCheck.motivo }, { status: 409 });
+        }
+
+        const previous = lead.appointmentDate!;
+        const newSlot = date!;
+        // Lucchetto ottimistico su versione e data vecchia: se nel frattempo le Conferme
+        // hanno spostato o esitato il lead, non si scrive sopra al loro lavoro.
+        const updated = await db.update(leads)
+            .set({
+                appointmentDate: newSlot,
+                ...appointmentMoveStamp(previous, newSlot, now),
+                version: lead.version + 1,
+                updatedAt: now,
+            })
+            .where(and(
+                eq(leads.id, leadId),
+                eq(leads.companyId, 'fenice'),
+                eq(leads.version, lead.version),
+                eq(leads.appointmentDate, previous),
+                isNull(leads.confirmationsOutcome),
+            ))
+            .returning({ id: leads.id });
+        if (updated.length === 0) {
+            return NextResponse.json({ error: 'spostamento_rifiutato', motivo: 'conflitto' }, { status: 409 });
+        }
+
+        const testoNota = notaSpostamento(previous, newSlot, note);
+        await db.insert(leadEvents).values([
+            {
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'BOT_APPOINTMENT_RESCHEDULED',
+                userId: actorUserId,
+                timestamp: now,
+                metadata: { from: previous.toISOString(), to: newSlot.toISOString(), trigger: SPOSTAMENTO_TRIGGER, note: note ?? null },
+                companyId: 'fenice',
+            },
+            {
+                // La nota nella tab Note delle Conferme: chi chiama sa che la data è cambiata e perché.
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'BOT_NOTE',
+                userId: actorUserId,
+                timestamp: now,
+                metadata: { note: testoNota },
+                companyId: 'fenice',
+            },
+        ]).catch((e) => console.error('[bot-fissatore] SPOSTAMENTO eventi err', e));
+
+        const confermeUsers = await db.select({ id: users.id }).from(users).where(and(
+            eq(users.companyId, 'fenice'),
+            eq(users.role, 'CONFERME'),
+            eq(users.isActive, true),
+            eq(users.isTest, false),
+        ));
+        if (confermeUsers.length > 0) {
+            await db.insert(notifications).values(confermeUsers.map(u => ({
+                id: crypto.randomUUID(),
+                recipientUserId: u.id,
+                type: 'bot_appuntamento_spostato',
+                title: '🔄 Spostato dal bot',
+                body: `${lead.name}: ${testoNota}`,
+                metadata: { leadId },
+                status: 'unread',
+                createdAt: now,
+                companyId: 'fenice',
+            }))).catch((e) => console.error('[bot-fissatore] SPOSTAMENTO notify err', e));
+        }
+
+        return NextResponse.json({ ok: true, rescheduled: true, from: previous.toISOString(), to: newSlot.toISOString() });
     }
 
     // Appuntamento autofissato dal venditore (pipeline autonoma): terminale per

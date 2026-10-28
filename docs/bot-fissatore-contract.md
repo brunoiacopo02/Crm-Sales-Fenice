@@ -1,7 +1,20 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.8 — 2026-09-24. Cosa cambia rispetto alla 1.7:
+> **Versione:** 1.9 — 2026-10-28. Cosa cambia rispetto alla 1.8:
+> - **Nuovo esito `SPOSTAMENTO`: il bot sposta la call di un lead GDO.** Solo sui lead
+>   dei GDO umani (quelli dove il bot fa il postino), una volta sola, verso i prossimi 3
+>   giorni lavorativi, dalle 9:00 alle 21:00 (ora di Roma). Il CRM cambia
+>   `appointmentDate`, timbra `appointmentMovedAt`, scrive `BOT_APPOINTMENT_RESCHEDULED`
+>   (`metadata.trigger = "bot_sposta_gdo"`) e una `BOT_NOTE` "Spostato dal bot: da … a …",
+>   e avvisa le Conferme. Rifiuta con `409 spostamento_rifiutato` + `motivo` se il lead è
+>   già confermato (venditore in calendario), scartato, parcheggiato, con la call passata,
+>   già spostato una volta, o se la data è fuori finestra/fascia: il bot allora manda la
+>   nota "SPOSTAMENTO CHIESTO" di sempre. Vedi
+>   [`SPOSTAMENTO` sui lead dei GDO](#spostamento-sui-lead-dei-gdo-nuovo-in-v19).
+>   Nessun payload esistente cambia.
+>
+> Versione precedente: 1.8 — 2026-09-24. Cosa cambiava rispetto alla 1.7:
 > - **`RICHIAMO` diventa una nota, non più un richiamo.** Il payload non cambia: il CRM
 >   lo accetta ancora (`200`) e lo valida come prima (`date` ISO con offset oppure
 >   `periodo`, altrimenti `400`). Ma dal 2026-09-24 lo registra come nota in timeline
@@ -332,8 +345,8 @@ x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
 ```ts
 interface BotOutcomeBody {
   leadId:         string;     // Obbligatorio — UUID ricevuto nel push
-  outcome:        BotOutcome; // Obbligatorio — uno dei 7 valori sotto
-  date?:          string;     // Obbligatorio per APPUNTAMENTO; per RICHIAMO se manca `periodo` (ISO 8601 con offset)
+  outcome:        BotOutcome; // Obbligatorio — uno degli 8 valori sotto
+  date?:          string;     // Obbligatorio per APPUNTAMENTO e SPOSTAMENTO; per RICHIAMO se manca `periodo` (ISO 8601 con offset)
   periodo?:       string;     // v1.5 — RICHIAMO senza data certa, testo libero ("a settembre")
   note?:          string;     // Note libere sull'interazione (obbligatoria per NOTA e CONTATTO_UMANO)
   discardReason?: string;     // Motivo scarto (usato per DA_SCARTARE)
@@ -342,7 +355,7 @@ interface BotOutcomeBody {
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
 }
 
-type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA' | 'CONTATTO_UMANO';
+type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA' | 'CONTATTO_UMANO' | 'SPOSTAMENTO';
 ```
 
 ### Valori `outcome`
@@ -356,6 +369,7 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 | `INTERROTTO` | Chat **avviata ma interrotta senza obiezione ferrea** | No | **Riassegnato a un operatore umano** (round-robin) |
 | `NOTA` | **Annotazione senza cambio di stato** (es. disdetta o richiesta di spostamento su lead già appuntato) | No | Nota in timeline + **notifica al team Conferme** se il lead è appuntato. Non tocca stato, appuntamento né assegnazione |
 | `CONTATTO_UMANO` | Il lead **chiede espressamente di parlare con una persona** | No | Segnalazione in timeline + **notifica agli amministratori** (e alle Conferme se il lead è appuntato). Non tocca stato, appuntamento né assegnazione |
+| `SPOSTAMENTO` | **v1.9** — Il lead di un GDO ha scelto in chat giorno e ora nuovi per la sua call | SI | Cambia `appointmentDate` (una volta sola, prossimi 3 giorni lavorativi, 9-21), evento + nota "Spostato dal bot" + **notifica alle Conferme**. Stato e assegnazione invariati |
 
 > **Importante (cambio rispetto alla v1.0):** `NON_RISPOSTO` non scarta più il lead — lo
 > **restituisce** al CRM, che lo riassegna a un GDO umano. Il nuovo esito `INTERROTTO` ha lo
@@ -466,6 +480,48 @@ Ora conta la data:
 Il rifissaggio **non** viene contato come un fissaggio nuovo (non ritimbriamo la data di
 creazione dell'appuntamento): altrimenti un lead spostato tre volte comparirebbe tre volte
 tra gli appuntamenti presi oggi. Il campo `noteOnly` che avete proposto non serve.
+
+### `SPOSTAMENTO` sui lead dei GDO (nuovo in v1.9)
+
+Decisione PO del 28/10/2026. Sui lead dei GDO la nota "SPOSTAMENTO CHIESTO" con una data
+rende il 18% di confermati, senza data il 4%; e le Conferme si sentivano dire «ho già
+spostato col bot». Adesso il bot si fa dare giorno e ora dal lead e li scrive lui.
+
+```json
+{ "leadId": "<uuid>", "outcome": "SPOSTAMENTO", "date": "2026-10-30T18:00:00+01:00", "note": "facoltativa" }
+```
+
+Il CRM sposta solo se **tutte** queste condizioni valgono (regole in
+`src/lib/bot-fissatore/spostamentoGdo.ts`):
+
+- il lead è di un GDO umano e il bot ci ha già parlato (push riuscito o agenda recapitata,
+  come per `NOTA`); sui lead del bot si usa `APPUNTAMENTO`;
+- `status = APPOINTMENT` e la call in agenda è **nel futuro** (per le call passate resta il
+  rifissaggio con `APPUNTAMENTO`);
+- le Conferme non l'hanno ancora esitato: niente `confermato` (c'è un venditore in
+  calendario: incidente del 25/09), `scartato`, `autofissato`, né parcheggio da rifissare;
+  nessuna presenza e nessun esito del venditore;
+- il bot **non l'ha già spostato** (un evento `BOT_APPOINTMENT_RESCHEDULED` con
+  `trigger = "bot_sposta_gdo"` basta a rifiutare il secondo);
+- la data nuova è diversa dalla vecchia, cade in uno dei **prossimi 3 giorni lavorativi**
+  (oggi escluso, la domenica non conta) e **fra le 9:00 e le 21:00** di Roma, estremi
+  inclusi. Le 9 sono l'emergenza: il bot non le propone.
+
+Effetti, in un colpo solo e con lucchetto ottimistico su `version` e data vecchia:
+`appointmentDate`, `appointmentMovedAt` (la board Conferme lo tratta come un fissaggio
+nuovo), `version + 1`, `updatedAt` (il feed `/api/bot/lead-status` lo ripropone). Poi
+l'evento `BOT_APPOINTMENT_RESCHEDULED` (`from`, `to`, `trigger`), la `BOT_NOTE`
+"Spostato dal bot: da gio 29/10 alle 18:00 a ven 30/10 alle 18:00. …" nella tab Note e la
+notifica "🔄 Spostato dal bot" alle Conferme. **Non** ritimbra `appointmentCreatedAt`, non
+tocca attribuzione né stato, **non** richiama `/api/appointment-set` (la data l'ha appena
+decisa il bot, che aggiorna da solo la sua chat).
+
+Risposte: `200 { ok: true, rescheduled: true, from, to }`, oppure
+`409 { error: "spostamento_rifiutato", motivo }` con `motivo` ∈ `lead_del_bot` \|
+`senza_appuntamento` \| `call_passata` \| `confermato` \| `scartato` \| `esito_conferme` \|
+`parcheggiato` \| `gia_presentato` \| `gia_spostato` \| `data_passata` \| `domenica` \|
+`fuori_finestra` \| `fuori_fascia` \| `stessa_data` \| `conflitto`. Su qualunque risposta che
+non sia `2xx` il bot manda la `NOTA` "SPOSTAMENTO CHIESTO" di sempre.
 
 > **`NOTA` sui lead dei GDO umani (nuovo in v1.3):** da quando l'agenda parte dal canale
 > bot (Direzione 3), il bot conversa anche con lead che **non gli sono assegnati**. Su
@@ -933,11 +989,13 @@ arrotondato al minuto. Stessa validazione di `info`/`note` di `/book`.
 | `200` | — (`{ ok: true, reassigned: <userId | null> }`) | `NON_RISPOSTO`/`INTERROTTO` su un lead **non** del lancio: riassegnato via round robin AC. `reassigned: null` con `skipped: '<motivo>'` se non c'era un GDO eleggibile |
 | `200` | — (`{ ok: true, deduped: true }`) | `APPUNTAMENTO` ripetuto sullo stesso lead con la stessa data: no-op |
 | `200` | — (`{ ok: true, rescheduled: true }`) | `APPUNTAMENTO` con data diversa su un lead già `APPOINTMENT`: rifissaggio, Conferme notificate |
+| `200` | — (`{ ok: true, rescheduled: true, from, to }`) | **v1.9** — `SPOSTAMENTO` applicato su un lead GDO |
+| `409` | `spostamento_rifiutato` | **v1.9** — `SPOSTAMENTO` non applicato, `motivo` nel body (vedi [§ SPOSTAMENTO](#spostamento-sui-lead-dei-gdo-nuovo-in-v19)) |
 | `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO; `note` vuota per NOTA o CONTATTO_UMANO |
 | `401` | `invalid_signature` | Firma HMAC assente o non corrispondente |
 | `403` | `forbidden` | Lead non appartiene all'azienda `fenice` (`lead non Fenice`) |
 | `403` | `forbidden` | `lead mai passato dal bot` — nessun `BOT_PUSHED` riuscito e nessuna agenda recapitata |
-| `403` | `forbidden` | `lead non assegnato a un account bot` — esito diverso da `NOTA` / `CONTATTO_UMANO` / `APPUNTAMENTO` su un lead di un GDO umano |
+| `403` | `forbidden` | `lead non assegnato a un account bot` — esito diverso da `NOTA` / `CONTATTO_UMANO` / `APPUNTAMENTO` / `SPOSTAMENTO` su un lead di un GDO umano |
 | `403` | `forbidden` | `agenda recapitata dal bot ma lead mai lavorato da lui` — `APPUNTAMENTO` senza `BOT_PUSHED` |
 | `404` | `lead_not_found` | `leadId` non esiste nel DB |
 | `409` | `update_failed` | La transizione di stato nel CRM non è riuscita (dettaglio in `detail`) |

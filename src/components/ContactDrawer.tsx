@@ -251,6 +251,7 @@ export function ContactDrawer({
             case 'APPOINTMENT_SET': return <CalendarCheck className="h-4 w-4 text-green-500" />
             case 'BOT_NOTE': return <FileText className="h-4 w-4 text-sky-500" />
             case 'REASSIGNED_TO_BOT': return <User className="h-4 w-4 text-indigo-500" />
+            case 'BOT_APPOINTMENT_RESCHEDULED': return <CalendarCheck className="h-4 w-4 text-sky-500" />
             case 'BOT_CONTACT_REQUEST': return <Phone className="h-4 w-4 text-sky-500" />
             // Tipi neutri della timeline GDO (getLeadProfile li rinomina lato server).
             case 'CONTACT_REQUEST': return <Phone className="h-4 w-4 text-sky-500" />
@@ -279,6 +280,7 @@ export function ContactDrawer({
             case 'venditore_appointment_rescheduled': return 'Appuntamento spostato dal venditore'
             case 'BOT_NOTE': return '📋 Nota dal Fissatore'
             case 'REASSIGNED_TO_BOT': return '🤖 Lead ripreso dal Fissatore'
+            case 'BOT_APPOINTMENT_RESCHEDULED': return '🔄 Appuntamento spostato dal Fissatore'
             case 'BOT_CONTACT_REQUEST': return '☎️ Richiesta di contatto umano'
             case 'INBOUND_MESSAGE': return '💬 Ha scritto lui su WhatsApp'
             case 'LANCIO_INTAKE': return '🚀 Ingresso nel lancio Web Dev AI'
