@@ -11,13 +11,6 @@
 import { toRomeDateStr } from '../dateUtils';
 import { nextWorkDayRome } from './boardWindow';
 
-/**
- * Regola TEMPORANEA: lunedì 26/10/2026 le Conferme attaccano alle 13, quindi le
- * call del mattino non si possono confermare. Togliere dopo il 27/10 (stessa
- * regola del bot in lib/booking-slots.ts).
- */
-export const MATTINE_PRENOTABILI_DAL = '2026-10-27';
-
 export function appointmentSlotWarning(dateStr: string, now: Date): string | null {
     const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(dateStr || '');
     if (!m) return null;
@@ -36,8 +29,6 @@ export function appointmentSlotWarning(dateStr: string, now: Date): string | nul
     // Mezzogiorno UTC: il giorno di Roma coincide con quello UTC.
     const day2 = nextWorkDayRome(new Date(`${day1}T12:00:00Z`));
     if (day !== day1 && day !== day2) return "Data troppo lontana: fissa per domani o dopodomani, dalle 10:00 alle 21:00.";
-
-    if (day < MATTINE_PRENOTABILI_DAL && h < 15) return "Lunedì 26 le Conferme attaccano alle 13: fissa dalle 15:00 alle 21:00.";
 
     if (h >= 10 && h <= 21) return null;
     if (h >= 9 && h < 10) return "Le 9:00 solo se il lead non può in nessun altro orario: la fascia giusta è dalle 10:00 alle 21:00.";
