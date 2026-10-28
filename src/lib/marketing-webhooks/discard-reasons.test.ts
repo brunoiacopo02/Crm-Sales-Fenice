@@ -47,6 +47,10 @@ describe('discardReasonCode', () => {
         test('anche l auto-scarto delle Conferme e irreperibilita', () => {
             assert.strictEqual(discardReasonCode('3 NR consecutivi'), 'UNREACHABLE');
         });
+
+        test('la disdetta verificata dal bot e un non interessato', () => {
+            assert.strictEqual(discardReasonCode('Disdetta in chat (verificata dal bot)'), 'NOT_INTERESTED');
+        });
     });
 
     describe('robustezza', () => {

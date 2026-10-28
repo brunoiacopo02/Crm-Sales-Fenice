@@ -18,6 +18,8 @@ import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
 import { readSalesPipelineConfig } from '@/app/actions/salesPipelineConfigActions';
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento } from '@/lib/bot-fissatore/spostamentoGdo';
+import { DISDETTA_VERIFICATA_REASON, buildDisdettaVerificataNote, valutaScartoDisdetta } from '@/lib/bot-fissatore/disdettaVerificata';
+import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -28,7 +30,10 @@ import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpo
 // SPOSTAMENTO (contratto v1.8, PO 28/10/2026): il bot sposta la call di un lead GDO a
 // giorno e ora scelti dal lead in chat. Solo lead GDO, una volta sola, prossimi 3 giorni
 // lavorativi, 9-21. Regole in `lib/bot-fissatore/spostamentoGdo.ts`.
-const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO', 'SPOSTAMENTO'] as const;
+// DISDETTA_VERIFICATA (contratto v1.10, PO 28/10/2026): il giudice del bot ha verificato
+// che il lead in chat ha disdetto davvero. Scarta il lead dalle Conferme come uno scarto a
+// mano (vedi `lib/bot-fissatore/disdettaVerificata.ts`), recuperabile con "Annulla scarto".
+const VALID_OUTCOMES = ['APPUNTAMENTO', 'DA_SCARTARE', 'RICHIAMO', 'NON_RISPOSTO', 'INTERROTTO', 'NOTA', 'CONTATTO_UMANO', 'SPOSTAMENTO', 'DISDETTA_VERIFICATA'] as const;
 type BotOutcome = typeof VALID_OUTCOMES[number];
 
 interface BotOutcomeBody {
@@ -46,6 +51,8 @@ interface BotOutcomeBody {
     // RICHIAMO (contratto v1.5): quando il lead dice "ci risentiamo a settembre"
     // non esiste un istante da scrivere. Alternativa a `date`, non aggiunta.
     periodo?: string;
+    // DISDETTA_VERIFICATA (contratto v1.10): il verdetto del giudice del bot.
+    disdetta?: { categoria?: string; citazione?: string; motivo?: string };
 }
 
 export async function POST(req: NextRequest) {
@@ -220,7 +227,9 @@ export async function POST(req: NextRequest) {
         // Tutto il resto no — uno scarto o un richiamo dal bot sovrascriverebbe il
         // lavoro di chi ce l'ha in mano.
         // SPOSTAMENTO passa: è fatto apposta per i lead dei GDO, con le sue regole sotto.
-        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO' && typedOutcome !== 'CONTATTO_UMANO' && typedOutcome !== 'SPOSTAMENTO') {
+        // DISDETTA_VERIFICATA passa con la soglia bassa, come NOTA: non tocca stato,
+        // assegnazione né appuntamento, solo l'esito delle Conferme, ed e' recuperabile.
+        if (typedOutcome !== 'NOTA' && typedOutcome !== 'APPUNTAMENTO' && typedOutcome !== 'CONTATTO_UMANO' && typedOutcome !== 'SPOSTAMENTO' && typedOutcome !== 'DISDETTA_VERIFICATA') {
             return NextResponse.json({ error: 'forbidden', detail: 'lead non assegnato a un account bot' }, { status: 403 });
         }
         // APPUNTAMENTO torna al bot (vedi sotto): un appuntamento fissato è troppo
@@ -244,6 +253,89 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'not_configured', detail: 'account bot assente' }, { status: 503 });
         }
         actorUserId = botAccount.id;
+    }
+
+    // DISDETTA_VERIFICATA: scarto dalle Conferme deciso dal giudice del bot. Mai un
+    // errore verso il bot quando non si scarta: `discarded: false` + `skipped`, e il bot
+    // ripiega sulla nota DISDETTA di sempre (tranne `gia_scartato_disdetta`, che e'
+    // il re-invio dello stesso scarto).
+    if (typedOutcome === 'DISDETTA_VERIFICATA') {
+        const disdetta = (body.disdetta && typeof body.disdetta === 'object') ? body.disdetta : {};
+        const testo = (note ?? '').trim() || (disdetta.citazione ?? '').trim();
+        if (!testo) {
+            return NextResponse.json({ error: 'bad_request', detail: 'note (o disdetta.citazione) richiesta per DISDETTA_VERIFICATA' }, { status: 400 });
+        }
+        const verdict = valutaScartoDisdetta(lead);
+        if (!verdict.ok) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'BOT_DISDETTA_NON_SCARTATA',
+                userId: actorUserId,
+                timestamp: new Date(),
+                metadata: { motivo: verdict.motivo, categoria: disdetta.categoria ?? null, citazione: disdetta.citazione ?? testo },
+                companyId: 'fenice',
+            }).catch((e) => console.error('[bot-fissatore] DISDETTA_NON_SCARTATA event err', e));
+            return NextResponse.json({ ok: true, discarded: false, skipped: verdict.motivo });
+        }
+        const now = new Date();
+        const updated = await db.update(leads)
+            .set({
+                confirmationsOutcome: 'scartato',
+                confirmationsDiscardReason: DISDETTA_VERIFICATA_REASON,
+                confirmationsUserId: actorUserId,
+                confirmationsTimestamp: now,
+                version: lead.version + 1,
+                updatedAt: now,
+            })
+            .where(and(
+                eq(leads.id, leadId),
+                eq(leads.companyId, 'fenice'),
+                eq(leads.version, lead.version),
+                isNull(leads.confirmationsOutcome),
+            ))
+            .returning({ id: leads.id });
+        if (updated.length === 0) {
+            return NextResponse.json({ ok: true, discarded: false, skipped: 'conflitto' });
+        }
+        const nota = buildDisdettaVerificataNote({ citazione: disdetta.citazione, categoria: disdetta.categoria, note: testo });
+        await db.insert(leadEvents).values([
+            {
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'BOT_DISDETTA_SCARTO',
+                userId: actorUserId,
+                timestamp: now,
+                metadata: {
+                    reason: DISDETTA_VERIFICATA_REASON,
+                    categoria: disdetta.categoria ?? null,
+                    citazione: disdetta.citazione ?? null,
+                    motivoGiudice: disdetta.motivo ?? null,
+                    appointmentDate: lead.appointmentDate ? lead.appointmentDate.toISOString() : null,
+                },
+                companyId: 'fenice',
+            },
+            // Nella tab Note delle Conferme, come le altre note del bot. Niente
+            // notifica: lo scopo e' proprio che nessuno debba piu' occuparsene.
+            {
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'BOT_NOTE',
+                userId: actorUserId,
+                timestamp: now,
+                metadata: { note: nota },
+                companyId: 'fenice',
+            },
+        ]).catch((e) => console.error('[bot-fissatore] DISDETTA_SCARTO events err', e));
+        await enqueueMarketingWebhook({ eventType: 'appointment.outcome', leadId, actorUserId })
+            .catch((e: unknown) => console.error('[bot-fissatore] webhook appointment.outcome (disdetta) err', e));
+        await enqueueMarketingWebhook({
+            eventType: 'lead.rejected',
+            leadId,
+            actorUserId,
+            rejection: { stage: 'CONFERME', automatic: true, byBot: true },
+        }).catch((e: unknown) => console.error('[bot-fissatore] webhook lead.rejected (disdetta) err', e));
+        return NextResponse.json({ ok: true, discarded: true });
     }
 
     // SPOSTAMENTO (contratto v1.8): il bot sposta la call di un lead GDO. A ogni rifiuto
@@ -552,7 +644,11 @@ export async function POST(req: NextRequest) {
                     id: crypto.randomUUID(),
                     recipientUserId: u.id,
                     type: 'bot_note',
-                    title: '📋 Nota dal Fissatore',
+                    // Lead scartato in automatico per disdetta che riscrive: la nota
+                    // può voler dire che ci ha ripensato, e il lead non è in board.
+                    title: lead.confirmationsOutcome === 'scartato' && lead.confirmationsDiscardReason === DISDETTA_VERIFICATA_REASON
+                        ? '📋 Nota su un lead scartato per disdetta: da recuperare?'
+                        : '📋 Nota dal Fissatore',
                     body: `${lead.name}: ${text.length > 200 ? text.slice(0, 200) + '…' : text}`,
                     metadata: { leadId },
                     status: 'unread',

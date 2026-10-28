@@ -1,7 +1,19 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.9 — 2026-10-28. Cosa cambia rispetto alla 1.8:
+> **Versione:** 1.10 — 2026-10-28. Cosa cambia rispetto alla 1.9:
+> - **Nuovo esito `DISDETTA_VERIFICATA`** (solo aggiunta, ogni payload v1.9 resta valido).
+>   Sui lead dei GDO il bot, quando sta per mandare la nota "DISDETTA", fa giudicare la
+>   chat da una chiamata separata al modello (il "giudice", `lib/giudice-disdetta.ts` nel
+>   repo del bot). Solo se il verdetto è `disdetta_vera` manda questo esito, e il CRM
+>   **scarta il lead dalle Conferme** come uno scarto a mano: `confirmationsOutcome =
+>   'scartato'`, motivo `"Disdetta in chat (verificata dal bot)"`, nota in timeline con
+>   categoria e parole del lead. Recuperabile con "Annulla scarto". Ogni altro verdetto,
+>   un errore o un timeout → la nota DISDETTA di sempre. Interruttore lato bot
+>   `GIUDICE_DISDETTE_ENABLED` (assente = acceso, `'0'` = spento). Vedi
+>   [`DISDETTA_VERIFICATA`](#disdetta_verificata-nuovo-in-v110).
+>
+> Versione precedente: 1.9 — 2026-10-28. Cosa cambiava rispetto alla 1.8:
 > - **Nuovo esito `SPOSTAMENTO`: il bot sposta la call di un lead GDO.** Solo sui lead
 >   dei GDO umani (quelli dove il bot fa il postino), una volta sola, verso i prossimi 3
 >   giorni lavorativi, dalle 9:00 alle 21:00 (ora di Roma). Il CRM cambia
@@ -350,12 +362,13 @@ interface BotOutcomeBody {
   periodo?:       string;     // v1.5 — RICHIAMO senza data certa, testo libero ("a settembre")
   note?:          string;     // Note libere sull'interazione (obbligatoria per NOTA e CONTATTO_UMANO)
   discardReason?: string;     // Motivo scarto (usato per DA_SCARTARE)
+  disdetta?:      { categoria?: string; citazione?: string; motivo?: string }; // v1.10 — DISDETTA_VERIFICATA
   motivo?:        string;     // v1.5 — CONTATTO_UMANO: categoria chiusa del motivo
   info?:          object;     // v1.5 — CONTATTO_UMANO: contesto sul lead (vedi sotto)
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
 }
 
-type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA' | 'CONTATTO_UMANO' | 'SPOSTAMENTO';
+type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA' | 'CONTATTO_UMANO' | 'SPOSTAMENTO' | 'DISDETTA_VERIFICATA'; // v1.9: SPOSTAMENTO, v1.10: DISDETTA_VERIFICATA
 ```
 
 ### Valori `outcome`
@@ -370,6 +383,7 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 | `NOTA` | **Annotazione senza cambio di stato** (es. disdetta o richiesta di spostamento su lead già appuntato) | No | Nota in timeline + **notifica al team Conferme** se il lead è appuntato. Non tocca stato, appuntamento né assegnazione |
 | `CONTATTO_UMANO` | Il lead **chiede espressamente di parlare con una persona** | No | Segnalazione in timeline + **notifica agli amministratori** (e alle Conferme se il lead è appuntato). Non tocca stato, appuntamento né assegnazione |
 | `SPOSTAMENTO` | **v1.9** — Il lead di un GDO ha scelto in chat giorno e ora nuovi per la sua call | SI | Cambia `appointmentDate` (una volta sola, prossimi 3 giorni lavorativi, 9-21), evento + nota "Spostato dal bot" + **notifica alle Conferme**. Stato e assegnazione invariati |
+| `DISDETTA_VERIFICATA` | **v1.10** — Disdetta in chat **verificata dal giudice** del bot (solo lead appuntati) | No | **Scarto dalle Conferme** (`confirmationsOutcome='scartato'`, motivo "Disdetta in chat (verificata dal bot)"), nota in timeline, nessuna notifica. Recuperabile con "Annulla scarto" |
 
 > **Importante (cambio rispetto alla v1.0):** `NON_RISPOSTO` non scarta più il lead — lo
 > **restituisce** al CRM, che lo riassegna a un GDO umano. Il nuovo esito `INTERROTTO` ha lo
@@ -445,6 +459,45 @@ un fastidio ma una richiesta persa è un lead perso.
 ma in coda resta **una sola riga per lead**: la riemissione aggiorna il motivo di quella
 riga e ne incrementa il contatore, non ne crea una seconda. Una richiesta già gestita non
 si riapre: se il lead torna a chiedere dopo giorni, torna in cima come richiesta nuova.
+
+### `DISDETTA_VERIFICATA` (nuovo in v1.10)
+
+Decisione PO del 28/10/2026. Le disdette scritte in chat sui lead dei GDO arrivavano come
+`NOTA` "DISDETTA" e le Conferme chiamavano lo stesso: sui dati del 28/10, 206 disdette
+vere con la call passata → 0 presenti. Ma un messaggio "da disdetta" su tre era uno
+spostamento o altro, e alcuni di quei lead si sono presentati e hanno comprato. Per questo
+lo scarto lo decide un giudice separato, prudente per costruzione: nel dubbio non scarta.
+
+```json
+{
+  "leadId": "…",
+  "outcome": "DISDETTA_VERIFICATA",
+  "note": "non sono più interessata, annullate pure",
+  "disdetta": { "categoria": "ripensamento", "citazione": "non sono più interessata, annullate pure", "motivo": "rinuncia esplicita senza aperture" }
+}
+```
+
+- `note` (o `disdetta.citazione`) è obbligatoria: sono le parole del lead. `400` se mancano entrambe.
+- `categoria` ∈ `soldi` · `non_fa_per_me` · `ripensamento` · `tempo` · `personale_salute` · `pensava_gratis` · `spostamento` · `altro`.
+- Autorizzazione: come `NOTA` (soglia bassa: `BOT_PUSHED` riuscito **o** agenda recapitata dal bot).
+- **Il CRM scarta solo se** il lead è `APPOINTMENT`, non è autofissato, non ha già un esito
+  Conferme (né confermato né scartato), non ha venditore assegnato, esito venditore o
+  presenza, ha una data e **la call non è passata da più di 24 ore**. Altrimenti risponde
+  `200 { ok: true, discarded: false, skipped }` con `skipped` ∈ `non_appuntato` ·
+  `autofissato` · `gia_scartato_disdetta` · `gia_scartato` · `gia_confermato` ·
+  `venditore_assegnato` · `esito_venditore` · `presentato` · `senza_data` · `call_passata` ·
+  `conflitto`, e scrive un evento `BOT_DISDETTA_NON_SCARTATA`.
+- Su `discarded: false` il bot manda la nota DISDETTA di sempre, così le Conferme sono
+  informate come prima. Unica eccezione `gia_scartato_disdetta`: è il re-invio dello
+  stesso scarto, niente nota.
+- Scarto riuscito → `200 { ok: true, discarded: true }`, eventi `BOT_DISDETTA_SCARTO` e
+  `BOT_NOTE` (tab Note delle Conferme), webhook marketing `appointment.outcome` e
+  `lead.rejected` (`stage: CONFERME`, `automatic: true`, `byBot: true`, causale
+  `NOT_INTERESTED`). Nessuna notifica: lo scopo è che nessuno debba occuparsene. Se poi
+  il lead riscrive e arriva una `NOTA`, la campanella delle Conferme dice "Nota su un
+  lead scartato per disdetta: da recuperare?".
+- Lato bot vale **solo sui lead dei GDO** (canale solo-nota): i dati del collaudo sono
+  solo su quelli. Sulle call fissate dal bot stesso resta tutto com'era.
 
 ### `RICHIAMO` senza data certa (nuovo in v1.5)
 
@@ -553,8 +606,8 @@ non sia `2xx` il bot manda la `NOTA` "SPOSTAMENTO CHIESTO" di sempre.
 | Assegnatario del lead | Prova di provenienza | Esiti ammessi |
 |---|---|---|
 | account bot | — | tutti |
-| GDO umano | `BOT_PUSHED` riuscito | `NOTA`, `CONTATTO_UMANO`, `APPUNTAMENTO` |
-| GDO umano | solo agenda recapitata | `NOTA`, `CONTATTO_UMANO` |
+| GDO umano | `BOT_PUSHED` riuscito | `NOTA`, `CONTATTO_UMANO`, `APPUNTAMENTO`, `DISDETTA_VERIFICATA` (v1.10) |
+| GDO umano | solo agenda recapitata | `NOTA`, `CONTATTO_UMANO`, `DISDETTA_VERIFICATA` (v1.10) |
 | GDO umano | nessuna | nessuno (403) |
 
 > **Eccezione sui lead che hanno già prodotto storico.** Se il lead ha già una presenza
@@ -991,11 +1044,13 @@ arrotondato al minuto. Stessa validazione di `info`/`note` di `/book`.
 | `200` | — (`{ ok: true, rescheduled: true }`) | `APPUNTAMENTO` con data diversa su un lead già `APPOINTMENT`: rifissaggio, Conferme notificate |
 | `200` | — (`{ ok: true, rescheduled: true, from, to }`) | **v1.9** — `SPOSTAMENTO` applicato su un lead GDO |
 | `409` | `spostamento_rifiutato` | **v1.9** — `SPOSTAMENTO` non applicato, `motivo` nel body (vedi [§ SPOSTAMENTO](#spostamento-sui-lead-dei-gdo-nuovo-in-v19)) |
+| `200` | — (`{ ok: true, discarded: true }`) | **v1.10** — `DISDETTA_VERIFICATA`: lead scartato dalle Conferme |
+| `200` | — (`{ ok: true, discarded: false, skipped }`) | **v1.10** — `DISDETTA_VERIFICATA` non applicata (valori di `skipped` nella sezione dedicata): il bot manda la nota di sempre |
 | `400` | `bad_request` | `leadId` o `outcome` mancanti/non validi; `date` assente, non ISO 8601, o priva di offset di fuso orario per APPUNTAMENTO/RICHIAMO; `note` vuota per NOTA o CONTATTO_UMANO |
 | `401` | `invalid_signature` | Firma HMAC assente o non corrispondente |
 | `403` | `forbidden` | Lead non appartiene all'azienda `fenice` (`lead non Fenice`) |
 | `403` | `forbidden` | `lead mai passato dal bot` — nessun `BOT_PUSHED` riuscito e nessuna agenda recapitata |
-| `403` | `forbidden` | `lead non assegnato a un account bot` — esito diverso da `NOTA` / `CONTATTO_UMANO` / `APPUNTAMENTO` / `SPOSTAMENTO` su un lead di un GDO umano |
+| `403` | `forbidden` | `lead non assegnato a un account bot` — esito diverso da `NOTA` / `CONTATTO_UMANO` / `APPUNTAMENTO` / `SPOSTAMENTO` / `DISDETTA_VERIFICATA` su un lead di un GDO umano |
 | `403` | `forbidden` | `agenda recapitata dal bot ma lead mai lavorato da lui` — `APPUNTAMENTO` senza `BOT_PUSHED` |
 | `404` | `lead_not_found` | `leadId` non esiste nel DB |
 | `409` | `update_failed` | La transizione di stato nel CRM non è riuscita (dettaglio in `detail`) |

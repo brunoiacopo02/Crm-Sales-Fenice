@@ -36,6 +36,8 @@ const BY_REASON: Record<string, DiscardReasonCode> = {
     'posticipa senza data': 'POSTPONED_NO_DATE',
     'attaccato in faccia': 'HUNG_UP',
     '3 nr consecutivi': 'UNREACHABLE',
+    // Scarto automatico delle Conferme deciso dal giudice disdette del bot (v1.10).
+    'disdetta in chat (verificata dal bot)': 'NOT_INTERESTED',
 };
 
 /**
