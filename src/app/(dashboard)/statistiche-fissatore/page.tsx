@@ -5,7 +5,7 @@ import { getStatisticheFissatore } from '@/app/actions/fissatoreStatsActions'
 import { conRuoloDb } from '@/lib/auth/ruoloDb'
 import { confronto, mesePrecedente, percentuale, semaforo, type Direzione, type RestituzioniPerMotivo, type Semaforo } from '@/lib/bot-fissatore/statisticheFissatore'
 import {
-    PIANO_CONFERMA_BOT, PIANO_PRESENZA_CONFERMATI, TESTO_FONTE, DIREZIONE_OBIETTIVI,
+    PIANO_CONFERMA_BOT, PIANO_PRESENZA_CONFERMATI, DIREZIONE_OBIETTIVI, obiettivoInProporzione, testoFonte,
     type ChiaveObiettivo, type ObiettivoRisolto,
 } from '@/lib/bot-fissatore/obiettiviFissatore'
 import { ObiettiviFissatoreForm } from './ObiettiviFissatoreForm'
@@ -68,7 +68,7 @@ function RigaObiettivo({ o }: { o: ObiettivoRisolto }) {
     return (
         <div className="mt-2 text-xs text-ash-600">
             Obiettivo <span className="font-semibold text-brand-charcoal">{pct(o.valore)}</span>
-            <span className="text-ash-400"> · {TESTO_FONTE[o.fonte]}</span>
+            <span className="text-ash-400"> · {testoFonte(o)}</span>
         </div>
     )
 }
@@ -113,6 +113,8 @@ export default async function StatisticheFissatorePage({
     const puoAvanti = meseSucc <= stats.meseCorrente
 
     const sem = (k: ChiaveObiettivo, v: number | null) => semaforo(v, ob[k].valore, DIREZIONE_OBIETTIVI[k])
+    const obApp = ob.appuntamenti
+    const propApp = obApp.valore === null ? null : obiettivoInProporzione(obApp.valore, stats.mese, new Date(stats.calcolatoIl))
 
     return (
         <div className="space-y-8 p-6 lg:p-8">
@@ -158,19 +160,43 @@ export default async function StatisticheFissatorePage({
                 </div>
             </div>
 
+            <p className="-mt-4 text-xs text-ash-500">Solo lead evergreen: lanci e database esclusi.</p>
+
             {/* A. Funnel del bot */}
             <section>
                 <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-ash-700">
                     <Target className="h-4 w-4 text-brand-orange" /> Funnel del bot
                 </h2>
                 <p className="mb-3 text-xs text-ash-500">
-                    I lead dati al bot nel mese (prima assegnazione). Lead di prova e del lancio esclusi.
+                    I lead dati al bot nel mese (prima assegnazione).
                     La risposta conta solo finché il lead è del bot, prima che lo restituisca.
                     I lead degli ultimi giorni sono ancora in lavorazione: i loro tassi crescono nei giorni dopo.
                 </p>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     <Card label="Lead ricevuti" value={num(fq.ricevuti)}>
                         <Delta d={confronto(fq.ricevuti, fp.ricevuti)} tasso={false} mesePrima={mesePrima} />
+                    </Card>
+                    <Card
+                        label="Appuntamenti del bot nel mese"
+                        value={num(q.appuntamentiDelMese)}
+                        s={propApp ? semaforo(q.appuntamentiDelMese, propApp.valore, 'alto') : null}
+                    >
+                        <Delta d={confronto(q.appuntamentiDelMese, p.appuntamentiDelMese)} tasso={false} mesePrima={mesePrima} />
+                        <div className="mt-0.5 text-xs text-ash-400">per data di fissaggio, un lead conta una volta</div>
+                        {obApp.valore === null || !propApp ? (
+                            <div className="mt-2 text-xs text-ash-400">Obiettivo: da impostare</div>
+                        ) : (
+                            <div className="mt-2 text-xs text-ash-600">
+                                Obiettivo <span className="font-semibold text-brand-charcoal">{num(obApp.valore)}</span> al mese
+                                <span className="text-ash-400"> · {testoFonte(obApp)}</span>
+                                {propApp.inCorso ? (
+                                    <div className="mt-0.5 text-ash-500">
+                                        Mese in corso: in proporzione ai giorni passati ({propApp.giorniTrascorsi} su {propApp.giorniMese})
+                                        {' '}l&apos;obiettivo a oggi è <span className="font-semibold text-brand-charcoal">{num(Math.round(propApp.valore))}</span>
+                                    </div>
+                                ) : null}
+                            </div>
+                        )}
                     </Card>
                     <Card label="% che risponde" value={pct(fq.pctRisposta)} s={sem('risposta', fq.pctRisposta)}>
                         <Delta d={confronto(fq.pctRisposta, fp.pctRisposta)} tasso mesePrima={mesePrima} />
@@ -228,7 +254,7 @@ export default async function StatisticheFissatorePage({
                     <CalendarCheck className="h-4 w-4 text-brand-orange" /> Linea del piano
                 </h2>
                 <p className="mb-3 text-xs text-ash-500">
-                    Gli appuntamenti fissati dal bot con data nel mese e già passati. Lanci esclusi.
+                    Gli appuntamenti fissati dal bot con data nel mese e già passati.
                     Verde = alla linea del piano o sopra, rosso = sotto.
                 </p>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

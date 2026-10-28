@@ -1,7 +1,8 @@
 // Obiettivi della pagina /statistiche-fissatore: la linea del piano (fissa nel
-// codice) e i quattro obiettivi del funnel del bot (default nel codice, valore
+// codice) e gli obiettivi del funnel del bot (default nel codice, valore
 // dell'admin in appSettings che vince sempre).
 
+import { toRomeDateStr } from '@/lib/dateUtils'
 import type { Direzione } from './statisticheFissatore'
 
 /** Chiave di appSettings con gli obiettivi scritti dall'admin (JSON). */
@@ -16,10 +17,14 @@ export const PIANO_CONFERMA_BOT = { linea: 18.6, base: 19.1 } as const
 /** Confermati presentati ÷ confermati con appuntamento passato (nel piano vale per tutti i confermati). */
 export const PIANO_PRESENZA_CONFERMATI = { linea: 85, base: 88.6 } as const
 
-export const CHIAVI_OBIETTIVI = ['risposta', 'fissaggioTotale', 'fissaggioRisposti', 'restituzione'] as const
+export const CHIAVI_OBIETTIVI = ['appuntamenti', 'risposta', 'fissaggioTotale', 'fissaggioRisposti', 'restituzione'] as const
 export type ChiaveObiettivo = typeof CHIAVI_OBIETTIVI[number]
 
+/** Le chiavi che sono percentuali (0-100); le altre sono conteggi interi. */
+export const OBIETTIVI_PERCENTUALI: readonly ChiaveObiettivo[] = ['risposta', 'fissaggioTotale', 'fissaggioRisposti', 'restituzione']
+
 export const ETICHETTE_OBIETTIVI: Record<ChiaveObiettivo, string> = {
+    appuntamenti: 'Appuntamenti del bot nel mese',
     risposta: '% che risponde',
     fissaggioTotale: '% fissaggio sul totale',
     fissaggioRisposti: '% fissaggio su chi risponde',
@@ -27,31 +32,42 @@ export const ETICHETTE_OBIETTIVI: Record<ChiaveObiettivo, string> = {
 }
 
 export const DIREZIONE_OBIETTIVI: Record<ChiaveObiettivo, Direzione> = {
+    appuntamenti: 'alto',
     risposta: 'alto',
     fissaggioTotale: 'alto',
     fissaggioRisposti: 'alto',
     restituzione: 'basso',
 }
 
-export type FonteDefault = 'piano' | 'miglior_mese'
+export type FonteDefault = 'piano' | 'base_piano' | 'miglior_mese'
 export type FonteObiettivo = FonteDefault | 'admin'
 
-export type ObiettiviDefault = Record<ChiaveObiettivo, { valore: number | null; fonte: FonteDefault }>
+export type ObiettivoDefault = { valore: number | null; fonte: FonteDefault; dettaglio?: string }
+export type ObiettiviDefault = Record<ChiaveObiettivo, ObiettivoDefault>
 export type ObiettiviSalvati = Partial<Record<ChiaveObiettivo, number>>
-export type ObiettivoRisolto = { valore: number; fonte: FonteObiettivo } | { valore: null; fonte: null }
+export type ObiettivoRisolto =
+    | { valore: number; fonte: FonteObiettivo; dettaglio?: string }
+    | { valore: null; fonte: null }
 export type ObiettiviRisolti = Record<ChiaveObiettivo, ObiettivoRisolto>
 
 export const TESTO_FONTE: Record<FonteObiettivo, string> = {
     piano: 'dal piano',
+    base_piano: 'base del piano (1/8-14/9)',
     miglior_mese: 'miglior mese del bot',
     admin: "scritto dall'admin",
 }
 
-function valido(n: unknown): n is number {
-    return typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 100
+/** "dal piano (§8.2)", "miglior mese del bot (agosto)", "scritto dall'admin". */
+export function testoFonte(o: { valore?: number | null; fonte: FonteObiettivo; dettaglio?: string }): string {
+    return o.dettaglio ? `${TESTO_FONTE[o.fonte]} (${o.dettaglio})` : TESTO_FONTE[o.fonte]
 }
 
-/** Il JSON di appSettings: tiene solo le chiavi note con un numero 0-100. */
+function valido(k: ChiaveObiettivo, n: unknown): n is number {
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return false
+    return OBIETTIVI_PERCENTUALI.includes(k) ? n <= 100 : Number.isInteger(n)
+}
+
+/** Il JSON di appSettings: tiene solo le chiavi note con un numero valido. */
 export function leggiObiettiviSalvati(raw: string | null | undefined): ObiettiviSalvati {
     if (!raw) return {}
     let v: unknown
@@ -60,7 +76,7 @@ export function leggiObiettiviSalvati(raw: string | null | undefined): Obiettivi
     const out: ObiettiviSalvati = {}
     for (const k of CHIAVI_OBIETTIVI) {
         const n = (v as Record<string, unknown>)[k]
-        if (valido(n)) out[k] = n
+        if (valido(k, n)) out[k] = n
     }
     return out
 }
@@ -70,8 +86,9 @@ export function risolviObiettivi(salvati: ObiettiviSalvati, def: ObiettiviDefaul
     const out = {} as ObiettiviRisolti
     for (const k of CHIAVI_OBIETTIVI) {
         const s = salvati[k]
+        const d = def[k]
         if (s !== undefined) out[k] = { valore: s, fonte: 'admin' }
-        else if (def[k].valore !== null) out[k] = { valore: def[k].valore as number, fonte: def[k].fonte }
+        else if (d.valore !== null) out[k] = d.dettaglio ? { valore: d.valore, fonte: d.fonte, dettaglio: d.dettaglio } : { valore: d.valore, fonte: d.fonte }
         else out[k] = { valore: null, fonte: null }
     }
     return out
@@ -86,8 +103,27 @@ export function validaObiettivi(input: Record<ChiaveObiettivo, string>): EsitoVa
         const t = String(input[k] ?? '').trim().replace(',', '.')
         if (t === '') continue
         const n = Number(t)
-        if (!valido(n)) return { ok: false, errore: `${ETICHETTE_OBIETTIVI[k]}: scrivi un numero fra 0 e 100` }
+        if (!valido(k, n)) {
+            const regola = OBIETTIVI_PERCENTUALI.includes(k) ? 'un numero fra 0 e 100' : 'un numero intero da 0 in su'
+            return { ok: false, errore: `${ETICHETTE_OBIETTIVI[k]}: scrivi ${regola}` }
+        }
         valori[k] = n
     }
     return { ok: true, valori }
+}
+
+/**
+ * Un obiettivo mensile (conteggio) riportato ai giorni passati del mese in
+ * corso: obiettivo × giorni trascorsi ÷ giorni del mese, con oggi contato
+ * (giorno di Roma). Per un mese chiuso è l'obiettivo pieno.
+ */
+export function obiettivoInProporzione(obiettivo: number, mese: string, ora: Date): {
+    valore: number; giorniTrascorsi: number; giorniMese: number; inCorso: boolean
+} {
+    const [a, m] = mese.split('-').map(Number)
+    const giorniMese = new Date(Date.UTC(a, m, 0)).getUTCDate()
+    const oggi = toRomeDateStr(ora)
+    if (oggi.slice(0, 7) !== mese) return { valore: obiettivo, giorniTrascorsi: giorniMese, giorniMese, inCorso: false }
+    const giorniTrascorsi = Number(oggi.slice(8, 10))
+    return { valore: (obiettivo * giorniTrascorsi) / giorniMese, giorniTrascorsi, giorniMese, inCorso: true }
 }

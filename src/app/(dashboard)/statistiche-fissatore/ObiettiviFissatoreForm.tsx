@@ -4,11 +4,12 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { salvaObiettiviFissatore } from '@/app/actions/fissatoreStatsActions'
 import {
-    CHIAVI_OBIETTIVI, ETICHETTE_OBIETTIVI, TESTO_FONTE,
+    CHIAVI_OBIETTIVI, ETICHETTE_OBIETTIVI, OBIETTIVI_PERCENTUALI, testoFonte,
     type ChiaveObiettivo, type ObiettiviRisolti, type ObiettiviSalvati,
 } from '@/lib/bot-fissatore/obiettiviFissatore'
 
 const SPIEGAZIONE: Record<ChiaveObiettivo, string> = {
+    appuntamenti: 'al mese, più alto è meglio',
     risposta: 'più alto è meglio',
     fissaggioTotale: 'più alto è meglio',
     fissaggioRisposti: 'più alto è meglio',
@@ -46,9 +47,10 @@ export function ObiettiviFissatoreForm({ salvati, obiettivi }: { salvati: Obiett
 
     return (
         <form onSubmit={salva} className="rounded-xl border border-ash-200/60 bg-white p-4 shadow-soft">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 {CHIAVI_OBIETTIVI.map(k => {
                     const o = obiettivi[k]
+                    const unita = OBIETTIVI_PERCENTUALI.includes(k) ? '%' : ''
                     return (
                         <label key={k} className="block">
                             <div className="text-xs font-semibold uppercase tracking-wider text-ash-500">{ETICHETTE_OBIETTIVI[k]}</div>
@@ -61,10 +63,10 @@ export function ObiettiviFissatoreForm({ salvati, obiettivi }: { salvati: Obiett
                                     placeholder="vuoto = predefinito"
                                     className="h-9 w-full rounded-lg border border-ash-200/60 bg-white px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/30"
                                 />
-                                <div className="text-sm text-ash-500">%</div>
+                                {unita ? <div className="text-sm text-ash-500">{unita}</div> : null}
                             </div>
                             <div className="mt-1 text-xs text-ash-400">
-                                {SPIEGAZIONE[k]} · oggi {o.valore === null ? 'da impostare' : `${String(o.valore).replace('.', ',')}% (${TESTO_FONTE[o.fonte]})`}
+                                {SPIEGAZIONE[k]} · oggi {o.valore === null ? 'da impostare' : `${String(o.valore).replace('.', ',')}${unita} (${testoFonte(o)})`}
                             </div>
                         </label>
                     )

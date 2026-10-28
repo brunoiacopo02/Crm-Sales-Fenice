@@ -9,10 +9,8 @@ import { db } from "@/db"
 import { callLogs, leadEvents, leads } from "@/db/schema"
 import { monthBoundsRome } from "@/lib/dateUtils"
 import { leadVero } from "@/lib/prova/sql"
-import { eLeadDelLancio } from "@/lib/diretta/instradamento"
-import { contaNeiKpi } from "@/lib/intakeBatch"
 import {
-    funnelDelBot, lineaDelPiano, mesePrecedente,
+    eLeadEvergreen, funnelDelBot, lineaDelPiano, mesePrecedente,
     type FunnelDelBot, type LeadDelBot, type LineaDelPiano,
 } from "./statisticheFissatore"
 
@@ -25,6 +23,8 @@ export interface NumeriDelMese {
     mese: string
     funnel: FunnelDelBot
     linea: LineaDelPiano
+    /** Lead fissati dal bot nel mese, per data di fissaggio (evergreen). */
+    appuntamentiDelMese: number
 }
 
 type Evento = { leadId: string; eventType: string; metadata: unknown; timestamp: Date }
@@ -77,7 +77,6 @@ async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
             lancioPool: leads.lancioPool,
             humanTestCohort: leads.humanTestCohort,
             intakeBatch: leads.intakeBatch,
-            isTest: leads.isTest,
         })
             .from(leadEvents)
             .innerJoin(leads, eq(leads.id, leadEvents.leadId))
@@ -109,14 +108,12 @@ async function leggiCoorteFunnel(botId: string, da: Date, a: Date) {
                 gte(leadEvents.timestamp, da),
             )),
     ])
-    // Infornata anomala (flood lista 133 del 15/09/2026): conta solo chi il bot
-    // ha davvero contattato, con la regola canonica `contaNeiKpi` (la stessa di
-    // marketingActions per i lead acquisiti). Si applica ai ricevuti e non agli
-    // appuntamenti: un appuntamento nato dall'infornata è vero.
+    // Solo evergreen (PO 28/10/2026): fuori lanci, liste e database, flood del
+    // 15/09 compreso. Prova già esclusa nel WHERE.
     // Un lead ha un solo primo ASSIGNED; due eventi nello stesso istante esatto passerebbero entrambi.
     const perLead = new Map<string, typeof coorte[number]>()
     for (const l of coorte) {
-        if (eLeadDelLancio(l) || !contaNeiKpi(l) || perLead.has(l.leadId)) continue
+        if (!eLeadEvergreen(l) || perLead.has(l.leadId)) continue
         perLead.set(l.leadId, l)
     }
 
@@ -171,7 +168,7 @@ function funnelDelMese(
 
 /**
  * Coorte B dei due mesi: appuntamenti con appointmentDate nel periodo e già
- * passati, su lead dove il bot ha registrato un APPUNTAMENTO. Lanci e prova esclusi.
+ * passati, su lead dove il bot ha registrato un APPUNTAMENTO. Solo evergreen, prova esclusa.
  */
 async function leggiAppuntamentiDelBot(botId: string, da: Date, a: Date) {
     const rows = await db.select({
@@ -180,6 +177,7 @@ async function leggiAppuntamentiDelBot(botId: string, da: Date, a: Date) {
         presentedAt: leads.presentedAt,
         salespersonOutcome: leads.salespersonOutcome,
         launchBucket: leads.launchBucket,
+        intakeBatch: leads.intakeBatch,
         funnel: leads.funnel,
         lancioPool: leads.lancioPool,
         humanTestCohort: leads.humanTestCohort,
@@ -196,7 +194,38 @@ async function leggiAppuntamentiDelBot(botId: string, da: Date, a: Date) {
                 eq(callLogs.outcome, 'APPUNTAMENTO'),
             ))),
         ))
-    return rows.filter(r => !eLeadDelLancio(r))
+    return rows.filter(eLeadEvergreen)
+}
+
+/**
+ * Appuntamenti fissati dal bot nel periodo, per data di fissaggio: chiamate
+ * APPUNTAMENTO del bot (indice userId, createdAt) su lead evergreen veri.
+ * Un lead fissato due volte nello stesso mese conta una volta.
+ */
+async function leggiFissaggiDelBot(botId: string, da: Date, a: Date) {
+    const rows = await db.select({
+        leadId: callLogs.leadId,
+        at: callLogs.createdAt,
+        launchBucket: leads.launchBucket,
+        intakeBatch: leads.intakeBatch,
+        funnel: leads.funnel,
+        lancioPool: leads.lancioPool,
+        humanTestCohort: leads.humanTestCohort,
+    })
+        .from(callLogs)
+        .innerJoin(leads, eq(leads.id, callLogs.leadId))
+        .where(and(
+            eq(callLogs.userId, botId),
+            eq(callLogs.outcome, 'APPUNTAMENTO'),
+            gte(callLogs.createdAt, da),
+            lt(callLogs.createdAt, a),
+            leadVero(),
+        ))
+    return rows.filter(eLeadEvergreen)
+}
+
+function appuntamentiNelPeriodo(rows: { leadId: string; at: Date }[], start: Date, end: Date): number {
+    return new Set(rows.filter(r => r.at >= start && r.at < end).map(r => r.leadId)).size
 }
 
 /** Numeri del mese e del mese prima. `ora` taglia gli appuntamenti non ancora passati. */
@@ -207,14 +236,21 @@ export async function calcolaNumeriFissatore(
     const b = monthBoundsRome(mese)
     const p = monthBoundsRome(mesePrima)
     const fineAppuntamenti = b.end < ora ? b.end : ora
-    const [coorte, appuntamenti] = await Promise.all([
+    const [coorte, appuntamenti, fissaggi] = await Promise.all([
         leggiCoorteFunnel(botId, p.start, b.end),
         leggiAppuntamentiDelBot(botId, p.start, fineAppuntamenti),
+        leggiFissaggiDelBot(botId, p.start, b.end),
     ])
     const linea = (start: Date, end: Date) => lineaDelPiano(appuntamenti.filter(a =>
         a.appointmentDate !== null && a.appointmentDate >= start && a.appointmentDate < end))
     return {
-        questo: { mese, funnel: funnelDelMese(coorte, b.start, b.end), linea: linea(b.start, b.end) },
-        prima: { mese: mesePrima, funnel: funnelDelMese(coorte, p.start, p.end), linea: linea(p.start, p.end) },
+        questo: {
+            mese, funnel: funnelDelMese(coorte, b.start, b.end), linea: linea(b.start, b.end),
+            appuntamentiDelMese: appuntamentiNelPeriodo(fissaggi, b.start, b.end),
+        },
+        prima: {
+            mese: mesePrima, funnel: funnelDelMese(coorte, p.start, p.end), linea: linea(p.start, p.end),
+            appuntamentiDelMese: appuntamentiNelPeriodo(fissaggi, p.start, p.end),
+        },
     }
 }

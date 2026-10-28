@@ -1,26 +1,20 @@
 // Obiettivi di partenza della pagina /statistiche-fissatore (PO 28/10/2026).
 //
 // Il valore scritto dall'admin (appSettings 'fissatore_obiettivi') vince
-// sempre su questi. La pagina scrive accanto a ogni obiettivo da dove viene:
-// 'piano' = dal piano della Direzione Commerciale, 'miglior_mese' = il
-// miglior mese del bot, oppure "scritto dall'admin".
-//
-// Nessuno dei quattro ha un obiettivo nel piano (Piano Direzione Commerciale e
-// Doc Paolo, letti il 28/10/2026): vengono dal miglior mese del bot.
-//
-// TODO(PO): valori segnaposto. I numeri li calcola il coordinatore e vanno
-// scritti qui al posto dei null. Finché sono null la pagina mostra
-// "da impostare" (o il valore dell'admin, se l'ha scritto).
+// sempre su questi. La pagina scrive accanto a ogni obiettivo da dove viene.
+// Tutti i numeri sono sui soli lead evergreen (lanci e database esclusi).
 
 import type { ObiettiviDefault } from './obiettiviFissatore'
 
 export const OBIETTIVI_FISSATORE_DEFAULT: ObiettiviDefault = {
-    /** % dei lead ricevuti che risponde al bot. TODO: miglior mese del bot. */
-    risposta: { valore: null, fonte: 'miglior_mese' },
-    /** % fissaggio sul totale dei ricevuti. TODO: miglior mese del bot. */
-    fissaggioTotale: { valore: null, fonte: 'miglior_mese' },
-    /** % fissaggio su chi risponde. TODO: miglior mese del bot. */
-    fissaggioRisposti: { valore: null, fonte: 'miglior_mese' },
-    /** % restituzioni sui ricevuti (più basso è meglio). TODO: miglior mese del bot. */
-    restituzione: { valore: null, fonte: 'miglior_mese' },
+    /** Appuntamenti fissati dal bot nel mese. Piano Direzione Commerciale §8.2: mix della base, 457 bot al mese. */
+    appuntamenti: { valore: 457, fonte: 'piano', dettaglio: '§8.2' },
+    /** % dei lead ricevuti che risponde al bot. Base del piano (1/8-14/9/2026). */
+    risposta: { valore: 61.6, fonte: 'base_piano' },
+    /** % fissaggio sul totale dei ricevuti. Base del piano (1/8-14/9/2026). */
+    fissaggioTotale: { valore: 10, fonte: 'base_piano' },
+    /** % fissaggio su chi risponde. Base del piano (1/8-14/9/2026). */
+    fissaggioRisposti: { valore: 16.3, fonte: 'base_piano' },
+    /** % restituzioni sui ricevuti, più bassa è meglio. Miglior mese del bot: agosto 2026. */
+    restituzione: { valore: 64.6, fonte: 'miglior_mese', dettaglio: 'agosto' },
 }

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     percentuale, semaforo, confronto, meseDaParametro, mesePrecedente,
-    haRisposto, funnelDelBot, lineaDelPiano, type LeadDelBot,
+    haRisposto, funnelDelBot, lineaDelPiano, eLeadEvergreen, type LeadDelBot,
 } from './statisticheFissatore'
 
 // ------------------------------------------------------------- percentuale
@@ -82,6 +82,28 @@ test('haRisposto: appuntamento o scarto del bot contano', () => {
 
 test('haRisposto: scarto "numero inesistente" non è una risposta', () => {
     assert.equal(haRisposto(lead({ logDelBot: [log('DA_SCARTARE', T1, 'Numero inesistente')] })), false)
+    // Gli scarti "Nessun messaggio consegnato in 14 giorni" (26/07-25/09/2026,
+    // 834 log) hanno tutti discardReason 'numero inesistente': fuori anche loro.
+    assert.equal(haRisposto(lead({ logDelBot: [log('DA_SCARTARE', T1, 'numero inesistente')] })), false)
+})
+
+// ------------------------------------------------------------- evergreen
+
+const base = { launchBucket: null, intakeBatch: null, funnel: 'TELEGRAM', lancioPool: null, humanTestCohort: null }
+
+test('eLeadEvergreen: lead AC senza lancio, senza infornata e non database', () => {
+    assert.equal(eLeadEvergreen(base), true)
+    assert.equal(eLeadEvergreen({ ...base, funnel: null }), true)
+})
+
+test('eLeadEvergreen: lanci, infornate e database sono fuori', () => {
+    assert.equal(eLeadEvergreen({ ...base, launchBucket: 'LANCIO_WEBDEV_2026' }), false)
+    assert.equal(eLeadEvergreen({ ...base, intakeBatch: 'DB_LISTA133_20260915' }), false)
+    assert.equal(eLeadEvergreen({ ...base, funnel: 'DATABASE' }), false)
+    assert.equal(eLeadEvergreen({ ...base, funnel: ' Database ' }), false)
+    assert.equal(eLeadEvergreen({ ...base, funnel: 'Lancio Web Dev AI' }), false)
+    assert.equal(eLeadEvergreen({ ...base, lancioPool: 'VERGINI' }), false)
+    assert.equal(eLeadEvergreen({ ...base, humanTestCohort: 'gdo_umani_lancio' }), false)
 })
 
 test('haRisposto: chat interrotta e segnali (report, messaggi, richiesta contatto) contano', () => {

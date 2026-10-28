@@ -10,6 +10,26 @@
 
 import { isNeverAnsweredLog, isFunnelClosure } from '@/lib/kpi/canon'
 import { toRomeDateStr } from '@/lib/dateUtils'
+import { eLeadDelLancio } from '@/lib/diretta/instradamento'
+
+/**
+ * Lead evergreen: il bot si misura solo su questi (PO 28/10/2026).
+ * Fuori i lanci (launchBucket, funnel del lancio, pool del lancio, prova
+ * umani del lancio), le infornate da liste (intakeBatch, per esempio il flood
+ * del 15/09) e il database (funnel 'Database', in qualunque maiuscola).
+ * Nel codice non c'era un helper "evergreen": è questo.
+ */
+export function eLeadEvergreen(l: {
+    launchBucket: string | null
+    intakeBatch: string | null
+    funnel: string | null
+    lancioPool: string | null
+    humanTestCohort: string | null
+}): boolean {
+    if (l.launchBucket || l.intakeBatch) return false
+    if ((l.funnel ?? '').trim().toLowerCase() === 'database') return false
+    return !eLeadDelLancio(l)
+}
 
 export type Semaforo = 'verde' | 'rosso'
 /** 'alto' = più alto è meglio; 'basso' = più basso è meglio (restituzioni). */
