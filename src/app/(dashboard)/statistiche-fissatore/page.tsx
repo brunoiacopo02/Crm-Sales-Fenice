@@ -144,7 +144,7 @@ export default async function StatisticheFissatorePage({
             prima: pct(fp.pctFissaggioRisposti),
         },
         {
-            cosa: 'Lead che il bot ridà ai GDO',
+            cosa: 'Lead che il bot restituisce',
             spiegazione: 'Quanti lead il bot non è riuscito a fissare e ha restituito. Più basso è meglio.',
             valore: pct(fq.pctRestituzione),
             dettaglio: `${num(fq.restituiti)} su ${num(fq.ricevuti)}`,
@@ -239,7 +239,7 @@ export default async function StatisticheFissatorePage({
                     <Passo titolo="Dati al bot" n={fq.ricevuti} sotto="" />
                     <Passo titolo="Gli hanno risposto" n={fq.risposti} sotto={`${pct(fq.pctRisposta)} dei lead`} />
                     <Passo titolo="Hanno preso un appuntamento" n={fq.fissati} sotto={`${pct(fq.pctFissaggioTotale)} dei lead`} evidenza />
-                    <Passo titolo="Ridati ai GDO" n={fq.restituiti} sotto={`${pct(fq.pctRestituzione)} dei lead`} />
+                    <Passo titolo="Restituiti dal bot" n={fq.restituiti} sotto={`${pct(fq.pctRestituzione)} dei lead`} />
                 </div>
                 {inCorso ? (
                     <p className="mt-2 text-sm text-ash-500">

@@ -35,7 +35,7 @@ export const ETICHETTE_OBIETTIVI: Record<ChiaveObiettivo, string> = {
     risposta: 'Lead che rispondono al bot',
     fissaggioTotale: 'Lead fissati, su tutti quelli ricevuti',
     fissaggioRisposti: 'Lead fissati, su quelli che rispondono',
-    restituzione: 'Lead che il bot ridà ai GDO',
+    restituzione: 'Lead che il bot restituisce',
 }
 
 export const DIREZIONE_OBIETTIVI: Record<ChiaveObiettivo, Direzione> = {
