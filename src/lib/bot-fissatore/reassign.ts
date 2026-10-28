@@ -6,6 +6,7 @@ import { isLeadLocked } from './contactRequests';
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
 import { dayBoundsRome } from '@/lib/dateUtils';
 import { EVENTO_RIDATO_PARCHEGGIATO } from './iaVocale';
+import { instradamentoRidato } from './maiConsegnato';
 
 const FENICE = 'fenice';
 
@@ -22,7 +23,8 @@ type ReassignResult =
  * chat interrotta senza obiezione ferrea). La chat interrotta va a un GDO della
  * squadra col flag Ridati (`botReturnIntake`) e sotto il suo tetto giornaliero
  * se ne ha uno (`dailyReturnCap`), a turno su `botReturnLastAssignedAt`; il mai
- * risposto resta parcheggiato (PO 19/10).
+ * risposto resta parcheggiato (PO 19/10), tranne il WhatsApp mai consegnato
+ * che va al giro come la chat interrotta (PO 28/10).
  * Il lead riparte come nuovo (status=NEW, callCount=0).
  *
  * Se non c'è nessun GDO eleggibile: lead lasciato non assegnato (recuperabile da admin).
@@ -118,7 +120,18 @@ export async function reassignBotLeadToHumanPool(
         // Chi non ha mai risposto al bot non va ai GDO (PO 19/10/2026): con tre GDO
         // presenti il loro tempo va al lancio e ai ridati con chat interrotta. Il
         // lead resta NEW e non assegnato, ripescabile in blocco.
-        if (reason === 'mai_risposto') {
+        //
+        // Eccezione (PO 28/10/2026): se il WhatsApp non è mai stato consegnato
+        // (numero senza WhatsApp, nota del bot "WhatsApp mai consegnato ...
+        // chiamare a voce") il lead non ha mai potuto rispondere e va chiamato:
+        // segue il giro dei ridati come la chat interrotta, stessi filtri e
+        // tetti. Nell'evento `reason` resta 'mai_risposto' (statistiche del bot
+        // e stella "Chiama per primo" non cambiano) e `instradato` ne dice il perché.
+        const instradamento = instradamentoRidato(reason, botNote);
+        const extraMeta = reason === 'mai_risposto' && instradamento === 'giro_gdo'
+            ? { instradato: 'mai_consegnato' as const }
+            : {};
+        if (instradamento === 'parcheggia') {
             await tx.update(leads)
                 .set({ ...resetFields, assignedToId: null })
                 .where(eq(leads.id, leadId));
@@ -203,7 +216,7 @@ export async function reassignBotLeadToHumanPool(
                 eventType: 'REASSIGNED_FROM_BOT',
                 userId: null,
                 timestamp: now,
-                metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo' },
+                metadata: { reason, ...extraMeta, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo' },
                 companyId: FENICE,
             });
 
@@ -228,7 +241,7 @@ export async function reassignBotLeadToHumanPool(
             eventType: 'REASSIGNED_FROM_BOT',
             userId: gdoId,
             timestamp: now,
-            metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: gdoId },
+            metadata: { reason, ...extraMeta, botNote: botNote ?? null, fromBot: botUserId, toGdo: gdoId },
             companyId: FENICE,
         });
 
