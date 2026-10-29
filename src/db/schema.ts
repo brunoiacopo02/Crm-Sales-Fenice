@@ -116,6 +116,11 @@ export const users = pgTable('users', {
     // domani. null = nessun tetto, come per tutti dal 19/10.
     dailyReturnCap: integer('dailyReturnCap'),
 
+    // Scorta personale delle prime chiamate (migr. 0059, PO 29/10/2026): con
+    // true il GDO vede in prima chiamata i vergini e una parte dei lead, il
+    // resto aspetta nella scorta (src/lib/diretta/scorta.ts). false = come prima.
+    scortaAttiva: boolean('scortaAttiva').default(false).notNull(),
+
     // Statistiche GDO: il TL/manager sceglie quali GDO contano nelle medie
     // per-GDO (App/gg, alert, scorte). Account isActive ma non operativi
     // (es. in pausa lunga) vengono esclusi dai divisori senza disattivarli.
@@ -306,6 +311,13 @@ export const leads = pgTable('leads', {
     // Riapertura trattativa dallo Storico: inizio del ciclo corrente. Il tetto
     // dei 3 follow-up conta solo gli attempt con outcomeAt >= questa data.
     salesCycleStartAt: timestamp('salesCycleStartAt', { withTimezone: true, mode: 'date' }),
+
+    // Scorta delle prime chiamate (migr. 0059, PO 29/10/2026): null = da
+    // classificare (si vede come sempre), 'visibile', 'scorta' = nascosto al GDO
+    // finché non si sblocca. Il trigger leads_scorta_reset le azzera quando il
+    // lead cambia GDO o riceve una telefonata. Regole in src/lib/diretta/scorta.ts.
+    scortaStato: text('scortaStato'),
+    scortaDal: timestamp('scortaDal', { withTimezone: true, mode: 'date' }),
 
     // Optimistic Concurrency
     version: integer('version').default(1).notNull(),
@@ -584,6 +596,22 @@ export const pipelineSnapshots = pgTable('pipelineSnapshots', {
     fingerprint: text('fingerprint').notNull(),
     companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' })
 });
+
+// Movimenti della scorta delle prime chiamate (migr. 0059, PO 29/10/2026):
+// 'iniziale' (prima assegnazione dei visibili), 'nascosti' (arrivi messi in
+// scorta), 'sblocco' (30 tornati visibili), 'consumato' (un esito in prima
+// chiamata). Li legge il monitor di /import.
+export const gdoScortaMovimenti = pgTable('gdoScortaMovimenti', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').notNull(),
+    userId: text('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tipo: text('tipo').notNull(),
+    quanti: integer('quanti').notNull(),
+    leadIds: jsonb('leadIds').$type<string[]>(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => ({
+    perGdo: index('gdo_scorta_mov_idx').on(t.companyId, t.userId, t.createdAt),
+}));
 
 // Heartbeat DB come fonte di verità della presence Conferme (Task P1,
 // 2026-07-05): il Realtime Supabase (channel `conferme_realtime_board`,
