@@ -63,6 +63,24 @@ export function ordineRipiegoFreschi(routing: string): readonly LivelloFreschi[]
     return routing === 'gdo_only' ? ORDINE_RIPIEGO_FRESCHI.filter((l) => l !== 'bot') : ORDINE_RIPIEGO_FRESCHI
 }
 
+/**
+ * Fascia mista ('bot_first', lun-ven 13-20 e sabato 9-16:30): chi passa per primo.
+ *
+ * Fino al 29/10/2026 il bot aveva la precedenza finché era sotto la soglia
+ * giornaliera (`BOT_DAILY_LEADS`). Ma la soglia è stata alzata sopra il volume
+ * che il bot riceve da solo la notte e la mattina (oltre 300 lead al giorno
+ * dal 26/10), quindi il bot restava sempre "sotto soglia" e i GDO non hanno
+ * mai ricevuto un vergine, nemmeno con `acAutoIntake` acceso: dal 19/09 zero.
+ *
+ * PO 25/10 e 29/10: ogni GDO della squadra riceve i suoi 10 vergini al giorno,
+ * "i successivi seguono la regola di oggi". Quindi in fascia mista vengono
+ * prima i GDO sotto il loro tetto, poi il bot con la sua soglia, poi la catena
+ * dei freschi di sempre (scorte, bot, umani senza tetto). Il tetto dei GDO è
+ * piccolo (10 a testa), quindi il bot perde pochi lead al giorno.
+ */
+export const ORDINE_FASCIA_MISTA = ['umani_sotto_tetto', 'bot_sotto_soglia', 'catena_freschi'] as const
+export type LivelloFasciaMista = (typeof ORDINE_FASCIA_MISTA)[number]
+
 export interface ScelteInstradamento {
     /** Codici GDO che non ricevono i ridati. */
     ridatiEsclusi: number[]

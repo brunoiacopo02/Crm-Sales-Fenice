@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    riceveRidati, riceveVergini, ORDINE_RIPIEGO_FRESCHI, ordineRipiegoFreschi, SCELTE_PO_25_10,
+    riceveRidati, riceveVergini, ORDINE_RIPIEGO_FRESCHI, ordineRipiegoFreschi, SCELTE_PO_25_10, ORDINE_FASCIA_MISTA,
     pianoInstradamento, pianoRidistribuzione, eLeadDelLancio, sottoTetto,
     type GdoInstradabile,
 } from './instradamento'
@@ -64,6 +64,14 @@ test('freschi: nel rientro "niente freschi al bot" (gdo_only) il bot resta fuori
     assert.equal(ordineRipiegoFreschi('gdo_only').includes('bot'), false)
     assert.deepEqual([...ordineRipiegoFreschi('bot_first')], [...ORDINE_RIPIEGO_FRESCHI])
     assert.deepEqual([...ordineRipiegoFreschi('bot_only')], [...ORDINE_RIPIEGO_FRESCHI])
+})
+
+test('fascia mista: i vergini dei GDO sotto tetto passano davanti al bot (PO 29/10/2026)', () => {
+    const o = [...ORDINE_FASCIA_MISTA]
+    assert.equal(o[0], 'umani_sotto_tetto')
+    assert.ok(o.indexOf('umani_sotto_tetto') < o.indexOf('bot_sotto_soglia'))
+    // la catena dei freschi resta l'ultima rete: un lead non resta mai senza padrone
+    assert.equal(o[o.length - 1], 'catena_freschi')
 })
 
 // ------------------------------------------------------------- piano di go-live

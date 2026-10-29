@@ -18,7 +18,7 @@ import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, finestraRientro, freschiSoloAlBot, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
-import { ordineRipiegoFreschi, type LivelloFreschi } from "@/lib/diretta/instradamento";
+import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, type LivelloFreschi, type LivelloFasciaMista } from "@/lib/diretta/instradamento";
 import { inviaNotificaAppenaArrivato } from "@/lib/diretta/notificaArrivoDb";
 
 /**
@@ -1383,8 +1383,18 @@ export async function POST(req: NextRequest) {
                     if (eligible.length === 0) eligible = await selectFreshWithOverflow();
                     if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
                 } else if (routing === 'bot_first') {
-                    eligible = await selectBotPool(true);
-                    if (eligible.length === 0) eligible = await selectFreshWithOverflow();
+                    // PO 29/10/2026: prima i vergini dei GDO sotto tetto, poi il
+                    // bot con la sua soglia, poi la catena dei freschi. L'ordine
+                    // sta in `ORDINE_FASCIA_MISTA` (testato).
+                    const livelliMisti: Record<LivelloFasciaMista, () => Promise<{ id: string; isBot: boolean }[]>> = {
+                        umani_sotto_tetto: selectHumanPool,
+                        bot_sotto_soglia: () => selectBotPool(true),
+                        catena_freschi: selectFreshWithOverflow,
+                    };
+                    for (const livello of ORDINE_FASCIA_MISTA) {
+                        eligible = await livelliMisti[livello]();
+                        if (eligible.length > 0) break;
+                    }
                     // Rete finale: il bot anche sopra soglia. Dal 25/10/2026 il bot
                     // sopra soglia sta già nella catena dei freschi (tetto dei GDO
                     // pieno → bot, ed è il funzionamento previsto, non un ripiego):
