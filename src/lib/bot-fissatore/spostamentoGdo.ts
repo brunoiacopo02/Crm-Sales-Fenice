@@ -10,8 +10,11 @@
  *
  * Qui solo le regole, senza DB: chi le chiama porta il lead e l'ora. Tutto in ora di Roma.
  *
+ * Dal 29/10/2026 (PO) vale anche per le call fissate dal bot (lead assegnato all'account
+ * bot), con le stesse regole e la stessa nota. `origine` le distingue negli eventi: la
+ * misura dello spostamento sui lead GDO (4/11, 11/11) non deve mescolarle.
+ *
  * Quando NON si sposta (e il bot ripiega sulla nota di sempre):
- * - il lead è del bot (le sue call seguono il ramo APPUNTAMENTO, non questo);
  * - non c'è un appuntamento, o la call è già passata (per quelle c'è il rifissaggio);
  * - le Conferme l'hanno già lavorato: confermato (c'è un venditore in calendario,
  *   l'incidente del 25/09), scartato, autofissato, parcheggiato da rifissare;
@@ -43,8 +46,14 @@ export type SpostamentoLead = {
     presentedAt: Date | null;
 };
 
+/** Di chi è la call spostata: di un GDO (bot postino) o fissata dal bot stesso. */
+export type OrigineSpostamento = 'gdo' | 'bot';
+
+export function origineSpostamento(assigneeIsBot: boolean): OrigineSpostamento {
+    return assigneeIsBot ? 'bot' : 'gdo';
+}
+
 export type MotivoRifiutoSpostamento =
-    | 'lead_del_bot'
     | 'senza_appuntamento'
     | 'call_passata'
     | 'confermato'
@@ -85,7 +94,6 @@ function minutiRoma(at: Date): number {
 
 /** Il lead si può spostare dal bot? Non guarda la data nuova. */
 export function checkLeadSpostabile(lead: SpostamentoLead, giaSpostato: boolean, now: Date): SpostamentoCheck {
-    if (lead.assigneeIsBot) return { ok: false, motivo: 'lead_del_bot' };
     if (lead.status !== 'APPOINTMENT' || !lead.appointmentDate) return { ok: false, motivo: 'senza_appuntamento' };
     if (lead.appointmentDate.getTime() <= now.getTime()) return { ok: false, motivo: 'call_passata' };
     if (lead.presentedAt || lead.salespersonOutcome) return { ok: false, motivo: 'gia_presentato' };

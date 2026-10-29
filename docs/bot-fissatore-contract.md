@@ -563,18 +563,23 @@ Il CRM sposta solo se **tutte** queste condizioni valgono (regole in
 Effetti, in un colpo solo e con lucchetto ottimistico su `version` e data vecchia:
 `appointmentDate`, `appointmentMovedAt` (la board Conferme lo tratta come un fissaggio
 nuovo), `version + 1`, `updatedAt` (il feed `/api/bot/lead-status` lo ripropone). Poi
-l'evento `BOT_APPOINTMENT_RESCHEDULED` (`from`, `to`, `trigger`), la `BOT_NOTE`
+l'evento `BOT_APPOINTMENT_RESCHEDULED` (`from`, `to`, `trigger`, `origine`), la `BOT_NOTE`
 "Spostato dal bot: da gio 29/10 alle 18:00 a ven 30/10 alle 18:00. …" nella tab Note e la
 notifica "🔄 Spostato dal bot" alle Conferme. **Non** ritimbra `appointmentCreatedAt`, non
 tocca attribuzione né stato, **non** richiama `/api/appointment-set` (la data l'ha appena
 decisa il bot, che aggiorna da solo la sua chat).
 
-Risposte: `200 { ok: true, rescheduled: true, from, to }`, oppure
-`409 { error: "spostamento_rifiutato", motivo }` con `motivo` ∈ `lead_del_bot` \|
+Risposte: `200 { ok: true, rescheduled: true, origine, from, to }`, oppure
+`409 { error: "spostamento_rifiutato", motivo }` con `motivo` ∈
 `senza_appuntamento` \| `call_passata` \| `confermato` \| `scartato` \| `esito_conferme` \|
 `parcheggiato` \| `gia_presentato` \| `gia_spostato` \| `data_passata` \| `domenica` \|
 `fuori_finestra` \| `fuori_fascia` \| `stessa_data` \| `conflitto`. Su qualunque risposta che
 non sia `2xx` il bot manda la `NOTA` "SPOSTAMENTO CHIESTO" di sempre.
+
+**Dal 29/10/2026 (PO) anche sulle call fissate dal bot** (lead assegnato all'account bot):
+stesse regole, stessa nota, stesso evento. `origine` (`gdo` | `bot`) nei metadata
+dell'evento e nella risposta le distingue; gli eventi precedenti senza `origine` sono
+tutti lead GDO. Il motivo `lead_del_bot` non esiste più. Il payload non cambia.
 
 > **`NOTA` sui lead dei GDO umani (nuovo in v1.3):** da quando l'agenda parte dal canale
 > bot (Direzione 3), il bot conversa anche con lead che **non gli sono assegnati**. Su

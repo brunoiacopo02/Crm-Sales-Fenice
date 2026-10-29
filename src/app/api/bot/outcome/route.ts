@@ -17,7 +17,7 @@ import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
 import { readSalesPipelineConfig } from '@/app/actions/salesPipelineConfigActions';
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
-import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento } from '@/lib/bot-fissatore/spostamentoGdo';
+import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento, origineSpostamento } from '@/lib/bot-fissatore/spostamentoGdo';
 import { DISDETTA_VERIFICATA_REASON, buildDisdettaVerificataNote, valutaScartoDisdetta } from '@/lib/bot-fissatore/disdettaVerificata';
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 import { ignoraEsitoSuScartato } from '@/lib/bot-fissatore/esitoSuScartato';
@@ -354,7 +354,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, discarded: true });
     }
 
-    // SPOSTAMENTO (contratto v1.8): il bot sposta la call di un lead GDO. A ogni rifiuto
+    // SPOSTAMENTO (contratto v1.8): il bot sposta la call di un lead GDO e, dal 29/10/2026,
+    // anche quella che ha fissato lui (lead assegnato al bot; `origine` le distingue). A ogni rifiuto
     // rispondiamo 409 con un `motivo`: il bot ripiega sulla nota "SPOSTAMENTO CHIESTO" di
     // sempre, quindi un rifiuto non perde niente. Non si passa da `updateLeadOutcome`
     // (ritimbrerebbe `appointmentCreatedAt` e l'attribuzione) e non si avvisa il bot con
@@ -370,10 +371,11 @@ export async function POST(req: NextRequest) {
                 sql`${leadEvents.metadata}->>'trigger' = ${SPOSTAMENTO_TRIGGER}`,
             ))
             .limit(1);
+        const origine = origineSpostamento(assigneeIsBot);
         const leadCheck = checkLeadSpostabile({ ...lead, assigneeIsBot }, !!giaSpostato, now);
         const dataCheck = leadCheck.ok ? checkDataSpostamento(date!, lead.appointmentDate, now) : leadCheck;
         if (!dataCheck.ok) {
-            console.warn(`[bot-fissatore] SPOSTAMENTO rifiutato su lead ${leadId}: ${dataCheck.motivo}`);
+            console.warn(`[bot-fissatore] SPOSTAMENTO (${origine}) rifiutato su lead ${leadId}: ${dataCheck.motivo}`);
             return NextResponse.json({ error: 'spostamento_rifiutato', motivo: dataCheck.motivo }, { status: 409 });
         }
 
@@ -408,7 +410,7 @@ export async function POST(req: NextRequest) {
                 eventType: 'BOT_APPOINTMENT_RESCHEDULED',
                 userId: actorUserId,
                 timestamp: now,
-                metadata: { from: previous.toISOString(), to: newSlot.toISOString(), trigger: SPOSTAMENTO_TRIGGER, note: note ?? null },
+                metadata: { from: previous.toISOString(), to: newSlot.toISOString(), trigger: SPOSTAMENTO_TRIGGER, origine, note: note ?? null },
                 companyId: 'fenice',
             },
             {
@@ -443,7 +445,7 @@ export async function POST(req: NextRequest) {
             }))).catch((e) => console.error('[bot-fissatore] SPOSTAMENTO notify err', e));
         }
 
-        return NextResponse.json({ ok: true, rescheduled: true, from: previous.toISOString(), to: newSlot.toISOString() });
+        return NextResponse.json({ ok: true, rescheduled: true, origine, from: previous.toISOString(), to: newSlot.toISOString() });
     }
 
     // Appuntamento autofissato dal venditore (pipeline autonoma): terminale per

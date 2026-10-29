@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    checkDataSpostamento, checkLeadSpostabile, giorniSpostamento, notaSpostamento, type SpostamentoLead,
+    checkDataSpostamento, checkLeadSpostabile, giorniSpostamento, notaSpostamento, origineSpostamento, type SpostamentoLead,
 } from './spostamentoGdo';
 
 // mer 28/10/2026 15:00 Roma (CET dal 25/10, UTC+1)
@@ -31,9 +31,16 @@ test('lead GDO appuntato e non lavorato: si sposta', () => {
     assert.deepEqual(checkLeadSpostabile(lead(), false, MER_15), { ok: true });
 });
 
+test('call fissata dal bot (PO 29/10/2026): si sposta con le stesse regole', () => {
+    assert.deepEqual(checkLeadSpostabile(lead({ assigneeIsBot: true }), false, MER_15), { ok: true });
+    assert.deepEqual(checkLeadSpostabile(lead({ assigneeIsBot: true }), true, MER_15), { ok: false, motivo: 'gia_spostato' });
+    assert.deepEqual(checkLeadSpostabile(lead({ assigneeIsBot: true, confirmationsOutcome: 'confermato' }), false, MER_15), { ok: false, motivo: 'confermato' });
+    assert.equal(origineSpostamento(true), 'bot');
+    assert.equal(origineSpostamento(false), 'gdo');
+});
+
 test('lead: tutti i rifiuti', () => {
     const casi: [Partial<SpostamentoLead>, boolean, string][] = [
-        [{ assigneeIsBot: true }, false, 'lead_del_bot'],
         [{ status: 'IN_PROGRESS' }, false, 'senza_appuntamento'],
         [{ appointmentDate: null }, false, 'senza_appuntamento'],
         [{ appointmentDate: new Date('2026-10-28T10:00:00Z') }, false, 'call_passata'],
