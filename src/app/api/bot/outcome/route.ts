@@ -20,6 +20,7 @@ import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento } from '@/lib/bot-fissatore/spostamentoGdo';
 import { DISDETTA_VERIFICATA_REASON, buildDisdettaVerificataNote, valutaScartoDisdetta } from '@/lib/bot-fissatore/disdettaVerificata';
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
+import { ignoraEsitoSuScartato } from '@/lib/bot-fissatore/esitoSuScartato';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -142,6 +143,21 @@ export async function POST(req: NextRequest) {
     }
     if (lead.companyId !== 'fenice') {
         return NextResponse.json({ error: 'forbidden', detail: 'lead non Fenice' }, { status: 403 });
+    }
+
+    // Lead già scartato: un esito di stato non lo riapre (PO 29/10/2026, vedi
+    // esitoSuScartato.ts). 200 apposta: il bot registra l'esito e chiude, nessun ritento.
+    if (ignoraEsitoSuScartato(lead.status, typedOutcome)) {
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: 'BOT_ESITO_IGNORATO',
+            userId: null,
+            timestamp: new Date(),
+            metadata: { outcome: typedOutcome, motivo: 'lead_gia_scartato', note: typeof body.note === 'string' ? body.note.slice(0, 500) : null },
+            companyId: 'fenice',
+        }).catch((e) => console.error('[bot-fissatore] BOT_ESITO_IGNORATO event err', e));
+        return NextResponse.json({ ok: true, skipped: 'lead_gia_scartato' });
     }
 
     const [assignee] = lead.assignedToId
