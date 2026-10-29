@@ -452,6 +452,15 @@ export type MetricsOverviewRow = {
     targetPerDay: number;
     today: number;
     isCurrency?: boolean;
+    /**
+     * Solo sulla riga "Trattative presenziati": quante delle presenze contate
+     * NON sono passate dalle Conferme (`confirmationsOutcome` diverso da
+     * 'confermato': chiamate subito del lancio senza appuntamento, chiusure da
+     * riconciliazione, ...). Restano nel totale della riga, ma la % sulle
+     * conferme si calcola senza (PO 29/10/2026, stessa regola di Performance
+     * GDO e bonus): altrimenti il rapporto presenze/confermati sale oltre il vero.
+     */
+    presenzeFuoriConferme?: number;
 };
 
 export type MetricsOverviewResult =
@@ -620,6 +629,20 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
         const actApp = totals.appCount + (cfg?.appExtra || 0);
         const actConf = totals.confermeCount + (cfg?.confermeExtra || 0);
         const actPres = totals.trattativeCount + (cfg?.trattativeExtra || 0);
+        // Presenze del mese che non vengono da un appuntamento confermato.
+        // Stessi filtri di getCrmFunnelCounts (azienda, lead veri, funnel non
+        // TEST/vuoto, mese UTC su presentedAt): sono un sottoinsieme esatto di
+        // `totals.trattativeCount`.
+        const [fuoriRow] = await db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            leadVero(),
+            sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
+            gte(leads.presentedAt, new Date(Date.UTC(year, month - 1, 1))),
+            lt(leads.presentedAt, new Date(Date.UTC(year, month, 1))),
+            sql`${leads.confirmationsOutcome} IS DISTINCT FROM 'confermato'`,
+        ));
+        const presenzeFuoriConferme = Number(fuoriRow?.c ?? 0);
+        const actPresConfermate = Math.max(0, actPres - presenzeFuoriConferme);
         const actClose = totals.closeCount + (cfg?.closeExtra || 0);
 
         // Fatturato ACT = somma closeAmountEur dei lead chiusi nel mese.
@@ -697,11 +720,13 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
             {
                 label: 'Trattative presenziati',
                 actCount: actPres,
-                actPct: safeDiv(actPres, actConf),
+                // % sulle conferme: solo le presenze passate dalle Conferme.
+                actPct: safeDiv(actPresConfermate, actConf),
                 targetPrevCount: Math.round(targetPrevPres),
                 targetPrevPct: pickPct(targetPresPct, targetPresMonthly, targetConfMonthly),
                 targetPerDay: targetPerDayPres,
                 today: todayPres,
+                presenzeFuoriConferme,
             },
             {
                 label: 'Closed',
@@ -1645,16 +1670,22 @@ function mergeMetricsOverviews(parts: MetricsOverviewResult[], ym: string, actLe
     // Denominatori a cascata: App su lead, Conf su App, Pres su Conf, Close su Pres.
     const actDenoms: (number | null)[] = [actLead, a[0], a[1], a[2], null];
     const targetDenoms: (number | null)[] = [null, t[0], t[1], t[2], null];
+    // Riga Trattative: la % sulle conferme conta solo le presenze confermate.
+    const fuori = labels.map((_, i) => {
+        const vals = ok.map(p => p.rows[i]?.presenzeFuoriConferme);
+        return vals.some(v => v !== undefined) ? vals.reduce<number>((s, v) => s + (v ?? 0), 0) : undefined;
+    });
 
     const rows: MetricsOverviewRow[] = labels.map((label, i) => ({
         label,
         actCount: a[i],
-        actPct: actDenoms[i] != null ? safeDiv(a[i], actDenoms[i] as number) : null,
+        actPct: actDenoms[i] != null ? safeDiv(Math.max(0, a[i] - (fuori[i] ?? 0)), actDenoms[i] as number) : null,
         targetPrevCount: t[i],
         targetPrevPct: targetDenoms[i] != null ? safeDiv(t[i], targetDenoms[i] as number) : null,
         targetPerDay: sumBy(i, 'targetPerDay'),
         today: sumBy(i, 'today'),
         isCurrency: ok[0].rows[i]?.isCurrency,
+        ...(fuori[i] !== undefined ? { presenzeFuoriConferme: fuori[i] } : {}),
     }));
 
     return {

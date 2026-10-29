@@ -2,13 +2,23 @@
 
 import { db } from "@/db"
 import { leads, users, monthlyLeadTargets } from "@/db/schema"
-import { eq, and, gte, lt, or, asc, sql, isNotNull } from "drizzle-orm"
+import { eq, and, gte, lt, or, asc, sql, isNotNull, notInArray } from "drizzle-orm"
 import { format } from "date-fns"
 import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr, previousYearMonth } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
 import { isFunnelClosure } from '@/lib/kpi/canon'
 import { leadDelMondoDiAccount, leadVero } from '@/lib/prova/sql'
+import { isConfermaAutomatica } from '@/lib/conferme/confermaAutomatica'
+
+/** Chi firma le conferme automatiche del lancio: gli account con ruolo GDO (il bot). */
+async function loadConfermantiAutomatici(): Promise<Set<string>> {
+    const rows = await db.select({ id: users.id }).from(users).where(eq(users.role, 'GDO'))
+    return new Set(rows.map(r => r.id))
+}
+
+/** Sottoquery degli account che firmano conferme automatiche, per i filtri SQL. */
+const confermantiAutomaticiSq = () => db.select({ id: users.id }).from(users).where(eq(users.role, 'GDO'))
 
 /** Default Conferme bonus: T1=30 chiusure (€145), T2=38 chiusure (€290).
  *  Module-private (i file con "use server" possono esportare solo funzioni
@@ -46,8 +56,16 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     const confirmedLeads = await db.select({
         id: leads.id,
         date: leads.confirmationsTimestamp,
-        outcome: leads.confirmationsOutcome
+        outcome: leads.confirmationsOutcome,
+        confirmationsUserId: leads.confirmationsUserId,
     }).from(leads).where(and(...conditionsConfirmations))
+
+    // Conferme automatiche del lancio (PO 29/10/2026): firmate dal bot, non dal
+    // team. Escluse da confermati, presenze e chiusure di questa vista; il
+    // conteggio separato torna in `automaticiLancio`.
+    const confermantiAutomatici = await loadConfermantiAutomatici()
+    const isAuto = (r: { outcome: string | null; confirmationsUserId: string | null }) =>
+        isConfermaAutomatica({ confirmationsOutcome: r.outcome, confirmationsUserId: r.confirmationsUserId }, confermantiAutomatici)
 
     // === QUERY 2: per il CALENDARIO ===
     // La cella del giorno X mostra le metriche relative agli appuntamenti
@@ -88,7 +106,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             !confermeUserId || l.confirmationsUserId === confermeUserId
 
         const fixed = leadsOfDay.length
-        const confirmed = leadsOfDay.filter(l => l.outcome === 'confermato' && matchesUser(l)).length
+        const confirmed = leadsOfDay.filter(l => l.outcome === 'confermato' && !isAuto(l) && matchesUser(l)).length
+        const confirmedAuto = leadsOfDay.filter(l => isAuto(l) && matchesUser(l)).length
         const discarded = leadsOfDay.filter(l => l.outcome === 'scartato' && matchesUser(l)).length
 
         return {
@@ -96,6 +115,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             dayOfWeek: new Date(dayStr + 'T12:00:00Z').getUTCDay(), // 0 = Sunday, 1 = Monday
             fixed,
             confirmed,
+            confirmedAuto,
             discarded,
         }
     })
@@ -137,7 +157,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         const weekEnd = weekBoundsRome(new Date(weekStart.getTime() + 12 * 3600_000)).end // esclusivo
 
         const actThisWeek = confirmedLeads.filter(l =>
-            l.date && l.outcome === 'confermato' &&
+            l.date && l.outcome === 'confermato' && !isAuto(l) &&
             new Date(l.date) >= weekStart &&
             new Date(l.date) < weekEnd
         ).length;
@@ -177,6 +197,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         eq(leads.salespersonOutcome, 'Chiuso'),
         eq(leads.confirmationsOutcome, 'confermato'),
         isNotNull(leads.confirmationsUserId),
+        notInArray(leads.confirmationsUserId, confermantiAutomaticiSq()),
         gte(leads.salespersonOutcomeAt, nowWeekStart),
         lt(leads.salespersonOutcomeAt, nowWeekEnd),
     ]
@@ -211,6 +232,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             eq(leads.salespersonOutcome, 'Chiuso'),
             eq(leads.confirmationsOutcome, 'confermato'),
             isNotNull(leads.confirmationsUserId),
+            notInArray(leads.confirmationsUserId, confermantiAutomaticiSq()),
             gte(leads.salespersonOutcomeAt, pw.start),
             lt(leads.salespersonOutcomeAt, pw.end),
         ]
@@ -294,6 +316,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         outcomeAt: leads.salespersonOutcomeAt,
         presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
+        confirmationsOutcome: leads.confirmationsOutcome,
+        confirmationsUserId: leads.confirmationsUserId,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
         delMondo,
@@ -309,9 +333,23 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     let todayTrat = 0
     let todayClosedReal = 0
 
+    const automaticiLancio = {
+        confermati: calendarLeads.filter(l => isAuto(l) && l.appointmentDate
+            && toRomeDateStr(new Date(l.appointmentDate)).slice(0, 7) === monthStr).length,
+        presenze: 0,
+        chiusure: 0,
+    }
     for (const r of monthlyOutcomeRows) {
+        if (isAuto({ outcome: r.confirmationsOutcome, confirmationsUserId: r.confirmationsUserId })) {
+            const pa = r.presentedAt ? new Date(r.presentedAt) : null
+            const ca = r.outcomeAt ? new Date(r.outcomeAt) : null
+            if (pa && pa >= start && pa < end) automaticiLancio.presenze++
+            if (r.outcome === 'Chiuso' && ca && ca >= start && ca < end) automaticiLancio.chiusure++
+            continue
+        }
         const presAt = r.presentedAt ? new Date(r.presentedAt) : null
-        if (presAt && presAt >= start && presAt < end) {
+        // Merito delle Conferme: solo presenze di lead confermati dal team.
+        if (presAt && presAt >= start && presAt < end && r.confirmationsOutcome === 'confermato') {
             actTrattative++
             if (toRomeDateStr(presAt) === todayStr) todayTrat++
         }
@@ -348,6 +386,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             rewardTier2: CONFERME_REWARD_T2,
         },
         closedHistory,
+        // Solo nella vista di squadra: il singolo operatore non ha conferme del bot.
+        automaticiLancio: confermeUserId ? null : automaticiLancio,
     }
 }
 
@@ -418,6 +458,8 @@ export type ConfermeTlOverview =
             pctPresenze: number | null   // presentati / confermati
             pctChiusure: number | null   // chiusure / presentati
         }
+        /** Conferme automatiche del bot del lancio nel mese: fuori da `month` e dalle altre tabelle. */
+        automaticiLancio: { confermati: number; presentati: number; chiusure: number }
         /** Differenza in PUNTI percentuali (o valore assoluto) vs mese precedente intero. */
         deltaVsPrev: {
             pctConferme: number | null
@@ -483,6 +525,8 @@ type TlLeadRow = {
     salespersonOutcome: string | null
     salespersonOutcomeAt: Date | null
     amount: number | null
+    /** Conferma automatica del bot del lancio (isConfermaAutomatica): fuori dal merito delle Conferme. */
+    auto?: boolean
 }
 
 const inRange = (d: Date | null | undefined, s: Date, e: Date): boolean =>
@@ -515,8 +559,12 @@ function withRatios(r: TlFunnelRow): TlFunnelRow {
 /** Accumula le 4 metriche canoniche di `row` (se nel range) dentro `acc`. */
 function accumulate(acc: TlFunnelRow, r: TlLeadRow, s: Date, e: Date): void {
     if (inRange(apptSetAt(r), s, e)) acc.fissati++
+    // Le conferme automatiche del lancio restano fra i fissati ma non contano
+    // come conferme, presenze o chiusure del team (PO 29/10/2026).
+    if (r.auto) return
     if (r.confirmationsOutcome === 'confermato' && inRange(r.confirmationsTimestamp, s, e)) acc.confermati++
-    if (inRange(r.presentedAt, s, e)) acc.presenziati++
+    // Solo presenze di appuntamenti confermati: pres/conf resta un rapporto vero.
+    if (r.confirmationsOutcome === 'confermato' && inRange(r.presentedAt, s, e)) acc.presenziati++
     if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, s, e)) {
         acc.chiusi++
         acc.fatturatoEur += r.amount || 0
@@ -546,7 +594,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
         const fetchStart = prev.start
         const fetchEnd = isCurrentMonth && wk.end > end ? wk.end : end
 
-        const rows: TlLeadRow[] = await db.select({
+        const fetched: TlLeadRow[] = await db.select({
             funnel: leads.funnel,
             appointmentDate: leads.appointmentDate,
             appointmentCreatedAt: leads.appointmentCreatedAt,
@@ -572,6 +620,16 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
                 and(gte(leads.salespersonOutcomeAt, fetchStart), lt(leads.salespersonOutcomeAt, fetchEnd)),
             ),
         ))
+
+        const confermantiAutomatici = await loadConfermantiAutomatici()
+        const rows: TlLeadRow[] = fetched.map(r => ({ ...r, auto: isConfermaAutomatica(r, confermantiAutomatici) }))
+        const automaticiLancio = { confermati: 0, presentati: 0, chiusure: 0 }
+        for (const r of rows) {
+            if (!r.auto) continue
+            if (inRange(r.confirmationsTimestamp, start, end)) automaticiLancio.confermati++
+            if (inRange(r.presentedAt, start, end)) automaticiLancio.presentati++
+            if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, start, end)) automaticiLancio.chiusure++
+        }
 
         // ── Totali mese + breakdown per funnel ──────────────────────────────
         const totals = emptyRow('TOTALE')
@@ -661,8 +719,9 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
                 : '8+ gg'
             const acc = ltMap.get(bucket)!
             acc.fissati++
+            if (r.auto) continue
             if (r.confirmationsOutcome === 'confermato') acc.confermati++
-            if (r.presentedAt) acc.presenziati++
+            if (r.confirmationsOutcome === 'confermato' && r.presentedAt) acc.presenziati++
         }
         const leadTime = LT_BUCKETS.map(b => {
             const a = ltMap.get(b)!
@@ -717,6 +776,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
         let fatturatoSettimana = 0
         if (isCurrentMonth) {
             for (const r of rows) {
+                if (r.auto) continue
                 if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, wk.start, wk.end)) {
                     chiusureSettimana++
                     fatturatoSettimana += r.amount || 0
@@ -743,7 +803,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             companyUsers.filter(u => u.role === 'CONFERME' && u.isActive && !u.isTest).map(u => u.id),
         )
         for (const r of rows) {
-            if (!r.confirmationsUserId) continue
+            if (!r.confirmationsUserId || r.auto) continue
             const worked = (r.confirmationsOutcome === 'confermato' || r.confirmationsOutcome === 'scartato')
                 && inRange(r.confirmationsTimestamp, start, end)
             if (worked) opIds.add(r.confirmationsUserId)
@@ -753,12 +813,12 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             const u = userMap.get(id)
             let confermati = 0, scartati = 0, presenziati = 0, chiusure = 0, fatturatoEur = 0
             for (const r of rows) {
-                if (r.confirmationsUserId !== id) continue
+                if (r.confirmationsUserId !== id || r.auto) continue
                 if (inRange(r.confirmationsTimestamp, start, end)) {
                     if (r.confirmationsOutcome === 'confermato') confermati++
                     else if (r.confirmationsOutcome === 'scartato') scartati++
                 }
-                if (inRange(r.presentedAt, start, end)) presenziati++
+                if (r.confirmationsOutcome === 'confermato' && inRange(r.presentedAt, start, end)) presenziati++
                 if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, start, end)) {
                     chiusure++
                     fatturatoEur += r.amount || 0
@@ -798,6 +858,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
                 pctPresenze: totalsRow.pctPres,
                 pctChiusure: totalsRow.pctChius,
             },
+            automaticiLancio,
             deltaVsPrev: {
                 pctConferme: deltaPct(totalsRow.pctConf, prevRow.pctConf),
                 pctPresenze: deltaPct(totalsRow.pctPres, prevRow.pctPres),

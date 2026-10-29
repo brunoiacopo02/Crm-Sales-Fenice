@@ -405,6 +405,12 @@ export function ConfermeKpiBoard({ currentUser, hideOldBonus = false }: { curren
                                 </tbody>
                             </table>
                         </div>
+                        {stats.automaticiLancio && (
+                            <div className="border-t border-ash-200 bg-ash-50/60 px-4 py-2 text-[11px] text-ash-600">
+                                <span className="font-semibold text-ash-700">Fuori dai numeri delle Conferme, confermati in automatico dal bot del lancio:</span>{' '}
+                                {stats.automaticiLancio.confermati} confermati · {stats.automaticiLancio.presenze} presenze · {stats.automaticiLancio.chiusure} chiusure
+                            </div>
+                        )}
                     </div>
 
                     {/* TABELLA: Scostamento Mensile */}

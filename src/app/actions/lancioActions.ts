@@ -283,6 +283,9 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
             salespersonAssigned: null,
             salespersonAssignedAt: null,
             negotiationStartedAt: null,
+            // Il lead lascia il venditore senza esito: nessuna presenza può
+            // restargli addosso (presenze fantasma del 05/10, PO 29/10/2026).
+            presentedAt: null,
             assignedToId: null,
             status: 'NEW',
             callCount: 0,
@@ -316,6 +319,9 @@ export async function recordLancioCallNowNoAnswer(leadId: string): Promise<{ ok:
             salespersonAssigned: null,
             salespersonAssignedAt: null,
             negotiationStartedAt: null,
+            // Il lead lascia il venditore senza esito: nessuna presenza può
+            // restargli addosso (presenze fantasma del 05/10, PO 29/10/2026).
+            presentedAt: null,
             version: lead.version + 1,
             updatedAt: now,
         }).where(and(eq(leads.id, leadId), eq(leads.version, lead.version))).returning({ id: leads.id })

@@ -948,7 +948,8 @@ function MetricsSection({ data, onRefresh, readOnly = false, isPastMonth = false
                     </thead>
                     <tbody>
                         {rows.map((row) => (
-                            <tr key={row.label} className="border-t border-ash-100 hover:bg-ash-50/30 transition-colors">
+                            <Fragment key={row.label}>
+                            <tr className="border-t border-ash-100 hover:bg-ash-50/30 transition-colors">
                                 <td className="px-4 py-3 text-white font-bold bg-brand-orange">{row.label}</td>
                                 <td className="px-4 py-3 text-right text-ash-800 tabular-nums border-l border-ash-100 font-semibold">
                                     {row.isCurrency ? fmtEur(row.actCount) : fmtInt(row.actCount)}
@@ -969,6 +970,18 @@ function MetricsSection({ data, onRefresh, readOnly = false, isPastMonth = false
                                     {isPastMonth ? '—' : (row.isCurrency ? fmtEur(row.today) : fmtInt(row.today))}
                                 </td>
                             </tr>
+                            {row.presenzeFuoriConferme !== undefined && (
+                                <tr className="border-t border-ash-100 bg-ash-50/40">
+                                    <td className="py-2 pr-4 pl-8 text-xs font-semibold text-ash-600">di cui non passate dalle Conferme</td>
+                                    <td className="px-4 py-2 text-right text-xs font-semibold tabular-nums text-ash-700 border-l border-ash-100">
+                                        {fmtInt(row.presenzeFuoriConferme)}
+                                    </td>
+                                    <td colSpan={5} className="px-4 py-2 text-[11px] text-ash-400">
+                                        contate nel totale, escluse dalla % sulle conferme
+                                    </td>
+                                </tr>
+                            )}
+                            </Fragment>
                         ))}
                     </tbody>
                 </table>

@@ -193,6 +193,13 @@ export function PanoramicaTlClient({
                 ))}
             </div>
 
+            {data.automaticiLancio && (data.automaticiLancio.confermati > 0 || data.automaticiLancio.presentati > 0 || data.automaticiLancio.chiusure > 0) && (
+                <p className="rounded-lg border border-gray-200 bg-ash-50/60 px-4 py-2 text-[11px] text-ash-600">
+                    <span className="font-semibold text-ash-700">Fuori da questi numeri, confermati in automatico dal bot del lancio:</span>{" "}
+                    {fmtNum(data.automaticiLancio.confermati)} confermati · {fmtNum(data.automaticiLancio.presentati)} presenze · {fmtNum(data.automaticiLancio.chiusure)} chiusure
+                </p>
+            )}
+
             {/* Funnel breakdown */}
             <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ash-700">
