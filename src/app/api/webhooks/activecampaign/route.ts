@@ -18,7 +18,8 @@ import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
-import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_RISERVA, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
+import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_TETTO_PROPRIO, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
+import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
 import { inviaNotificaAppenaArrivato } from "@/lib/diretta/notificaArrivoDb";
 
 /**
@@ -950,6 +951,9 @@ export async function POST(req: NextRequest) {
         const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
         const newLeadId = crypto.randomUUID();
         const now = new Date();
+        // Regola "fasce solo GDO" (PO 29/10/2026): lo stato dei numeri si legge
+        // FUORI dalla transazione, da cache (5 min). Nel dubbio vale accesa.
+        const soloGdoStato = await fasciaSoloGdoAttiva();
         // 24 ore e non 10 minuti: le ricomparse entro un giorno sono doppi
         // submit veri (439 misurate sullo storico), non persone che rientrano.
         // Oltre, chi rientra È un lead nuovo e va richiamato — la mediana fra
@@ -1228,8 +1232,9 @@ export async function POST(req: NextRequest) {
             /**
              * Regola temporanea "solo GDO" (PO 29/10/2026): giro PAREGGIATO sui
              * lead nati oggi e assegnati a ciascuno (i ridati sono nati prima e
-             * non contano). Prima i GDO dei vergini sotto `SOLO_GDO_TETTO`, poi
-             * anche la riserva, poi il bot come rete finale.
+             * non contano). Prima i GDO dei vergini sotto il loro tetto in fascia
+             * (30, Lavinia il suo `dailyFreshCap`), poi tutti senza tetto a
+             * round-robin normale, poi il bot come rete finale.
              */
             const freschiOggi = sql`(
                 SELECT count(*) FROM leads l
@@ -1237,10 +1242,14 @@ export async function POST(req: NextRequest) {
                   AND l."companyId" = ${FENICE_COMPANY}
                   AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
             )`;
-            const selectSoloGdo = (where: ReturnType<typeof and>) => tx.select({
-                id: users.id,
-                isBot: users.isBot,
-            }).from(users).where(where).orderBy(asc(freschiOggi), ...roundRobinOrder);
+            const tettoInFascia = sql`(CASE WHEN ${inArray(users.gdoCode, [...SOLO_GDO_TETTO_PROPRIO])}
+                THEN coalesce(${users.dailyFreshCap}, ${SOLO_GDO_TETTO}) ELSE ${SOLO_GDO_TETTO} END)`;
+            const poolSoloGdo = and(gdoBase, eq(users.isBot, false), inSquadra, eq(users.acAutoIntake, true));
+            const selectSoloGdoSottoTetto = () => tx.select({ id: users.id, isBot: users.isBot })
+                .from(users).where(and(poolSoloGdo, sql`${freschiOggi} < ${tettoInFascia}`))
+                .orderBy(asc(freschiOggi), ...roundRobinOrder);
+            const selectSoloGdoTutti = () => tx.select({ id: users.id, isBot: users.isBot })
+                .from(users).where(poolSoloGdo).orderBy(...roundRobinOrder);
 
             // La finestra ferie, quando attiva, vince su tutto: nessun umano al lavoro.
             //
@@ -1256,7 +1265,7 @@ export async function POST(req: NextRequest) {
             const rientro = finestraRientro(now);
             // Regola temporanea "solo GDO" (PO 29/10/2026): se accesa vince anche
             // sulla finestra ferie; la domenica resta comunque tutta del bot.
-            const soloGdo = regolaSoloGdo(now);
+            const soloGdo = regolaSoloGdo(now, soloGdoStato.attiva);
             const holidayWindow = !rientro && !soloGdo && isBotHolidayWindow(now);
             // Domenica (PO 25/10/2026): i freschi solo al bot, mai ai GDO, qualunque flag.
             const domenicaSoloBot = freschiSoloAlBot(now);
@@ -1389,15 +1398,8 @@ export async function POST(req: NextRequest) {
             if (!divertedTo) {
                 if (routing === 'solo_gdo') {
                     const livelliSoloGdo: Record<LivelloSoloGdo, () => Promise<{ id: string; isBot: boolean }[]>> = {
-                        principali_sotto_tetto: () => selectSoloGdo(and(
-                            gdoBase, eq(users.isBot, false), inSquadra,
-                            eq(users.acAutoIntake, true),
-                            sql`${freschiOggi} < ${SOLO_GDO_TETTO}`,
-                        )),
-                        principali_e_riserva: () => selectSoloGdo(and(
-                            gdoBase, eq(users.isBot, false), inSquadra,
-                            or(eq(users.acAutoIntake, true), inArray(users.gdoCode, [...SOLO_GDO_RISERVA])),
-                        )),
+                        sotto_tetto: selectSoloGdoSottoTetto,
+                        tutti_senza_tetto: selectSoloGdoTutti,
                         bot: () => selectBotPool(false),
                     };
                     for (const livello of ORDINE_SOLO_GDO) {

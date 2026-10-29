@@ -90,16 +90,25 @@ export const ORDINE_FASCIA_MISTA = ['umani_sotto_tetto', 'bot_sotto_soglia', 'um
 export type LivelloFasciaMista = (typeof ORDINE_FASCIA_MISTA)[number]
 
 /**
- * Regola temporanea "solo GDO" (PO 29/10/2026, interruttore `FASCIA_SOLO_GDO`
- * in leadRouting.ts). In fascia tutti i lead vanno ai GDO dei vergini
- * (`acAutoIntake`) a giro PAREGGIATO: chi oggi ne ha di meno, poi il round-robin
- * di sempre. Il tetto dei vergini (`dailyFreshCap`) qui non vale: vale
- * `SOLO_GDO_TETTO`. Quando tutti lo hanno raggiunto entra anche la riserva
- * (Lavinia, 116), sempre pareggiando. Rete finale: il bot, mai un lead orfano.
+ * Regola temporanea "solo GDO" (PO 29/10/2026, si accende da sola quando i
+ * numeri del giro non sono tutti HIGH: qualitaNumeri.ts). In fascia tutti i lead
+ * vanno ai GDO dei vergini (`acAutoIntake`: 105, 106, 110, 115, 116, 119) a giro
+ * PAREGGIATO (chi oggi ne ha di meno, poi il round-robin di sempre):
+ *   1. ognuno fino al suo tetto del giorno: `SOLO_GDO_TETTO` (30) per tutti,
+ *      tranne chi sta in `SOLO_GDO_TETTO_PROPRIO` (Lavinia 116), che si ferma al
+ *      suo `dailyFreshCap` (10, modificabile da /gestione);
+ *   2. tutti a tetto: round-robin normale fra tutti, senza tetti;
+ *   3. nessun GDO disponibile: il bot, mai un lead orfano.
  */
 export const SOLO_GDO_TETTO = 30
-export const SOLO_GDO_RISERVA: readonly number[] = [116]
-export const ORDINE_SOLO_GDO = ['principali_sotto_tetto', 'principali_e_riserva', 'bot'] as const
+export const SOLO_GDO_TETTO_PROPRIO: readonly number[] = [116]
+export const ORDINE_SOLO_GDO = ['sotto_tetto', 'tutti_senza_tetto', 'bot'] as const
+
+/** Il tetto in fascia per un GDO. Puro: lo stesso calcolo sta nella query del webhook. */
+export function tettoSoloGdo(gdoCode: number | null, dailyFreshCap: number | null): number {
+    if (gdoCode != null && SOLO_GDO_TETTO_PROPRIO.includes(gdoCode)) return dailyFreshCap ?? SOLO_GDO_TETTO
+    return SOLO_GDO_TETTO
+}
 export type LivelloSoloGdo = (typeof ORDINE_SOLO_GDO)[number]
 
 export interface ScelteInstradamento {

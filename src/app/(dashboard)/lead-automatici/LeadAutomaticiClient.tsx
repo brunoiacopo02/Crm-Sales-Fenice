@@ -49,7 +49,7 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
     },
     solo_gdo: {
         titolo: 'Fascia solo GDO (temporanea)',
-        spiega: "lun–ven 13:30–19:00 e sabato 10:00–14:30: tutti i lead ai GDO a giro pareggiato, oltre 30 a testa anche Lavinia; il bot solo se non c'è nessuno. Si spegne con FASCIA_SOLO_GDO=off.",
+        spiega: "lun–ven 13:30–19:00 e sabato 10:00–14:30: tutti i lead ai GDO a giro pareggiato, ognuno fino a 30 (Lavinia fino a 10), poi tutti senza tetto; il bot solo se non c'è nessuno. Si accende da sola quando un numero del giro non è HIGH; FASCIA_SOLO_GDO=on/off la forza.",
         tono: 'border-emerald-200 bg-emerald-50 text-emerald-900',
     },
     legacy: {

@@ -329,42 +329,81 @@ test('lunedi-sabato: invariato, i freschi possono andare ai GDO', () => {
 });
 
 // ------------------------------------------------ regola temporanea "solo GDO"
-import { regolaSoloGdo, fasciaSoloGdoAccesa } from './leadRouting';
+import { regolaSoloGdo } from './leadRouting';
+import { modoSoloGdo, numeriTuttiHigh } from './qualitaNumeri';
 
-test('solo GDO: spenta (env assente o off) non cambia niente', () => {
-    assert.equal(regolaSoloGdo(utc('2026-10-30T14:00:00Z'), {}), null);
-    assert.equal(regolaSoloGdo(utc('2026-10-30T14:00:00Z'), { FASCIA_SOLO_GDO: 'off' }), null);
-    assert.equal(fasciaSoloGdoAccesa({ FASCIA_SOLO_GDO: ' ON ' }), true);
-    assert.equal(fasciaSoloGdoAccesa({ FASCIA_SOLO_GDO: 'boh' }), false);
+test('solo GDO: non attiva non cambia niente', () => {
+    assert.equal(regolaSoloGdo(utc('2026-10-30T14:00:00Z'), false), null);
 });
 
 test('solo GDO: feriale 13:30-19:00 di Roma ai GDO, il resto al bot', () => {
-    const on = { FASCIA_SOLO_GDO: 'on' };
     // venerdì 30/10/2026, Roma = UTC+1
-    assert.equal(regolaSoloGdo(utc('2026-10-30T12:29:00Z'), on), 'bot_only');   // 13:29
-    assert.equal(regolaSoloGdo(utc('2026-10-30T12:30:00Z'), on), 'solo_gdo');   // 13:30
-    assert.equal(regolaSoloGdo(utc('2026-10-30T17:59:00Z'), on), 'solo_gdo');   // 18:59
-    assert.equal(regolaSoloGdo(utc('2026-10-30T18:00:00Z'), on), 'bot_only');   // 19:00
-    assert.equal(regolaSoloGdo(utc('2026-10-30T08:00:00Z'), on), 'bot_only');   // 09:00
+    assert.equal(regolaSoloGdo(utc('2026-10-30T12:29:00Z'), true), 'bot_only');   // 13:29
+    assert.equal(regolaSoloGdo(utc('2026-10-30T12:30:00Z'), true), 'solo_gdo');   // 13:30
+    assert.equal(regolaSoloGdo(utc('2026-10-30T17:59:00Z'), true), 'solo_gdo');   // 18:59
+    assert.equal(regolaSoloGdo(utc('2026-10-30T18:00:00Z'), true), 'bot_only');   // 19:00
+    assert.equal(regolaSoloGdo(utc('2026-10-30T08:00:00Z'), true), 'bot_only');   // 09:00
 });
 
 test('solo GDO: sabato 10:00-14:30, domenica non la riguarda (tutto al bot)', () => {
-    const on = { FASCIA_SOLO_GDO: 'on' };
-    assert.equal(regolaSoloGdo(utc('2026-10-31T08:59:00Z'), on), 'bot_only');   // sab 09:59
-    assert.equal(regolaSoloGdo(utc('2026-10-31T09:00:00Z'), on), 'solo_gdo');   // sab 10:00
-    assert.equal(regolaSoloGdo(utc('2026-10-31T13:29:00Z'), on), 'solo_gdo');   // sab 14:29
-    assert.equal(regolaSoloGdo(utc('2026-10-31T13:30:00Z'), on), 'bot_only');   // sab 14:30
-    assert.equal(regolaSoloGdo(utc('2026-11-01T14:00:00Z'), on), null);         // domenica
+    assert.equal(regolaSoloGdo(utc('2026-10-31T08:59:00Z'), true), 'bot_only');   // sab 09:59
+    assert.equal(regolaSoloGdo(utc('2026-10-31T09:00:00Z'), true), 'solo_gdo');   // sab 10:00
+    assert.equal(regolaSoloGdo(utc('2026-10-31T13:29:00Z'), true), 'solo_gdo');   // sab 14:29
+    assert.equal(regolaSoloGdo(utc('2026-10-31T13:30:00Z'), true), 'bot_only');   // sab 14:30
+    assert.equal(regolaSoloGdo(utc('2026-11-01T14:00:00Z'), true), null);         // domenica
 });
 
-test('solo GDO: accesa vince su getLeadRouting, ma la domenica resta del bot', () => {
-    const prev = process.env.FASCIA_SOLO_GDO;
-    process.env.FASCIA_SOLO_GDO = 'on';
-    try {
-        assert.equal(getLeadRouting(utc('2026-10-30T14:00:00Z')), 'solo_gdo');
-        assert.equal(getLeadRouting(utc('2026-10-30T12:10:00Z')), 'bot_only'); // 13:10, prima era bot_first
-        assert.equal(getLeadRouting(utc('2026-11-01T14:00:00Z')), 'bot_only');
-    } finally {
-        if (prev === undefined) delete process.env.FASCIA_SOLO_GDO; else process.env.FASCIA_SOLO_GDO = prev;
-    }
+test('solo GDO: attiva vince su getLeadRouting, ma la domenica resta del bot', () => {
+    assert.equal(getLeadRouting(utc('2026-10-30T14:00:00Z'), true), 'solo_gdo');
+    assert.equal(getLeadRouting(utc('2026-10-30T12:10:00Z'), true), 'bot_only'); // 13:10
+    assert.equal(getLeadRouting(utc('2026-11-01T14:00:00Z'), true), 'bot_only');
+    assert.notEqual(getLeadRouting(utc('2026-10-30T14:00:00Z'), false), 'solo_gdo');
+});
+
+test('solo GDO: interruttore manuale on/off, assente = automatico', () => {
+    assert.equal(modoSoloGdo({}), 'auto');
+    assert.equal(modoSoloGdo({ FASCIA_SOLO_GDO: 'auto' }), 'auto');
+    assert.equal(modoSoloGdo({ FASCIA_SOLO_GDO: ' ON ' }), 'on');
+    assert.equal(modoSoloGdo({ FASCIA_SOLO_GDO: 'off' }), 'off');
+    assert.equal(modoSoloGdo({ FASCIA_SOLO_GDO: 'boh' }), 'auto');
+});
+
+const tuttiHigh = (oggi: string) => ({
+    storico: {
+        '+393520158061': { [oggi]: 'HIGH' },
+        '+393522018718': { [oggi]: 'HIGH' },
+        '+393522070047': { [oggi]: 'HIGH' },
+        '+393520413199': { [oggi]: 'LOW' }, // il 3199 non conta
+    } as Record<string, Record<string, string>>,
+    pause: {} as Record<string, unknown>,
+});
+
+test('stato numeri: tutti HIGH e nessuno in pausa = a posto (il 3199 non conta)', () => {
+    assert.equal(numeriTuttiHigh(tuttiHigh('2026-10-30'), '2026-10-30'), true);
+    // lettura di ieri ancora valida al mattino presto, prima del primo giro del cron
+    assert.equal(numeriTuttiHigh(tuttiHigh('2026-10-29'), '2026-10-30'), true);
+});
+
+test('stato numeri: uno non HIGH, in pausa, senza letture recenti o illeggibile = non a posto', () => {
+    const s1 = tuttiHigh('2026-10-30'); s1.storico['+393522070047']['2026-10-30'] = 'MEDIUM';
+    assert.equal(numeriTuttiHigh(s1, '2026-10-30'), false);
+    const s2 = tuttiHigh('2026-10-30'); s2.pause['+393522070047'] = { fino: '2026-11-01' };
+    assert.equal(numeriTuttiHigh(s2, '2026-10-30'), false);
+    assert.equal(numeriTuttiHigh(tuttiHigh('2026-10-28'), '2026-10-30'), false);
+    const s3 = tuttiHigh('2026-10-30'); delete s3.storico['+393522018718'];
+    assert.equal(numeriTuttiHigh(s3, '2026-10-30'), false);
+    assert.equal(numeriTuttiHigh(null, '2026-10-30'), false);
+    assert.equal(numeriTuttiHigh('rotto', '2026-10-30'), false);
+});
+
+test('stato numeri: lo stato vero del 29/10 sera (0047 in pausa e LOW) accende la regola', () => {
+    const stato = {
+        pause: { '+393522070047': { dal: '2026-10-29', fino: '2026-11-01', tettoPrima: 100000 } },
+        storico: {
+            '+393520158061': { '2026-10-29': 'HIGH' }, '+393520413199': { '2026-10-29': 'LOW' },
+            '+393522018718': { '2026-10-29': 'HIGH' }, '+393522070047': { '2026-10-29': 'LOW' },
+        },
+        primario: null,
+    };
+    assert.equal(numeriTuttiHigh(stato, '2026-10-29'), false);
 });

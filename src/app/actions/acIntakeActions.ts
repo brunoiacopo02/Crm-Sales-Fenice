@@ -5,6 +5,7 @@ import { users, acIntakeFailures, leads } from "@/db/schema";
 import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
@@ -512,7 +513,7 @@ export async function getBotRoutingStatus(): Promise<BotRoutingStatus> {
     ));
 
     return {
-        routing: getLeadRouting(now),
+        routing: getLeadRouting(now, (await fasciaSoloGdoAttiva()).attiva),
         dailyMin: BOT_DAILY_MIN,
         todayBot: today?.bot ?? 0,
         todayHumans: today?.humans ?? 0,
