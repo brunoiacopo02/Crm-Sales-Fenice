@@ -17,6 +17,7 @@ import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 import { reverseFissato, riallineaScaliniDopoUscita, syncLeadPiume } from "@/lib/economy/awards";
 import { leadDelMondoDiAccount } from "@/lib/prova/sql";
+import { daRifissareDalleConferme, dividiRifissaggi, notaConfermePerGdo } from "@/lib/diretta/daRifissare";
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -56,12 +57,17 @@ export async function getAppointments() {
     // Lead parcheggiati dalle Conferme ("da rifissare"): appointmentDate
     // azzerata e data spostata in recallDate. Senza questo bucket il lead
     // spariva dalla vista GDO (QA Conferme 2026-06-12).
-    const inRifissaggio = allAppointments.filter(l => !l.appointmentDate)
-    inRifissaggio.sort((a, b) => {
-        const ta = a.recallDate ? a.recallDate.getTime() : Infinity
-        const tb = b.recallDate ? b.recallDate.getTime() : Infinity
-        return ta - tb
-    })
+    // PO 29/10/2026: in testa quelli che le Conferme stanno rifissando (le
+    // Conferme lo richiamano il <recallDate>), poi gli altri senza data (già
+    // scartati o esitati), dal fissato più recente. Il GDO li vede, ma a
+    // rifissarli restano le Conferme. La nota delle Conferme arriva al GDO
+    // solo se non nomina il bot.
+    const { attivi, altri } = dividiRifissaggi(allAppointments.filter(l => !l.appointmentDate))
+    const inRifissaggio = [...attivi, ...altri].map(l => ({
+        ...l,
+        rifissaggioConferme: daRifissareDalleConferme(l),
+        confRecallNotes: isGdo ? notaConfermePerGdo(l.confRecallNotes) : l.confRecallNotes,
+    }))
 
     // Sort upcoming by appointmentDate ascending (closest first)
     upcoming.sort((a, b) => {

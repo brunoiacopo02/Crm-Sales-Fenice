@@ -8,6 +8,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { assegnatarioPerGdo, eventoTimelinePerGdo } from "@/lib/diretta/vistaGdo"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
+import { daRifissareDalleConferme, notaConfermePerGdo } from "@/lib/diretta/daRifissare"
 
 export async function getLeadProfile(leadId: string) {
     const ctx = await currentTenant()
@@ -32,6 +33,9 @@ export async function getLeadProfile(leadId: string) {
             appointmentNote: leads.appointmentNote,
             appointmentCreatedAt: leads.appointmentCreatedAt,
             discardReason: leads.discardReason,
+            confNeedsReschedule: leads.confNeedsReschedule,
+            confirmationsOutcome: leads.confirmationsOutcome,
+            confRecallNotes: leads.confRecallNotes,
             version: leads.version,
             createdAt: leads.createdAt,
             updatedAt: leads.updatedAt,
@@ -44,7 +48,17 @@ export async function getLeadProfile(leadId: string) {
         [0]
 
     if (!leadRow) return null
-    const { assignedToIsBot, ...lead } = leadRow
+    const { assignedToIsBot, confNeedsReschedule, confirmationsOutcome, confRecallNotes, ...resto } = leadRow
+    // PO 29/10/2026: appuntamento che le Conferme stanno rifissando. La scheda
+    // lo dice a chiunque la apra, con il giorno del richiamo e la nota delle
+    // Conferme (al GDO solo se non nomina il bot).
+    const daRifissare = daRifissareDalleConferme({ status: resto.status, appointmentDate: resto.appointmentDate, confNeedsReschedule, confirmationsOutcome })
+        ? {
+            richiamoIl: resto.recallDate,
+            nota: ctx.role === 'GDO' ? notaConfermePerGdo(confRecallNotes) : (confRecallNotes?.trim() || null),
+        }
+        : null
+    const lead = { ...resto, daRifissare }
 
     const events = await db.select({
             id: leadEvents.id,

@@ -466,7 +466,7 @@ export function ContactDrawer({
                                     <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
                                         <div className="rounded-lg bg-[#262626] px-3 py-2.5">
                                             <dt className="text-[12px] text-[#BFBFBF]">Stato</dt>
-                                            <dd className="mt-0.5 text-[14px] font-semibold">{STATO_LEAD[lead.status] ?? lead.status}</dd>
+                                            <dd className="mt-0.5 text-[14px] font-semibold">{lead.daRifissare ? 'Da rifissare' : (STATO_LEAD[lead.status] ?? lead.status)}</dd>
                                         </div>
                                         <div className="rounded-lg bg-[#262626] px-3 py-2.5">
                                             <dt className="text-[12px] text-[#BFBFBF]">In mano a</dt>
@@ -477,6 +477,19 @@ export function ContactDrawer({
                                             <dd className="mt-0.5 text-[14px] font-semibold">{lead.callCount} di 3</dd>
                                         </div>
                                     </dl>
+                                    {/* PO 29/10/2026: appuntamento tolto dalle Conferme per rifissarlo */}
+                                    {lead.daRifissare && (
+                                        <div role="note" className="mt-3 rounded-lg border-2 border-[#FF9330] px-3 py-2.5 text-[14px]">
+                                            <div className="font-semibold">
+                                                {lead.daRifissare.richiamoIl
+                                                    ? `Appuntamento da rifissare: le Conferme lo richiamano il ${dataOraBreveRoma(new Date(lead.daRifissare.richiamoIl))}`
+                                                    : 'Appuntamento da rifissare: lo richiamano le Conferme'}
+                                            </div>
+                                            {lead.daRifissare.nota && (
+                                                <div className="mt-1 break-words text-[#BFBFBF]">&quot;{lead.daRifissare.nota}&quot;</div>
+                                            )}
+                                        </div>
+                                    )}
                                 </section>
                             </div>
                         ) : activeTab === 'timeline' && events ? (
@@ -737,7 +750,7 @@ export function ContactDrawer({
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
                                         <div className="text-xs text-ash-500 mb-1">Stato DB</div>
-                                        <div className="text-sm font-bold text-ash-900">{lead.status}</div>
+                                        <div className="text-sm font-bold text-ash-900">{lead.status}{lead.daRifissare ? ' · da rifissare' : ''}</div>
                                     </div>
                                     <div className="bg-ash-50 p-3 rounded-lg border border-ash-100">
                                         <div className="text-xs text-ash-500 mb-1">Assegnazione</div>
@@ -748,6 +761,18 @@ export function ContactDrawer({
                                         <div className="text-sm font-bold text-ash-900">{lead.callCount} / 3</div>
                                     </div>
                                 </div>
+                                {lead.daRifissare && (
+                                    <div role="note" className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                                        <div className="font-bold">
+                                            {lead.daRifissare.richiamoIl
+                                                ? `Appuntamento da rifissare: le Conferme lo richiamano il ${dataOraBreveRoma(new Date(lead.daRifissare.richiamoIl))}`
+                                                : 'Appuntamento da rifissare: lo richiamano le Conferme'}
+                                        </div>
+                                        {lead.daRifissare.nota && (
+                                            <div className="mt-1 break-words italic text-sky-700">&quot;{lead.daRifissare.nota}&quot;</div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <hr className="border-ash-100" />

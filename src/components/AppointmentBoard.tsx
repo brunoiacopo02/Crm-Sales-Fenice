@@ -54,9 +54,14 @@ export function AppointmentBoard({
     // fisse: a 390 px restano dentro lo schermo e l'email si legge intera).
     // Stessi dati, stessi ritorni da Conferme e venditore, stessa modifica.
     if (variant === 'diretta') {
+        // PO 29/10/2026: gli appuntamenti che le Conferme stanno rifissando
+        // (getAppointments li mette in testa e li segna con rifissaggioConferme)
+        // si vedono anche in cima a "In programma", così il GDO non li perde.
+        const daRifissare = inRifissaggio.filter(l => l.rifissaggioConferme)
+        const altriSenzaData = inRifissaggio.filter(l => !l.rifissaggioConferme)
         const tabs = [
             { key: 'upcoming' as const, label: 'In programma', count: upcoming.length },
-            { key: 'rifissaggio' as const, label: 'Da rifissare', count: inRifissaggio.length },
+            { key: 'rifissaggio' as const, label: 'Da rifissare', count: daRifissare.length },
             { key: 'past' as const, label: 'Archivio', count: past.length },
         ]
         const quando = (iso: string | Date | null | undefined) => iso ? dataOraBreveRoma(new Date(iso)) : 'N/D'
@@ -68,7 +73,9 @@ export function AppointmentBoard({
             const isUpcoming = tipo === 'upcoming'
             const isRifissaggio = tipo === 'rifissaggio'
             const funnel = funnelLeggibile(lead.funnel)
-            const conEsiti = (lead.confirmationsOutcome && !isSelfBooked(lead.confirmationsOutcome)) || lead.salespersonOutcome || isRifissaggio || lead.confSnoozeAt
+            // In mano alle Conferme per rifissarlo; gli altri senza data sono già esitati.
+            const conConferme = isRifissaggio && !!lead.rifissaggioConferme
+            const conEsiti = (lead.confirmationsOutcome && !isSelfBooked(lead.confirmationsOutcome)) || lead.salespersonOutcome || conConferme || lead.confSnoozeAt
             const etichettaModifica = isRifissaggio ? 'Rifissa' : 'Modifica'
             return (
                 <div key={lead.id} className="flex min-w-0 flex-col gap-2.5 rounded-2xl border-2 border-transparent bg-[var(--d-surface)] px-4 py-3 text-[var(--d-text)] transition-colors hover:border-[var(--d-line)] sm:px-5">
@@ -77,10 +84,15 @@ export function AppointmentBoard({
                         <div className="min-w-0 flex-1">
                             <div className="truncate text-[16px] font-semibold leading-tight" title={lead.name}>{lead.name}</div>
                             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
-                                {isRifissaggio ? (
+                                {conConferme ? (
                                     <div className="inline-flex items-center gap-1.5 font-semibold text-[var(--d-orange)]">
                                         <RefreshCcw className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                                        Da rifissare{lead.recallDate ? ` (era ${quando(lead.recallDate)})` : ''}
+                                        Da rifissare
+                                    </div>
+                                ) : isRifissaggio ? (
+                                    <div className="inline-flex items-center gap-1.5 font-semibold text-[var(--d-muted)]">
+                                        <CalendarCheck className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                                        Senza data
                                     </div>
                                 ) : (
                                     <div className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${isUpcoming ? 'text-[var(--d-text)]' : 'text-[var(--d-muted)]'}`}>
@@ -135,9 +147,14 @@ export function AppointmentBoard({
                     {/* Ritorno da Conferme e venditore, come nella pagina di sempre */}
                     {conEsiti && (
                         <div className="flex min-w-0 flex-wrap items-start gap-2 border-t border-[var(--d-line)] pt-2.5">
-                            {isRifissaggio && (
-                                <div className={`${chip} border-[var(--d-line)]`}>
-                                    <div className="flex items-center gap-1.5">{pallino('var(--d-orange)')}Conferme: appuntamento da rifissare</div>
+                            {conConferme && (
+                                <div className={`${chip} border-[var(--d-orange)]`}>
+                                    <div className="flex items-center gap-1.5">
+                                        {pallino('var(--d-orange)')}
+                                        {lead.recallDate
+                                            ? `Le Conferme lo richiamano il ${quando(lead.recallDate)} per rifissarlo`
+                                            : 'Le Conferme lo richiamano per rifissarlo'}
+                                    </div>
                                     {lead.confRecallNotes && notaChip(lead.confRecallNotes)}
                                 </div>
                             )}
@@ -187,7 +204,7 @@ export function AppointmentBoard({
         const vuoto = activeTab === 'upcoming'
             ? { titolo: 'Nessun appuntamento in programma', testo: 'Continua a chiamare lead per fissare appuntamenti.' }
             : activeTab === 'rifissaggio'
-                ? { titolo: 'Nessun appuntamento da rifissare', testo: 'Quando le Conferme parcheggiano un tuo appuntamento da rifissare, lo trovi qui.' }
+                ? { titolo: 'Nessun appuntamento da rifissare', testo: 'Quando le Conferme mettono un tuo appuntamento da rifissare, lo trovi qui con il giorno in cui lo richiamano.' }
                 : { titolo: 'Nessun appuntamento passato', testo: 'Gli appuntamenti scorsi appariranno qui.' }
 
         return (
@@ -210,8 +227,29 @@ export function AppointmentBoard({
                 </div>
 
                 <div className="flex flex-col gap-2.5 pb-24">
-                    {currentList.map(lead => cardDiretta(lead, activeTab))}
-                    {currentList.length === 0 && (
+                    {activeTab === 'upcoming' && daRifissare.length > 0 && (
+                        <>
+                            <div className="pt-1 text-[14px] font-semibold text-[var(--d-orange)]">
+                                Da rifissare, li stanno richiamando le Conferme <span className="tabular-nums">{daRifissare.length}</span>
+                            </div>
+                            {daRifissare.map(lead => cardDiretta(lead, 'rifissaggio'))}
+                            <div className="pt-2 text-[14px] font-semibold text-[var(--d-muted)]">
+                                In programma <span className="tabular-nums">{upcoming.length}</span>
+                            </div>
+                        </>
+                    )}
+                    {activeTab === 'rifissaggio' ? (
+                        <>
+                            {daRifissare.map(lead => cardDiretta(lead, 'rifissaggio'))}
+                            {altriSenzaData.length > 0 && (
+                                <div className="pt-3 text-[14px] font-semibold text-[var(--d-muted)]">
+                                    Senza data, già esitati dalle Conferme <span className="tabular-nums">{altriSenzaData.length}</span>
+                                </div>
+                            )}
+                            {altriSenzaData.map(lead => cardDiretta(lead, 'rifissaggio'))}
+                        </>
+                    ) : currentList.map(lead => cardDiretta(lead, activeTab))}
+                    {currentList.length === 0 && !(activeTab === 'upcoming' && daRifissare.length > 0) && (
                         <div className="rounded-2xl border-2 border-[var(--d-surface)] px-6 py-12 text-center">
                             <div className="text-[16px] font-semibold text-[var(--d-text)]">{vuoto.titolo}</div>
                             <div className="mt-1 text-[14px] text-[var(--d-muted)]">{vuoto.testo}</div>
@@ -298,7 +336,9 @@ export function AppointmentBoard({
                 {isRifissaggio ? (
                     <div className="text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full bg-sky-100 text-sky-700">
                         <RefreshCcw className="h-3 w-3" />
-                        Da rifissare{lead.recallDate ? ` (era ${new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })})` : ''}
+                        {lead.rifissaggioConferme
+                            ? `Da rifissare${lead.recallDate ? ` · le Conferme lo richiamano il ${new Date(lead.recallDate).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}` : ''}`
+                            : 'Senza data'}
                     </div>
                 ) : (
                     <div className={`text-xs font-bold px-2 py-1 rounded inline-flex items-center justify-end gap-1 w-full ${isUpcoming ? 'bg-green-100 text-green-700' : 'bg-ash-100 text-ash-600'}`}>
@@ -314,11 +354,11 @@ export function AppointmentBoard({
             {/* 5. GDO Feedback Loop (Conferme & Vendita) */}
             {/* La sentinella degli autofissati e' truthy ma nessun ramo qui dentro
                 la riconosce: senza escluderla usciva un riquadro vuoto. */}
-            {((lead.confirmationsOutcome && !isSelfBooked(lead.confirmationsOutcome)) || lead.salespersonOutcome || isRifissaggio || lead.confSnoozeAt) && (
+            {((lead.confirmationsOutcome && !isSelfBooked(lead.confirmationsOutcome)) || lead.salespersonOutcome || (isRifissaggio && lead.rifissaggioConferme) || lead.confSnoozeAt) && (
                 <div className="w-full mt-3 pt-3 border-t border-dashed border-ash-200 flex flex-wrap items-start gap-3 col-span-full">
 
                     {/* Parcheggiato dalle Conferme: il GDO deve rifissare la data */}
-                    {isRifissaggio && (
+                    {isRifissaggio && lead.rifissaggioConferme && (
                         <div className="flex flex-col items-start gap-0.5 text-[11px] font-bold bg-sky-50 text-sky-700 px-2 py-1 rounded border border-sky-200">
                             <div className="flex items-center gap-1.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
