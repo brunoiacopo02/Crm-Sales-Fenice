@@ -28,6 +28,8 @@ import { accountVero, nonDaAccountDiProva } from "@/lib/prova/sql"
 import { dayBoundsRome, toRomeDateStr, weekBoundsRome } from "@/lib/dateUtils"
 import { personName } from "@/lib/diretta/config"
 import { leggiSquadra, type DirettaSquadra } from "@/lib/diretta/live"
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa"
+import { leadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount"
 import {
     totaliRegistro, type TotaliValuta, type Valuta,
 } from "@/lib/diretta/centro"
@@ -137,6 +139,10 @@ async function sezione<T>(nome: string, f: () => Promise<T>): Promise<T | null> 
 const STORNO = sql<boolean>`left(${currencyLedger.idemKey}, 7) = 'storno:'`
 
 async function movimenti(filtro: ReturnType<typeof and> | undefined, limite: number): Promise<MovimentoCentro[]> {
+    // Account ripartito (118, PO 29/10/2026): i movimenti di chi c'era prima
+    // non si leggono sotto il nome di chi lo usa adesso. I totali del registro
+    // (somme di squadra, sotto) restano interi.
+    const inizio = await leggiInizioAccount()
     const righe = await db.select({
         id: currencyLedger.id,
         at: currencyLedger.createdAt,
@@ -150,7 +156,7 @@ async function movimenti(filtro: ReturnType<typeof and> | undefined, limite: num
     })
         .from(currencyLedger)
         .innerJoin(users, eq(users.id, currencyLedger.userId))
-        .where(and(eq(currencyLedger.companyId, FENICE), accountVero(), filtro))
+        .where(and(eq(currencyLedger.companyId, FENICE), accountVero(), filtro, sqlRigaConta(inizio, currencyLedger.userId, currencyLedger.createdAt)))
         .orderBy(desc(currencyLedger.createdAt), desc(currencyLedger.id))
         .limit(limite)
     return righe.map(r => ({
@@ -213,6 +219,8 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
         confermatoAlle: leads.confirmationsTimestamp,
         appuntamento: leads.appointmentDate,
         gdoId: leads.assignedToId,
+        assignedAt: leads.assignedAt,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
         confermeId: leads.confirmationsUserId,
         venditoreId: leads.salespersonUserId,
         esitoVenditore: leads.salespersonOutcome,
@@ -229,6 +237,7 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
         .orderBy(asc(leads.appointmentDate), desc(leads.confirmationsTimestamp))
         .limit(200)
 
+    const inizio = await leggiInizioAccount()
     const ids = [...new Set(righe.flatMap(r => [r.gdoId, r.confermeId, r.venditoreId]).filter((x): x is string => !!x))]
     const persone = ids.length === 0 ? [] : await db.select({
         id: users.id, firstName: users.firstName, displayName: users.displayName, name: users.name, gdoCode: users.gdoCode,
@@ -251,7 +260,11 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
         nota: r.nota ?? null,
         confermatoAlle: (r.confermatoAlle as Date).toISOString(),
         appuntamento: r.appuntamento?.toISOString() ?? null,
-        gdo: gdoDi(r.gdoId),
+        // Account ripartito (118, PO 29/10/2026): un lead fissato da chi c'era
+        // prima non porta il nome di chi usa l'account adesso.
+        gdo: leadConta(inizio, { assignedToId: r.gdoId, assignedAt: r.assignedAt, appointmentCreatedAt: r.appointmentCreatedAt })
+            ? gdoDi(r.gdoId)
+            : `GDO ${(r.gdoId ? codice.get(r.gdoId) : null) ?? '?'} (titolare precedente)`,
         conferme: di(r.confermeId),
         venditore: di(r.venditoreId),
         esitoVenditore: r.esitoVenditore ?? null,

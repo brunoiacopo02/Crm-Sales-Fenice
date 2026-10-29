@@ -8,6 +8,8 @@ import { BREAK_RULES, getLocalDateRome } from "@/lib/pauseUtils"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { nomeVeroOppure } from '@/lib/diretta/nomeSql';
 import { nonDaAccountDiProva } from '@/lib/prova/sql';
+import { leggiInizioAccount } from '@/lib/diretta/vistaDa';
+import { sqlRigaConta } from '@/lib/diretta/inizioAccount';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -181,13 +183,16 @@ export async function getGdoPauseHistory(gdoId: string): Promise<PauseHistoryEnt
     const ctx = await currentTenant(); assertSalesArea(ctx);
     const now = new Date()
     const yearMonth = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Rome' }).slice(0, 7)
+    // Account ripartito (118, PO 29/10/2026): le pause di chi c'era prima non si vedono.
+    const inizio = await leggiInizioAccount()
 
     const sessions = await db.select()
         .from(breakSessions)
         .where(and(
             eq(breakSessions.companyId, ctx.companyId),
             eq(breakSessions.gdoUserId, gdoId),
-            sql`${breakSessions.dateLocal} LIKE ${yearMonth + '%'}`
+            sql`${breakSessions.dateLocal} LIKE ${yearMonth + '%'}`,
+            sqlRigaConta(inizio, breakSessions.gdoUserId, breakSessions.startTime),
         ))
         .orderBy(desc(breakSessions.startTime))
 

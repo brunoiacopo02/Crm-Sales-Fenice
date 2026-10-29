@@ -18,6 +18,8 @@ import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils
 import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { accountVero, leadVero } from "@/lib/prova/sql";
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
+import { inizioPeriodo, leadConta } from "@/lib/diretta/inizioAccount";
 
 // Target espliciti richiesti dal management (Correzioni CRM 2026-06-11).
 // TARGET_APP_PER_GDO_DAY (soglia giudizio manager = 10) ora importata da canon.
@@ -88,8 +90,14 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
 
         // ── Appuntamenti del mese (con conferme) — stessa definizione panoramica ──
         const queryStart = weekStart < monthStart ? weekStart : monthStart;
+        // Account ripartito (118, PO 29/10/2026): conta per il GDO solo dalla
+        // data di inizio. Filtro solo sugli appuntamenti per-GDO (sotto
+        // target); scorte e card aziendali restano intere (i lead aperti di
+        // chi c'era prima sono stati tolti all'account il 29/10).
+        const inizio = await leggiInizioAccount();
         const apptRows = await db.select({
             assignedToId: leads.assignedToId,
+            assignedAt: leads.assignedAt,
             appointmentCreatedAt: leads.appointmentCreatedAt,
             appointmentDate: leads.appointmentDate,
             confirmationsOutcome: leads.confirmationsOutcome,
@@ -118,7 +126,7 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
                 apptMtd++;
                 if (r.confirmationsOutcome === 'confermato') confMtd++;
             }
-            if (r.assignedToId && t >= weekStart) {
+            if (r.assignedToId && t >= weekStart && leadConta(inizio, r)) {
                 appWeekByGdo.set(r.assignedToId, (appWeekByGdo.get(r.assignedToId) || 0) + 1);
                 if (t >= todayStart && t <= todayEnd) {
                     appTodayByGdo.set(r.assignedToId, (appTodayByGdo.get(r.assignedToId) || 0) + 1);
@@ -243,7 +251,10 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         const underperformers: GdoUnderperformerRow[] = gdos
             .map(g => {
                 const appWeek = appWeekByGdo.get(g.id) || 0;
-                const avg = wdElapsedWeek > 0 ? appWeek / wdElapsedWeek : null;
+                // Account ripartito: i giorni contano dall'inizio, non dal lunedì.
+                const daInizio = inizioPeriodo(inizio, g.id, weekStart);
+                const giorni = daInizio === weekStart ? wdElapsedWeek : workingDaysBetween(daInizio, now);
+                const avg = giorni > 0 ? appWeek / giorni : null;
                 return { gdoId: g.id, name: gdoName.get(g.id)!, appToday: appTodayByGdo.get(g.id) || 0, appWeekAvg: avg };
             })
             .filter(r => r.appWeekAvg !== null && r.appWeekAvg < TARGET_APP_PER_GDO_DAY * 0.5)

@@ -24,6 +24,8 @@ import { prossimaTappa, type TappaSerie } from '@/lib/economy/serie'
 import { leggiSerie } from '@/lib/economy/serieDb'
 import { contaFissati } from './fissati'
 import { leggiFissati, leggiMembriSquadra } from './fissatiDb'
+import { sqlLeadConta, sqlRigaConta } from './inizioAccount'
+import { leggiInizioAccount } from './vistaDa'
 import {
     FISSATI_DAL, PRESENZE_DAL, distintiPerSettimana, etichettaGiorno,
     migliorSettimana, sommaPerSettimana, ultimiPerLead,
@@ -150,6 +152,8 @@ export function leggiObiettivi(): Promise<GamificationTargets> {
  */
 async function calcolaMiglioriPassate(userId: string, companyId: string, inizioSettimanaIso: string) {
     const inizio = new Date(inizioSettimanaIso)
+    // Account ripartito (118): la miglior settimana è solo della persona nuova.
+    const inizioAccount = await leggiInizioAccount()
     const [presentati, aggiustamenti, fissati] = await Promise.all([
         inizio > PRESENZE_DAL ? db.select({ at: leads.presentedAt })
             .from(leads)
@@ -160,6 +164,7 @@ async function calcolaMiglioriPassate(userId: string, companyId: string, inizioS
                 isNotNull(leads.presentedAt),
                 gte(leads.presentedAt, PRESENZE_DAL),
                 lt(leads.presentedAt, inizio),
+                sqlLeadConta(inizioAccount, leads),
             )) : Promise.resolve([]),
         inizio > PRESENZE_DAL ? db.select({ at: manualAdjustments.createdAt, n: manualAdjustments.count })
             .from(manualAdjustments)
@@ -169,6 +174,7 @@ async function calcolaMiglioriPassate(userId: string, companyId: string, inizioS
                 eq(manualAdjustments.type, 'presenze'),
                 gte(manualAdjustments.createdAt, PRESENZE_DAL),
                 lt(manualAdjustments.createdAt, inizio),
+                sqlRigaConta(inizioAccount, manualAdjustments.userId, manualAdjustments.createdAt),
             )).catch(() => [] as { at: Date; n: number }[]) : Promise.resolve([]),
         inizio > FISSATI_DAL
             ? leggiFissati({ companyId, userIds: [userId], start: FISSATI_DAL, end: inizio })
@@ -184,7 +190,7 @@ async function calcolaMiglioriPassate(userId: string, companyId: string, inizioS
     }
 }
 
-const miglioriInCache = unstable_cache(calcolaMiglioriPassate, ['diretta-migliori-v1'], { revalidate: 3600 })
+const miglioriInCache = unstable_cache(calcolaMiglioriPassate, ['diretta-migliori-v2'], { revalidate: 3600 })
 
 /** Dati personali del GDO: fissati di oggi e della settimana, presenze, euro, saldo. */
 export async function leggiMia(userId: string, companyId: string, obiettivi: GamificationTargets): Promise<DirettaMia> {
@@ -193,6 +199,7 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
     const settimana = weekBoundsRome(now)
     const daFissati = settimana.start > FISSATI_DAL ? settimana.start : FISSATI_DAL
 
+    const inizioAccount = await leggiInizioAccount()
     const [righeSettimana, presenze, conferme, saldo, passate, serie, regole] = await Promise.all([
         leggiFissati({ companyId, userIds: [userId], start: settimana.start, end: settimana.end }),
         countPresences(userId, settimana.start, settimana.end, companyId),
@@ -203,6 +210,7 @@ export async function leggiMia(userId: string, companyId: string, obiettivi: Gam
                 eq(leads.assignedToId, userId),
                 eq(leads.confirmationsOutcome, 'confermato'),
                 gte(leads.confirmationsTimestamp, new Date(Math.min(settimana.start.getTime(), giorno.start.getTime() - 7 * 86_400_000))),
+                sqlLeadConta(inizioAccount, leads),
             )),
         db.select({ scintille: users.scintille, piume: users.piume }).from(users).where(eq(users.id, userId)).limit(1),
         miglioriInCache(userId, companyId, settimana.start.toISOString()),

@@ -11,6 +11,8 @@ import { isRealGdo, DEFAULT_DAILY_APPT_TARGET } from "@/lib/kpi/canon";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 import { getMinCallsPerDay } from "@/app/actions/managerAdvancedActions";
 import { accountVero, leadVero } from "@/lib/prova/sql";
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
+import { sqlLeadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount";
 
 export interface GamificationTargetInput {
     month: string;
@@ -111,11 +113,16 @@ export async function getManagerGdoTables(monthString: string) {
     // mese successivo va contato nel mese in cui è stato fissato.
     // Bounds Europe/Rome (end esclusivo): prima usava componenti Date locali (UTC su Vercel).
     const { start: startObj, end: endObj } = monthBoundsRome(monthString);
+    // Account ripartito (118, PO 29/10/2026): ogni numero qui è per-GDO (nessun
+    // totale di squadra), quindi il filtro va direttamente nelle query.
+    const inizio = await leggiInizioAccount();
+    const leadSuo = sqlLeadConta(inizio, leads);
 
     const [monthLeads, calledLeads, presenceLeads, confirmedLeads, closedLeads] = await Promise.all([
         db.select().from(leads).where(
             and(
                 eq(leads.companyId, ctx.companyId),
+                leadSuo,
                 isNotNull(leads.appointmentDate),
                 sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startObj}`,
                 sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endObj}`,
@@ -143,6 +150,7 @@ export async function getManagerGdoTables(monthString: string) {
                 isNotNull(callLogs.userId),
                 gte(callLogs.createdAt, startObj),
                 lt(callLogs.createdAt, endObj),
+                sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt),
             )),
         // Presenze del mese (PO 2026-07-17): base `presentedAt` (giorno dell'appuntamento
         // in cui il lead ha presenziato, latch immutabile) — NON il cohort dei fissati.
@@ -158,6 +166,7 @@ export async function getManagerGdoTables(monthString: string) {
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadSuo,
                 eq(leads.confirmationsOutcome, 'confermato'),
                 isNotNull(leads.presentedAt),
                 gte(leads.presentedAt, startObj),
@@ -174,6 +183,7 @@ export async function getManagerGdoTables(monthString: string) {
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadSuo,
                 eq(leads.confirmationsOutcome, 'confermato'),
                 isNotNull(leads.appointmentDate),
                 gte(leads.appointmentDate, startObj),
@@ -192,6 +202,7 @@ export async function getManagerGdoTables(monthString: string) {
         }).from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
+                leadSuo,
                 sql`LOWER(${leads.salespersonOutcome}) = 'chiuso'`,
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, startObj),
@@ -531,6 +542,8 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
     const rangeStart = weekStart < monthStart ? weekStart : monthStart;
     const rangeEnd = weekEnd > monthEnd ? weekEnd : monthEnd;
 
+    // Account ripartito (118, PO 29/10/2026): solo i lead presi o fissati dall'inizio.
+    const inizio = await leggiInizioAccount();
     const gdoLeads = await db.select({
         appointmentDate: leads.appointmentDate,
         confirmationsOutcome: leads.confirmationsOutcome,
@@ -540,6 +553,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         and(
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoUserId),
+            sqlLeadConta(inizio, leads),
             isNotNull(leads.appointmentDate),
             gte(leads.appointmentDate, rangeStart),
             lt(leads.appointmentDate, rangeEnd)
@@ -605,6 +619,8 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
     const userRow = await db.select({ dailyApptTarget: users.dailyApptTarget })
         .from(users).where(and(eq(users.companyId, ctx.companyId), eq(users.id, gdoUserId))).limit(1);
     const dailyApptTarget = userRow[0]?.dailyApptTarget || DEFAULT_DAILY_APPT_TARGET;
+    // Account ripartito (118, PO 29/10/2026): chiamate e lead solo dall'inizio.
+    const inizio = await leggiInizioAccount();
 
     // Count today's calls from callLogs
     const callResult = await db.select({ count: sql<number>`count(*)::integer` })
@@ -613,7 +629,8 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
             eq(callLogs.companyId, ctx.companyId),
             eq(callLogs.userId, gdoUserId),
             gte(callLogs.createdAt, todayStart),
-            lt(callLogs.createdAt, todayEnd)
+            lt(callLogs.createdAt, todayEnd),
+            sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt),
         ));
     const callsDone = callResult[0]?.count || 0;
 
@@ -623,6 +640,7 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
         .where(and(
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, gdoUserId),
+            sqlLeadConta(inizio, leads),
             isNotNull(leads.appointmentCreatedAt),
             gte(leads.appointmentCreatedAt, todayStart),
             lt(leads.appointmentCreatedAt, todayEnd)
@@ -655,16 +673,20 @@ export async function getGdoDailyObjectives(gdoUserId: string) {
 export async function getScriptCompletionRate(userId: string) {
     const ctx = await currentTenant();
     assertSalesArea(ctx);
+    // Account ripartito (118, PO 29/10/2026): solo le chiamate dall'inizio.
+    const inizio = await leggiInizioAccount();
+    const dallInizio = sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt);
     const [totalResult, scriptResult, scriptDaysResult] = await Promise.all([
         db.select({ count: sql<number>`count(*)::integer` })
             .from(callLogs)
-            .where(and(eq(callLogs.companyId, ctx.companyId), eq(callLogs.userId, userId))),
+            .where(and(eq(callLogs.companyId, ctx.companyId), eq(callLogs.userId, userId), dallInizio)),
         db.select({ count: sql<number>`count(*)::integer` })
             .from(callLogs)
             .where(and(
                 eq(callLogs.companyId, ctx.companyId),
                 eq(callLogs.userId, userId),
-                eq(callLogs.scriptCompleted, true)
+                eq(callLogs.scriptCompleted, true),
+                dallInizio,
             )),
         // Get distinct dates (Europe/Rome) where user completed at least one script, ordered desc
         db.select({
@@ -674,7 +696,8 @@ export async function getScriptCompletionRate(userId: string) {
             .where(and(
                 eq(callLogs.companyId, ctx.companyId),
                 eq(callLogs.userId, userId),
-                eq(callLogs.scriptCompleted, true)
+                eq(callLogs.scriptCompleted, true),
+                dallInizio,
             ))
             .orderBy(sql`day DESC`),
     ]);
@@ -730,6 +753,8 @@ export async function getAllGdoScriptRates(): Promise<Record<string, { completio
     if (activeGdos.length === 0) return {};
 
     const gdoIds = activeGdos.map(g => g.id);
+    // Account ripartito (118, PO 29/10/2026): solo le chiamate dall'inizio.
+    const dallInizio = sqlRigaConta(await leggiInizioAccount(), callLogs.userId, callLogs.createdAt);
 
     const [totalByUser, scriptByUser] = await Promise.all([
         db.select({
@@ -738,7 +763,8 @@ export async function getAllGdoScriptRates(): Promise<Record<string, { completio
         }).from(callLogs)
             .where(and(
                 eq(callLogs.companyId, ctx.companyId),
-                sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`
+                sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`,
+                dallInizio,
             ))
             .groupBy(callLogs.userId),
         db.select({
@@ -748,7 +774,8 @@ export async function getAllGdoScriptRates(): Promise<Record<string, { completio
             .where(and(
                 eq(callLogs.companyId, ctx.companyId),
                 sql`${callLogs.userId} IN (${sql.join(gdoIds.map(id => sql`${id}`), sql`, `)})`,
-                eq(callLogs.scriptCompleted, true)
+                eq(callLogs.scriptCompleted, true),
+                dallInizio,
             ))
             .groupBy(callLogs.userId),
     ]);

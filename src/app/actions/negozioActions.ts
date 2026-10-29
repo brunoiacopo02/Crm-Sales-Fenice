@@ -24,6 +24,8 @@ import { prossimaTappa, puoComprareScudo, scudiDelMese, KIND_SCUDO, type TappaSe
 import { leggiSerie } from "@/lib/economy/serieDb"
 import { readEconomyRules } from "@/lib/economy/awards"
 import { readGamificationTargets } from "@/lib/diretta/settings"
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa"
+import { sqlRigaConta } from "@/lib/diretta/inizioAccount"
 import { shiftWindow } from "@/lib/diretta/config"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { comeFunziona, type BloccoSpiegazione } from "@/lib/diretta/comeFunziona"
@@ -110,6 +112,9 @@ export async function getNegozioView(): Promise<NegozioView> {
     }).from(users).where(eq(users.id, ctx.userId)).limit(1)
     if (!me) throw new Error('Utente non trovato')
 
+    // Account ripartito (118, PO 29/10/2026): gli acquisti di chi c'era prima
+    // non sono nello storico (né tra le cose possedute) di chi lo usa adesso.
+    const inizio = await leggiInizioAccount()
     const [items, purchases] = await Promise.all([
         db.select().from(rewardItems)
             .where(and(eq(rewardItems.companyId, FENICE), eq(rewardItems.isActive, true)))
@@ -121,7 +126,7 @@ export async function getNegozioView(): Promise<NegozioView> {
             nome: rewardItems.name, kind: rewardItems.kind, imageUrl: rewardItems.imageUrl,
         }).from(rewardPurchases)
             .innerJoin(rewardItems, eq(rewardPurchases.itemId, rewardItems.id))
-            .where(eq(rewardPurchases.userId, me.id))
+            .where(and(eq(rewardPurchases.userId, me.id), sqlRigaConta(inizio, rewardPurchases.userId, rewardPurchases.createdAt)))
             .orderBy(desc(rewardPurchases.createdAt))
             .limit(100),
     ])

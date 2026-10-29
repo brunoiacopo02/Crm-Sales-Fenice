@@ -11,6 +11,8 @@ import { db } from '@/db'
 import { callLogs, leads, users } from '@/db/schema'
 import { isTeamMember } from './config'
 import { soloValidi } from './fissati'
+import { sqlRigaConta } from './inizioAccount'
+import { leggiInizioAccount } from './vistaDa'
 
 /** db oppure una transazione: basta che sappia fare select. */
 type Lettore = Pick<typeof db, 'select'>
@@ -32,6 +34,8 @@ export async function leggiFissati(
     lettore: Lettore = db,
 ): Promise<FissatoLetto[]> {
     if (q.userIds.length === 0) return []
+    // Account ripartito (118, PO 29/10/2026): i fissati di chi c'era prima non sono suoi.
+    const inizio = await leggiInizioAccount()
     const righe = await lettore.select({
         id: callLogs.id,
         userId: callLogs.userId,
@@ -47,6 +51,7 @@ export async function leggiFissati(
             eq(callLogs.outcome, 'APPUNTAMENTO'),
             gte(callLogs.createdAt, q.start),
             lt(callLogs.createdAt, q.end),
+            sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt),
         ))
         .orderBy(desc(callLogs.createdAt), desc(callLogs.id))
     return soloValidi(righe).map(r => ({ id: r.id, userId: r.userId, leadId: r.leadId, createdAt: r.createdAt }))

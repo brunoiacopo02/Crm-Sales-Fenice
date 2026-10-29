@@ -5,6 +5,8 @@ import { db } from '@/db'
 import { appSettings, currencyLedger } from '@/db/schema'
 import { toRomeDateStr } from '@/lib/dateUtils'
 import { parseClosedDays, QUOTES_CLOSED_DAYS_KEY } from '@/lib/quotes/calendar'
+import { leggiInizioAccount } from '@/lib/diretta/vistaDa'
+import { sqlRigaConta } from '@/lib/diretta/inizioAccount'
 import { calcolaSerie, scudiComprati, giorniFatti, type AcquistoScudo, type RigaSerie, type StatoSerie } from './serie'
 
 /** db oppure una transazione: basta che sappia leggere. */
@@ -16,6 +18,8 @@ type Lettore = Pick<typeof db, 'select'>
  * (userId, createdAt): sono poche righe al giorno.
  */
 export async function leggiRigheSerie(l: Lettore, userId: string): Promise<RigaSerie[]> {
+    // Account ripartito (118, PO 29/10/2026): la serie parte dall'inizio account.
+    const inizio = await leggiInizioAccount()
     return l.select({
         idemKey: currencyLedger.idemKey, reason: currencyLedger.reason, amount: currencyLedger.amount,
         createdAt: currencyLedger.createdAt, metadata: currencyLedger.metadata,
@@ -30,6 +34,7 @@ export async function leggiRigheSerie(l: Lettore, userId: string): Promise<RigaS
             like(currencyLedger.idemKey, `storno:P:serie:${userId}:%`),
             inArray(currencyLedger.reason, ['negozio', 'negozio_rimborso']),
         ),
+        sqlRigaConta(inizio, currencyLedger.userId, currencyLedger.createdAt),
     ))
 }
 

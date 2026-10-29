@@ -8,6 +8,8 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isRealGdo, isAnsweredLog } from "@/lib/kpi/canon"
 import { contaNeiKpi } from "@/lib/intakeBatch"
 import { operativaPeriodBounds } from "@/lib/kpi/periodBounds"
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa"
+import { sqlLeadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount"
 
 export type OperativaDataRow = {
     userId: string
@@ -136,6 +138,12 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
     // Prima erano componenti Date del server: su Vercel (UTC) il mese partiva
     // alle 02:00 italiane e sconfinava di 2h in quello dopo.
     const { start: startDate, end: endDate } = operativaPeriodBounds(period)
+    // Account ripartito (118, PO 29/10/2026): l'account conta solo dalla data
+    // di inizio. Qui ogni numero è per-GDO, quindi filtro nelle query; la riga
+    // "Totale" del client è la somma delle righe e perde anche lei lo storico
+    // di Fabio sul 118.
+    const inizio = await leggiInizioAccount()
+    const leadSuo = sqlLeadConta(inizio, leads)
 
     // Usiamo Promise.all() per queries pesanti simultanee
     const [gdosRaw, logsRaw, appointments, closedLeads, assignedLeadsRaw, cplEur] = await Promise.all([
@@ -157,7 +165,10 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
             leadFunnel: leads.funnel,
         }).from(callLogs)
             .leftJoin(leads, eq(callLogs.leadId, leads.id))
-            .where(and(gte(callLogs.createdAt, startDate), lt(callLogs.createdAt, endDate), eq(callLogs.companyId, ctx.companyId))),
+            .where(and(
+                gte(callLogs.createdAt, startDate), lt(callLogs.createdAt, endDate), eq(callLogs.companyId, ctx.companyId),
+                sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt),
+            )),
 
         // Appuntamenti FISSATI nel periodo. Base canonica `apptSetAt`
         // (src/lib/kpi/canon.ts) = COALESCE(appointmentCreatedAt, appointmentDate):
@@ -172,6 +183,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
                 sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${startDate}`,
                 sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${endDate}`,
                 eq(leads.companyId, ctx.companyId),
+                leadSuo,
             )),
 
         // Contratti chiusi NEL periodo: regola canonica chiusure = data
@@ -188,6 +200,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
                 gte(leads.salespersonOutcomeAt, startDate),
                 lt(leads.salespersonOutcomeAt, endDate),
                 eq(leads.companyId, ctx.companyId),
+                leadSuo,
             )),
 
         // leadAssegnati = lead assegnati al GDO nel periodo, indipendentemente
@@ -212,6 +225,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
                 sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${endDate}`,
                 eq(leads.companyId, ctx.companyId),
                 or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+                leadSuo,
             )),
 
         readCplEur(),

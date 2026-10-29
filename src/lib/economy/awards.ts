@@ -19,6 +19,8 @@ import { guadagnaPremiPersonali, peakWindow, stepReached, type GamificationTarge
 import { stessoMondo } from '@/lib/prova/regole'
 import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import { readGamificationTargets } from '@/lib/diretta/settings'
+import { leggiInizioAccount } from '@/lib/diretta/vistaDa'
+import { leadConta } from '@/lib/diretta/inizioAccount'
 import { boostIdemKey, boosterAttivo, raddoppia, CAUSALE_BOOSTER } from './booster'
 import {
     acquistoMoltiplicatore, fissatoValido, moltiplicatoreCopre, pianoMoltiplicatore, premiPerAcquisto, CAUSALE_MOLTIPLICATORE,
@@ -363,6 +365,7 @@ const coppia = (userId: string, lunedi: string) => `${userId}|${lunedi}`
 async function sincronizzaLead(leadId: string, actorUserId: string | null, rules: EconomyRules): Promise<DaRiallineare> {
     const inizio = inizioEconomia(rules)
     const daRiallineare: DaRiallineare = new Set()
+    const inizioAccount = await leggiInizioAccount()
 
     await db.transaction(async (tx) => {
         // Lock sul lead: due sincronizzazioni dello stesso lead non si incrociano
@@ -372,6 +375,8 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
             companyId: leads.companyId,
             isTest: leads.isTest,
             assignedToId: leads.assignedToId,
+            assignedAt: leads.assignedAt,
+            appointmentCreatedAt: leads.appointmentCreatedAt,
             confirmationsOutcome: leads.confirmationsOutcome,
             confirmationsUserId: leads.confirmationsUserId,
             confirmationsTimestamp: leads.confirmationsTimestamp,
@@ -418,8 +423,11 @@ async function sincronizzaLead(leadId: string, actorUserId: string | null, rules
         }, inizio)
         const destinatario = persona(lead.assignedToId)
         const autore = persona(actorUserId)
+        // Account ripartito (118, PO 29/10/2026): un lead fissato da chi c'era
+        // prima non paga chi usa l'account adesso (gli storni restano).
         const accreditabile = puoAccreditarePiume(autore, destinatario)
             && !!autore && !!destinatario && stessoMondo(lead, autore) && stessoMondo(lead, destinatario)
+            && leadConta(inizioAccount, lead)
         const pianoGdo = pianoStadi(righe, PREFISSO_STADI.gdo, leadId, stadio, importiGdo(rules))
         for (const k of pianoGdo.storna) await reverseOnce(k, `storno ${causaleGradinoGdo(Number(k.split(':')[3]))}: il lead è sceso di stadio`, tx)
         if (accreditabile && destinatario) {

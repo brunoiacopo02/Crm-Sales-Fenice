@@ -23,6 +23,8 @@
 import { db } from "@/db";
 import { leads, manualAdjustments } from "@/db/schema";
 import { and, eq, gte, lt, isNotNull } from "drizzle-orm";
+import { sqlLeadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount";
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
 
 export interface PresenceCount {
     /** Presenze effettive (lead `Chiuso`/`Non chiuso` esitate nel range). */
@@ -43,6 +45,9 @@ export async function countPresences(
     end: Date,
     companyId: string,
 ): Promise<PresenceCount> {
+    // Account ripartito (118, PO 29/10/2026): le presenze dei lead fissati da
+    // chi c'era prima non contano per la persona nuova.
+    const inizio = await leggiInizioAccount();
     const [leadsRows, adjustments] = await Promise.all([
         db.select({ id: leads.id }).from(leads).where(and(
             eq(leads.companyId, companyId),
@@ -51,6 +56,7 @@ export async function countPresences(
             isNotNull(leads.presentedAt),
             gte(leads.presentedAt, start),
             lt(leads.presentedAt, end),
+            sqlLeadConta(inizio, leads),
         )),
         db.select({ count: manualAdjustments.count }).from(manualAdjustments).where(and(
             eq(manualAdjustments.companyId, companyId),
@@ -58,6 +64,7 @@ export async function countPresences(
             eq(manualAdjustments.type, 'presenze'),
             gte(manualAdjustments.createdAt, start),
             lt(manualAdjustments.createdAt, end),
+            sqlRigaConta(inizio, manualAdjustments.userId, manualAdjustments.createdAt),
         )).catch(() => [] as { count: number }[]),
     ]);
 

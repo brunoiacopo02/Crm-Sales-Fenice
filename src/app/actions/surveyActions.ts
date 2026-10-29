@@ -16,6 +16,8 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { isConfermeTl } from "@/lib/confermeTl";
 import { leadDelMondoDiAccount, leadVisibileA, nonDaAccountDiProva } from "@/lib/prova/sql";
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
+import { sqlRigaConta } from "@/lib/diretta/inizioAccount";
 // Le costanti di monete e XP di @/lib/surveys/rewards non si usano più: dal
 // restyle "Diretta" (PO 25/10/2026) i sondaggi non pagano e non penalizzano.
 import {
@@ -502,6 +504,9 @@ export async function listSuspiciousSurveys(): Promise<{
     const ctx = await currentTenant();
     assertSalesArea(ctx);
     await requireQualitaLeadView();
+    // Account ripartito (118, PO 29/10/2026): i sondaggi di chi c'era prima non
+    // si leggono sotto il nome di chi usa l'account adesso.
+    const inizio = await leggiInizioAccount();
     const gdo = await db.select({
         id: gdoLeadSurveys.id,
         leadId: gdoLeadSurveys.leadId,
@@ -515,7 +520,10 @@ export async function listSuspiciousSurveys(): Promise<{
         .from(gdoLeadSurveys)
         .leftJoin(users, eq(gdoLeadSurveys.gdoUserId, users.id))
         // Fuori i sondaggi degli account di prova (migr. 0050).
-        .where(and(eq(gdoLeadSurveys.suspicious, true), eq(gdoLeadSurveys.companyId, ctx.companyId), nonDaAccountDiProva(gdoLeadSurveys.gdoUserId)))
+        .where(and(
+            eq(gdoLeadSurveys.suspicious, true), eq(gdoLeadSurveys.companyId, ctx.companyId), nonDaAccountDiProva(gdoLeadSurveys.gdoUserId),
+            sqlRigaConta(inizio, gdoLeadSurveys.gdoUserId, gdoLeadSurveys.createdAt),
+        ))
         .orderBy(desc(gdoLeadSurveys.createdAt))
         .limit(100);
 

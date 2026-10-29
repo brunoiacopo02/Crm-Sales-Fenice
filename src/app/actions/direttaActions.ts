@@ -17,7 +17,6 @@ import {
 } from '@/lib/diretta/live'
 import { leggiFissati } from '@/lib/diretta/fissatiDb'
 import { dayBoundsRome } from '@/lib/dateUtils'
-import { filtroVistaDa } from '@/lib/diretta/vistaDa'
 import { giornoLavorativoPrecedente } from '@/lib/diretta/home'
 import { DIRETTA_FLAG_KEYS, GAMIFICATION_SETTINGS_KEY, RUOLI_DIRETTA, type GamificationTargets, type RuoloDiretta } from '@/lib/diretta/config'
 import { readDirettaFlags, readGamificationTargets, writeSetting } from '@/lib/diretta/settings'
@@ -61,13 +60,11 @@ export async function getDirettaRichiamiScaduti(): Promise<number> {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
     if (ctx.role !== 'GDO') return 0
-    const vistaDa = await filtroVistaDa(ctx.userId)
     const [r] = await db.select({ n: sql<number>`count(*)::int` })
         .from(leads)
         .where(and(
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, ctx.userId),
-            vistaDa,
             ne(leads.status, 'REJECTED'),
             ne(leads.status, 'APPOINTMENT'),
             isNotNull(leads.recallDate),
@@ -96,13 +93,11 @@ export async function getGdoRichiamiDaFare(): Promise<{ richiami: RichiamoDaFare
     assertSalesArea(ctx)
     if (ctx.role !== 'GDO') return { richiami: [], totale: 0 }
     const now = new Date()
-    const vistaDa = await filtroVistaDa(ctx.userId)
     const rows = await db.select({ id: leads.id, name: leads.name, phone: leads.phone, recallDate: leads.recallDate })
         .from(leads)
         .where(and(
             eq(leads.companyId, ctx.companyId),
             eq(leads.assignedToId, ctx.userId),
-            vistaDa,
             ne(leads.status, 'REJECTED'),
             ne(leads.status, 'APPOINTMENT'),
             isNotNull(leads.recallDate),

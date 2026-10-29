@@ -9,6 +9,8 @@ import { isRealGdo } from "@/lib/kpi/canon"
 import { leaderboardPeriodBounds } from "@/lib/kpi/periodBounds"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { accountVero } from "@/lib/prova/sql"
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa"
+import { sqlLeadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount"
 
 export type LeaderboardPeriod = 'today' | 'week' | 'month'
 export type LeaderboardMetric = 'appointments' | 'calls' | 'xp' | 'streak'
@@ -34,7 +36,9 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
         .where(and(eq(users.companyId, ctx.companyId), eq(users.role, 'GDO'))))
         .filter(isRealGdo)
 
-    // Get all appointments in the period (tenant-scoped)
+    // Get all appointments in the period (tenant-scoped).
+    // Account ripartito (118, PO 29/10/2026): i fissati del vecchio titolare non contano.
+    const inizio = await leggiInizioAccount()
     const periodAppointments = await db.select()
         .from(leads)
         .where(
@@ -42,7 +46,8 @@ export async function getLeaderboard(period: LeaderboardPeriod) {
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.status, 'APPOINTMENT'),
                 gte(leads.appointmentCreatedAt, startDate),
-                lt(leads.appointmentCreatedAt, endDate)
+                lt(leads.appointmentCreatedAt, endDate),
+                sqlLeadConta(inizio, leads),
             )
         )
 
@@ -215,14 +220,17 @@ export async function getMultiMetricLeaderboard(period: LeaderboardPeriod, metri
     const skinMap = new Map(allSkins.map(s => [s.id, s.cssValue]))
 
     if (metric === 'calls') {
-        // Count calls in the period per user (tenant-scoped)
+        // Count calls in the period per user (tenant-scoped).
+        // Account ripartito (118, PO 29/10/2026): solo chiamate dall'inizio account.
+        const inizio = await leggiInizioAccount()
         const periodCalls = await db.select()
             .from(callLogs)
             .where(
                 and(
                     eq(callLogs.companyId, ctx.companyId),
                     gte(callLogs.createdAt, startDate),
-                    lt(callLogs.createdAt, endDate)
+                    lt(callLogs.createdAt, endDate),
+                    sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt),
                 )
             )
 
@@ -432,16 +440,23 @@ export async function getRoleLeaderboard(period: LeaderboardPeriod, role: Leader
 export async function getUserLifetimeStats(userId: string) {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
+    // Account ripartito (118, PO 29/10/2026): chiamate e fissati solo dall'inizio account.
+    const inizio = await leggiInizioAccount()
     const [callResult, apptResult, userRow] = await Promise.all([
         db.select({ value: count() })
             .from(callLogs)
-            .where(and(eq(callLogs.companyId, ctx.companyId), eq(callLogs.userId, userId))),
+            .where(and(
+                eq(callLogs.companyId, ctx.companyId),
+                eq(callLogs.userId, userId),
+                sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt),
+            )),
         db.select({ value: count() })
             .from(leads)
             .where(and(
                 eq(leads.companyId, ctx.companyId),
                 eq(leads.assignedToId, userId),
-                isNotNull(leads.appointmentCreatedAt)
+                isNotNull(leads.appointmentCreatedAt),
+                sqlLeadConta(inizio, leads),
             )),
         db.select({
             level: users.level,

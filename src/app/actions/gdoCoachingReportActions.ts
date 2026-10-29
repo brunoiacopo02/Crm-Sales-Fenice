@@ -24,6 +24,8 @@ import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils";
 import { accountVero } from "@/lib/prova/sql";
+import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
+import { leadConta, rigaConta } from "@/lib/diretta/inizioAccount";
 import {
     computeRow, matchesScope,
     type CallFact, type ApptFact, type FunnelScope, type QualityRow,
@@ -159,6 +161,8 @@ export async function getGdoQualityReport(
             db.select({
                 leadId: leads.id,
                 assignedToId: leads.assignedToId,
+                assignedAt: leads.assignedAt,
+                appointmentCreatedAt: leads.appointmentCreatedAt,
                 apptSetAt: sql<Date | null>`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate})`,
                 confirmationsOutcome: leads.confirmationsOutcome,
                 confirmationsDiscardReason: leads.confirmationsDiscardReason,
@@ -195,6 +199,13 @@ export async function getGdoQualityReport(
                 funnel: r.funnel,
             }));
 
+        // Account ripartito (118, PO 29/10/2026): le righe del GDO contano
+        // l'account solo dalla data di inizio; la media team resta intera.
+        const inizio = await leggiInizioAccount();
+        const apptNonSuoi = new Set(apptRows.filter(r => !leadConta(inizio, r)).map(r => r.leadId));
+        const callSua = (c: CallFact) => c.userId === gdo.id && rigaConta(inizio, c.userId, c.createdAt);
+        const apptSuo = (a: ApptFact) => a.assignedToId === gdo.id && !apptNonSuoi.has(a.leadId);
+
         const inWindow = (d: Date | null | undefined, w: Window): boolean => {
             if (!d) return false;
             return d >= w.start && d < w.end;
@@ -210,8 +221,8 @@ export async function getGdoQualityReport(
 
             rows.push(computeRow(
                 w.label,
-                callsWin.filter(c => c.userId === gdo.id),
-                apptsWin.filter(a => a.assignedToId === gdo.id),
+                callsWin.filter(callSua),
+                apptsWin.filter(apptSuo),
             ));
             teamRows.push(computeRow(
                 w.label,

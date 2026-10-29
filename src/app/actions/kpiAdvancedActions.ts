@@ -2,13 +2,15 @@
 
 import { db } from "@/db"
 import { callLogs, leads, users } from "@/db/schema"
-import { gte, lte, lt, and, eq, desc, isNotNull, sql, inArray, aliasedTable } from "drizzle-orm"
+import { gte, lte, lt, and, eq, desc, isNotNull, sql, inArray, aliasedTable, type SQL } from "drizzle-orm"
 import { format } from "date-fns"
 import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isRealGdo, apptSetAt, isNeverAnsweredLog, isAnsweredLog } from '@/lib/kpi/canon'
 import { contaNeiKpiSql } from '@/lib/intakeBatch'
 import { leadVero } from '@/lib/prova/sql'
+import { leggiInizioAccount } from '@/lib/diretta/vistaDa'
+import { leadConta, rigaConta, sqlLeadConta, sqlRigaConta } from '@/lib/diretta/inizioAccount'
 
 import { cache } from "react"
 
@@ -57,6 +59,7 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
         createdAt: leads.createdAt,
         discardReason: leads.discardReason,
         assignedToId: leads.assignedToId,
+        assignedAt: leads.assignedAt,
         recallDate: leads.recallDate,
         appointmentDate: leads.appointmentDate,
         appointmentCreatedAt: leads.appointmentCreatedAt,
@@ -76,6 +79,12 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     leadConditions.push(contaNeiKpiSql())
     if (filters.funnel) leadConditions.push(eq(leads.funnel, filters.funnel))
     if (filters.gdoId) leadConditions.push(eq(leads.assignedToId, filters.gdoId))
+
+    // Account ripartito (118, PO 29/10/2026): conta solo dalla data di inizio.
+    // Filtrato su un GDO, tutta la pagina è sua e il filtro va nelle query;
+    // sulla squadra solo le righe per-GDO (sotto), la testata resta intera.
+    const inizio = await leggiInizioAccount()
+    if (filters.gdoId) leadConditions.push(sqlLeadConta(inizio, leads))
 
     // We consider a lead "in target" if created in the date range, or having activity in the date range.
     // For simplicity, let's just fetch all leads and filter their LOGS by date range,
@@ -141,17 +150,21 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const apptLeadIdsByAssignee = new Map<string, Set<string>>()
     for (const l of apptLeadsInRange) {
         if (!l.assignedToId) continue
+        if (!leadConta(inizio, l)) continue // account ripartito: non suo
         if (!apptLeadIdsByAssignee.has(l.assignedToId)) apptLeadIdsByAssignee.set(l.assignedToId, new Set())
         apptLeadIdsByAssignee.get(l.assignedToId)!.add(l.id)
     }
 
     // Now fetch logs within the date range
-    let logConditions = [
+    let logConditions: (SQL | undefined)[] = [
         companyScope(ctx, callLogs.companyId),
         gte(callLogs.createdAt, safeStartDate),
         lte(callLogs.createdAt, safeEndDate)
     ]
-    if (filters.gdoId) logConditions.push(eq(callLogs.userId, filters.gdoId))
+    if (filters.gdoId) {
+        logConditions.push(eq(callLogs.userId, filters.gdoId))
+        logConditions.push(sqlRigaConta(inizio, callLogs.userId, callLogs.createdAt))
+    }
 
     const rawLogs = await db.select().from(callLogs).where(and(...logConditions))
 
@@ -236,6 +249,8 @@ export const getAdvancedKpi = cache(async (filters: KpiFilters) => {
     const gdoStatsMap: Record<string, any> = {}
 
     validLogs.forEach(log => {
+        // Account ripartito: le chiamate prima dell'inizio restano in testata, non nella sua riga
+        if (!rigaConta(inizio, log.userId, log.createdAt)) return
         const uid = log.userId || 'Tracciato Vecchio / Sconosciuto'
         const uname = userMap.get(uid) || uid
         if (!gdoStatsMap[uname]) {
@@ -441,6 +456,8 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     const now = new Date()
     const { start: todayStart, end: todayEnd } = dayBoundsRome(now)
     const { start: weekStart, end: weekEnd } = weekBoundsRome(now)
+    // Account ripartito (118, PO 29/10/2026): solo i lead presi o fissati dall'inizio.
+    const inizio = await leggiInizioAccount()
 
     // Appuntamenti Odierni — base canonica decisione PO 2026-07-05: data di
     // fissaggio (COALESCE(appointmentCreatedAt, appointmentDate)), gate
@@ -456,6 +473,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
             companyScope(ctx, leads.companyId),
             leadVero(),
             eq(leads.assignedToId, gdoId),
+            sqlLeadConta(inizio, leads),
             isNotNull(leads.appointmentDate),
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) >= ${todayStart}`,
             sql`COALESCE(${leads.appointmentCreatedAt}, ${leads.appointmentDate}) < ${todayEnd}`,
@@ -470,6 +488,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
             companyScope(ctx, leads.companyId),
             leadVero(),
             eq(leads.assignedToId, gdoId),
+            sqlLeadConta(inizio, leads),
             eq(leads.confirmationsOutcome, 'confermato'),
             gte(leads.confirmationsTimestamp, weekStart),
             lt(leads.confirmationsTimestamp, weekEnd)
@@ -484,6 +503,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
             companyScope(ctx, leads.companyId),
             leadVero(),
             eq(leads.assignedToId, gdoId),
+            sqlLeadConta(inizio, leads),
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, weekStart),
             lt(leads.salespersonOutcomeAt, weekEnd)
@@ -577,6 +597,10 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     // TUTTO su questa pagina — la sua produzione resta visibile solo su
     // panoramica-generale e /statistiche-fissatore).
     const realGdoIdSet = new Set(gdoUsers.map(u => u.id))
+    // Account ripartito (118, PO 29/10/2026): le righe per-GDO contano l'account
+    // solo dalla data di inizio; i totali di squadra restano interi (eccezione
+    // alla regola "team = somma delle righe" qui sopra).
+    const inizio = await leggiInizioAccount()
 
     // --- Query 2: lead chiusi nella finestra (per GDO) ---
     // Un lead è "chiuso" quando ha raggiunto uno stato terminale:
@@ -587,6 +611,8 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const appointmentLeads = await db.select({
         id: leads.id,
         assignedToId: leads.assignedToId,
+        assignedAt: leads.assignedAt,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
         callCount: leads.callCount,
     })
         .from(leads)
@@ -605,6 +631,8 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
     const rejectedLeads = await db.select({
         id: leads.id,
         assignedToId: leads.assignedToId,
+        assignedAt: leads.assignedAt,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
         callCount: leads.callCount,
     })
         .from(leads)
@@ -618,17 +646,18 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             contaNeiKpiSql(),
         ))
 
-    const closedByLead = new Map<string, { assignedToId: string; callCount: number }>()
+    const closedByLead = new Map<string, { assignedToId: string; callCount: number; conta: boolean }>()
     for (const row of [...appointmentLeads, ...rejectedLeads]) {
         if (!row.assignedToId) continue
         if (!realGdoIdSet.has(row.assignedToId)) continue // bot/non-GDO fuori anche dai totali team
         if (closedByLead.has(row.id)) continue
-        closedByLead.set(row.id, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0 })
+        closedByLead.set(row.id, { assignedToId: row.assignedToId, callCount: row.callCount ?? 0, conta: leadConta(inizio, row) })
     }
 
-    // Aggrega per GDO.
+    // Aggrega per GDO (account ripartito: solo i lead suoi).
     const closedByGdo = new Map<string, { sumCalls: number; count: number }>()
     for (const v of closedByLead.values()) {
+        if (!v.conta) continue
         const cur = closedByGdo.get(v.assignedToId) ?? { sumCalls: 0, count: 0 }
         cur.sumCalls += v.callCount
         cur.count += 1
@@ -661,38 +690,53 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
 
     // userId → dayKey → { distinctLeads, totalCalls }
     type DayBucket = { distinctLeads: Set<string>, totalCalls: number }
+    // Due mappe: la squadra con tutte le chiamate, le righe per-GDO senza
+    // quelle di un account ripartito prima dell'inizio.
     const perUserDay = new Map<string, Map<string, DayBucket>>()
+    const perUserDayRiga = new Map<string, Map<string, DayBucket>>()
+    const aggiungi = (m: Map<string, Map<string, DayBucket>>, userId: string, day: string, leadId: string) => {
+        let userMap = m.get(userId)
+        if (!userMap) { userMap = new Map(); m.set(userId, userMap) }
+        let bucket = userMap.get(day)
+        if (!bucket) { bucket = { distinctLeads: new Set(), totalCalls: 0 }; userMap.set(day, bucket) }
+        bucket.distinctLeads.add(leadId)
+        bucket.totalCalls += 1
+    }
     for (const c of allCalls) {
         if (!c.userId) continue
         if (!realGdoIdSet.has(c.userId)) continue // bot/non-GDO fuori anche dai totali team
         const day = dayKeyRome(c.createdAt)
-        let userMap = perUserDay.get(c.userId)
-        if (!userMap) { userMap = new Map(); perUserDay.set(c.userId, userMap) }
-        let bucket = userMap.get(day)
-        if (!bucket) { bucket = { distinctLeads: new Set(), totalCalls: 0 }; userMap.set(day, bucket) }
-        bucket.distinctLeads.add(c.leadId)
-        bucket.totalCalls += 1
+        aggiungi(perUserDay, c.userId, day, c.leadId)
+        if (rigaConta(inizio, c.userId, c.createdAt)) aggiungi(perUserDayRiga, c.userId, day, c.leadId)
     }
 
     // Per ogni GDO: contiamo i giorni "attivi" (>= MIN_LEADS_FOR_ACTIVE_DAY lead esitati)
     // e sommiamo le chiamate fatte SOLO in quei giorni.
-    const activityByGdo = new Map<string, { activeDays: number, callsOnActiveDays: number }>()
-    for (const [userId, days] of perUserDay.entries()) {
-        let activeDays = 0
-        let callsOnActiveDays = 0
-        for (const bucket of days.values()) {
-            if (bucket.distinctLeads.size >= MIN_LEADS_FOR_ACTIVE_DAY) {
-                activeDays += 1
-                callsOnActiveDays += bucket.totalCalls
+    const attivita = (m: Map<string, Map<string, DayBucket>>) => {
+        const out = new Map<string, { activeDays: number, callsOnActiveDays: number }>()
+        for (const [userId, days] of m.entries()) {
+            let activeDays = 0
+            let callsOnActiveDays = 0
+            for (const bucket of days.values()) {
+                if (bucket.distinctLeads.size >= MIN_LEADS_FOR_ACTIVE_DAY) {
+                    activeDays += 1
+                    callsOnActiveDays += bucket.totalCalls
+                }
             }
+            out.set(userId, { activeDays, callsOnActiveDays })
         }
-        activityByGdo.set(userId, { activeDays, callsOnActiveDays })
+        return out
     }
+    const activityByGdo = attivita(perUserDay)
+    const activityByGdoRiga = attivita(perUserDayRiga)
 
     // --- Query 4: chiusure nella finestra (per GDO) — stesso pattern di getGdoTargetsProgress ---
-    const closuresAgg = await db.select({
+    // Righe, non count(*): servono assignedAt/appointmentCreatedAt per l'account
+    // ripartito (sono poche decine al mese).
+    const closuresRows = await db.select({
         assignedToId: leads.assignedToId,
-        cnt: sql<number>`count(*)::int`,
+        assignedAt: leads.assignedAt,
+        appointmentCreatedAt: leads.appointmentCreatedAt,
     })
         .from(leads)
         .where(and(
@@ -702,13 +746,15 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             gte(leads.salespersonOutcomeAt, startBound),
             lt(leads.salespersonOutcomeAt, end),
         ))
-        .groupBy(leads.assignedToId)
 
     const closuresByGdo = new Map<string, number>()
-    for (const r of closuresAgg) {
+    let teamClosures = 0
+    for (const r of closuresRows) {
         if (!r.assignedToId) continue
         if (!realGdoIdSet.has(r.assignedToId)) continue // bot/non-GDO fuori anche dai totali team
-        closuresByGdo.set(r.assignedToId, Number(r.cnt))
+        teamClosures += 1
+        if (!leadConta(inizio, r)) continue // account ripartito: resta solo nel totale
+        closuresByGdo.set(r.assignedToId, (closuresByGdo.get(r.assignedToId) ?? 0) + 1)
     }
 
     // --- Compose per-GDO rows ---
@@ -721,7 +767,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             ? Math.round((sumCalls / closedCount) * 10) / 10
             : null
 
-        const activity = activityByGdo.get(u.id) ?? { activeDays: 0, callsOnActiveDays: 0 }
+        const activity = activityByGdoRiga.get(u.id) ?? { activeDays: 0, callsOnActiveDays: 0 }
         const callsPerDay = activity.activeDays > 0
             ? Math.round((activity.callsOnActiveDays / activity.activeDays) * 10) / 10
             : 0
@@ -754,7 +800,6 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
         teamSumCalls += v.callCount
         teamClosedCount += 1
     }
-    const teamClosures = Array.from(closuresByGdo.values()).reduce((a, b) => a + b, 0)
 
     let teamActiveDays = 0
     let teamCallsOnActiveDays = 0
@@ -798,6 +843,9 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
     assertSalesArea(ctx)
     const start = new Date(filters.startDate)
     const end = new Date(filters.endDate)
+    // Account ripartito (118, PO 29/10/2026): filtrato su un GDO, solo le sue
+    // chiamate dall'inizio. Sulla squadra le chiamate restano tutte.
+    const inizio = filters.gdoId ? await leggiInizioAccount() : null
 
     const botRows = await db.select({ id: users.id }).from(users)
         .where(and(companyScope(ctx, users.companyId), eq(users.isBot, true)))
@@ -848,6 +896,7 @@ export async function getGdoCallAttemptMetrics(filters: { startDate: Date | stri
             lte(ranked.createdAt, end), // end = bound esclusivo (dayBoundsRome/monthBoundsRome), ma getAdvancedKpi usa lte sullo stesso valore: manteniamo lte per coerenza dei totali (off-by-1ms teorico condiviso).
             ...(filters.funnel ? [eq(leads.funnel, filters.funnel)] : []),
             ...(filters.gdoId ? [eq(ranked.userId, filters.gdoId)] : []),
+            inizio ? sqlRigaConta(inizio, ranked.userId, ranked.createdAt) : undefined,
         ))
 
     const emptyBucket = () => ({ calls: 0, answered: 0, appts: 0 })
