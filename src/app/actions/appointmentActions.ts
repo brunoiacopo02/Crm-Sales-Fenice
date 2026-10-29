@@ -63,7 +63,11 @@ export async function getAppointments() {
     // rifissarli restano le Conferme. La nota delle Conferme arriva al GDO
     // solo se non nomina il bot.
     const { attivi, altri } = dividiRifissaggi(allAppointments.filter(l => !l.appointmentDate))
-    const inRifissaggio = [...attivi, ...altri].map(l => ({
+    // PO 29/10/2026 sera: al GDO solo quelli che le Conferme stanno
+    // richiamando. Gli altri senza data (scartati dalle Conferme: 3 NR, non
+    // interessato...) non sono più suoi da vedere; restano nel DB come sono e
+    // manager, admin e Conferme li vedono come prima.
+    const inRifissaggio = [...attivi, ...(isGdo ? [] : altri)].map(l => ({
         ...l,
         rifissaggioConferme: daRifissareDalleConferme(l),
         confRecallNotes: isGdo ? notaConfermePerGdo(l.confRecallNotes) : l.confRecallNotes,
