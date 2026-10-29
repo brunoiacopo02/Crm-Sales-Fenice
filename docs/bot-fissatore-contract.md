@@ -1,7 +1,11 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.10 — 2026-10-28. Cosa cambia rispetto alla 1.9:
+> **Versione:** 1.11 — 2026-10-29. Cosa cambia rispetto alla 1.10: campo `letto` su
+> `NON_RISPOSTO` (chi ha letto va ai GDO, non al parcheggio) e la nota "IL BOT HA RIPRESO LA
+> CHAT" su un lead parcheggiato lo manda a un GDO. Vedi la sezione dedicata sotto Direzione 2.
+>
+> **Versione precedente:** 1.10 — 2026-10-28. Cosa cambiava rispetto alla 1.9:
 > - **Nuovo esito `DISDETTA_VERIFICATA`** (solo aggiunta, ogni payload v1.9 resta valido).
 >   Sui lead dei GDO il bot, quando sta per mandare la nota "DISDETTA", fa giudicare la
 >   chat da una chiamata separata al modello (il "giudice", `lib/giudice-disdetta.ts` nel
@@ -366,6 +370,7 @@ interface BotOutcomeBody {
   motivo?:        string;     // v1.5 — CONTATTO_UMANO: categoria chiusa del motivo
   info?:          object;     // v1.5 — CONTATTO_UMANO: contesto sul lead (vedi sotto)
   report?:        BotReport;  // Report strutturato (opzionale ma raccomandato)
+  letto?:         boolean;    // v1.11 — NON_RISPOSTO: il lead ha letto almeno un nostro messaggio
 }
 
 type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' | 'INTERROTTO' | 'NOTA' | 'CONTATTO_UMANO' | 'SPOSTAMENTO' | 'DISDETTA_VERIFICATA'; // v1.9: SPOSTAMENTO, v1.10: DISDETTA_VERIFICATA
@@ -416,6 +421,21 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
 > minuti di proposito: copre il tempo entro cui un admin prende in carico la richiesta. Se
 > il lead richiede di essere richiamato la settimana dopo, è una richiesta nuova e notifica
 > di nuovo. Risposta: `{ ok: true, noted: true }`.
+
+### `NON_RISPOSTO` letto e lead che riscrive (nuovo in v1.11)
+
+- **`letto`** (booleano, solo su `NON_RISPOSTO`): `true` se almeno un nostro messaggio
+  dell'ultimo arruolamento risulta letto (spunte blu, `twilio_status = 'read'` o `read_at`).
+  Con `letto: true` il CRM **non parcheggia** il lead: va al giro dei ridati come una chat
+  interrotta (evento `REASSIGNED_FROM_BOT`, `reason: 'mai_risposto'`, `instradato: 'letto'`,
+  senza stella). `false` o campo assente: parcheggiato come dal 19/10. Qualunque valore non
+  booleano vale "assente".
+- **Nota "IL BOT HA RIPRESO LA CHAT — …"** (già inviata dal bot quando un lead restituito
+  riscrive): se il lead nel CRM è aperto (`NEW`/`IN_PROGRESS`) e **non è di nessuno**
+  (parcheggiato), il CRM lo dà subito al giro dei ridati come chat interrotta (stella
+  "Chiama per primo", metadata `haRiscritto: true`). Risposta `{ ok: true, noted: true,
+  reassigned: <id GDO | null> }`. Sui lead di un GDO, fissati, scartati o del lancio resta
+  solo una nota, come prima. Il riconoscimento è sul prefisso del testo: non cambiarlo.
 
 ### `CONTATTO_UMANO`: motivo e contesto (nuovo in v1.5)
 

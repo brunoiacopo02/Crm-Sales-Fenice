@@ -21,6 +21,8 @@ import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpo
 import { DISDETTA_VERIFICATA_REASON, buildDisdettaVerificataNote, valutaScartoDisdetta } from '@/lib/bot-fissatore/disdettaVerificata';
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 import { ignoraEsitoSuScartato } from '@/lib/bot-fissatore/esitoSuScartato';
+import { lettoDalCorpo } from '@/lib/bot-fissatore/maiConsegnato';
+import { isNotaBotRipreso, ripresaVaAlGdo } from '@/lib/bot-fissatore/ripresaChat';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -54,6 +56,9 @@ interface BotOutcomeBody {
     periodo?: string;
     // DISDETTA_VERIFICATA (contratto v1.10): il verdetto del giudice del bot.
     disdetta?: { categoria?: string; citazione?: string; motivo?: string };
+    // NON_RISPOSTO (contratto v1.11, PO 29/10/2026): il lead ha letto almeno un nostro
+    // messaggio. true = va ai GDO invece che al parcheggio. Assente = come prima.
+    letto?: boolean;
 }
 
 export async function POST(req: NextRequest) {
@@ -126,6 +131,13 @@ export async function POST(req: NextRequest) {
         // Lancio Web Developer AI: decide se un NON_RISPOSTO/INTERROTTO torna nel
         // pool di /import invece di finire al round robin dei GDO (spec §4.6).
         launchBucket: leads.launchBucket,
+        // Lead che riscrive dopo la restituzione (ripresaChat.ts): solo i lead aperti di
+        // nessuno, fuori dal lancio e dalle infornate a senso unico, vanno a un GDO.
+        funnel: leads.funnel,
+        lancioPool: leads.lancioPool,
+        humanTestCohort: leads.humanTestCohort,
+        isTest: leads.isTest,
+        intakeBatch: leads.intakeBatch,
         // Serve al ramo di rifissaggio: un lead scartato dalle Conferme resta
         // `status = 'APPOINTMENT'`, quindi senza questo campo il rifissaggio
         // non saprebbe di dover riaprire lo scarto.
@@ -638,6 +650,15 @@ export async function POST(req: NextRequest) {
             companyId: 'fenice',
         });
 
+        // Il lead ha riscritto dopo che il bot ce lo aveva restituito (PO 29/10/2026,
+        // vedi ripresaChat.ts): il bot riapre la chat ma non manda più un esito, quindi
+        // un lead parcheggiato resterebbe fermo per sempre. Se è aperto e non è di
+        // nessuno va subito al giro dei ridati come chat interrotta (stella).
+        if (isNotaBotRipreso(text) && ripresaVaAlGdo(lead)) {
+            const r = await reassignBotLeadToHumanPool(leadId, 'chat_interrotta', actorUserId, text, { haRiscritto: true });
+            return NextResponse.json({ ok: true, noted: true, reassigned: r.assignedToId, ...(isDuplicate ? { deduped: true } : {}) });
+        }
+
         // Una notifica per intenzione, non una per re-invio.
         //
         // E nessuna notifica se l'appuntamento è autofissato dal venditore: la
@@ -827,7 +848,9 @@ export async function POST(req: NextRequest) {
         }
 
         const reason = typedOutcome === 'NON_RISPOSTO' ? 'mai_risposto' : 'chat_interrotta';
-        const r = await reassignBotLeadToHumanPool(leadId, reason, actorUserId, note);
+        const r = await reassignBotLeadToHumanPool(leadId, reason, actorUserId, note, {
+            letto: typedOutcome === 'NON_RISPOSTO' ? lettoDalCorpo(body.letto) : null,
+        });
         // Un 2xx che dice "reassigned: null" e basta è indistinguibile da un
         // successo: il fornitore deve poter leggere DENTRO la risposta che la
         // riassegnazione non è stata applicata, e perché.

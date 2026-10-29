@@ -6,7 +6,7 @@ import { isLeadLocked } from './contactRequests';
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
 import { dayBoundsRome } from '@/lib/dateUtils';
 import { EVENTO_RIDATO_PARCHEGGIATO } from './iaVocale';
-import { instradamentoRidato } from './maiConsegnato';
+import { instradamentoRidato, isWhatsappMaiConsegnato } from './maiConsegnato';
 
 const FENICE = 'fenice';
 
@@ -26,7 +26,8 @@ type ReassignResult =
  * squadra col flag Ridati (`botReturnIntake`) e sotto il suo tetto giornaliero
  * se ne ha uno (`dailyReturnCap`), a turno su `botReturnLastAssignedAt`; il mai
  * risposto resta parcheggiato (PO 19/10), tranne il WhatsApp mai consegnato
- * che va al giro come la chat interrotta (PO 28/10).
+ * (PO 28/10) e chi ha letto il messaggio (`opzioni.letto`, PO 29/10), che vanno
+ * al giro come la chat interrotta.
  * Il lead riparte come nuovo (status=NEW, callCount=0).
  *
  * Se non c'è nessun GDO eleggibile: lead lasciato non assegnato (recuperabile da admin).
@@ -36,6 +37,12 @@ export async function reassignBotLeadToHumanPool(
     reason: ReassignReason,
     botUserId: string,
     botNote?: string | null,
+    opzioni: {
+        /** NON_RISPOSTO: il lead ha letto il messaggio (contratto v1.11, PO 29/10/2026). */
+        letto?: boolean | null;
+        /** Il lead ha riscritto dopo la restituzione (nota "il bot ha ripreso la chat"). */
+        haRiscritto?: boolean;
+    } = {},
 ): Promise<ReassignResult> {
     return await db.transaction(async (tx) => {
         // Un lead che ha già un appuntamento o una presenza non torna nel pool:
@@ -129,10 +136,16 @@ export async function reassignBotLeadToHumanPool(
         // segue il giro dei ridati come la chat interrotta, stessi filtri e
         // tetti. Nell'evento `reason` resta 'mai_risposto' (statistiche del bot
         // e stella "Chiama per primo" non cambiano) e `instradato` ne dice il perché.
-        const instradamento = instradamentoRidato(reason, botNote);
-        const extraMeta = reason === 'mai_risposto' && instradamento === 'giro_gdo'
-            ? { instradato: 'mai_consegnato' as const }
-            : {};
+        // Dal 29/10/2026 (PO) anche il NON_RISPOSTO che ha LETTO il messaggio va al
+        // giro (`letto` nel corpo, contratto v1.11); `instradato` dice perché.
+        const instradamento = instradamentoRidato(reason, botNote, opzioni.letto);
+        const extraMeta = {
+            ...(reason === 'mai_risposto' && instradamento === 'giro_gdo'
+                ? { instradato: isWhatsappMaiConsegnato(botNote) ? 'mai_consegnato' as const : 'letto' as const }
+                : {}),
+            ...(opzioni.letto != null ? { letto: opzioni.letto } : {}),
+            ...(opzioni.haRiscritto ? { haRiscritto: true } : {}),
+        };
         if (instradamento === 'parcheggia') {
             await tx.update(leads)
                 .set({ ...resetFields, assignedToId: null })
@@ -145,7 +158,7 @@ export async function reassignBotLeadToHumanPool(
                     eventType: 'REASSIGNED_FROM_BOT',
                     userId: null,
                     timestamp: now,
-                    metadata: { reason, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'parcheggiato' },
+                    metadata: { reason, ...extraMeta, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'parcheggiato' },
                     companyId: FENICE,
                 },
                 {

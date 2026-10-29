@@ -20,12 +20,25 @@ export function isWhatsappMaiConsegnato(botNote: string | null | undefined): boo
 
 export type InstradamentoRidato = 'parcheggia' | 'giro_gdo'
 
-/** Dove va un lead restituito dal bot, dato il motivo e la nota del bot. */
+/**
+ * `letto` del corpo NON_RISPOSTO (contratto v1.11): true se il lead ha letto almeno un
+ * nostro messaggio (spunte blu). Solo un booleano vero conta; qualunque altro valore
+ * è "non lo sappiamo" (null), e il lead si tratta come prima.
+ */
+export function lettoDalCorpo(v: unknown): boolean | null {
+    return typeof v === 'boolean' ? v : null
+}
+
+/** Dove va un lead restituito dal bot, dato il motivo, la nota del bot e se ha letto. */
 export function instradamentoRidato(
     reason: 'mai_risposto' | 'chat_interrotta' | 'rifiutato_dal_bot',
     botNote: string | null | undefined,
+    letto?: boolean | null,
 ): InstradamentoRidato {
     // Il lead che il bot non ha nemmeno preso (PO 29/10) va chiamato: nessuno ci ha parlato.
     if (reason === 'chat_interrotta' || reason === 'rifiutato_dal_bot') return 'giro_gdo'
-    return isWhatsappMaiConsegnato(botNote) ? 'giro_gdo' : 'parcheggia'
+    if (isWhatsappMaiConsegnato(botNote)) return 'giro_gdo'
+    // PO 29/10/2026: chi ha LETTO il messaggio e non ha risposto non si parcheggia più,
+    // va ai GDO come i ridati. Chi non l'ha letto (o il bot non lo dice) resta parcheggiato.
+    return letto === true ? 'giro_gdo' : 'parcheggia'
 }
