@@ -8,22 +8,51 @@
 //
 // Sono contatti VECCHI (ingresso 2024-2025): per il numero WhatsApp sono
 // aperture a freddo, le stesse che il 15/09 lo hanno portato a LOW. Per questo
-// passano a scaglioni con un tetto al giorno, mai tutti insieme.
+// passano a scaglioni, mai tutti insieme.
+//
+// Ritmo (PO 29/10/2026, sessione qualita' numeri): 20 al giorno PER NUMERO sui 3
+// numeri delle aperture a freddo, 10 la mattina e 10 il pomeriggio. Il CRM ne
+// manda 30 nella finestra della mattina e 30 in quella del pomeriggio, col campo
+// `codaMarketing: true`; il bot li divide alla pari sui numeri del giro (mai il
+// 3199). Anche i vecchi, i piu' recenti per primi.
 //
 // Modulo puro: niente DB, niente rete. Testato in alBot.test.ts.
 
-/** Lead per giro (il cron gira una volta all'ora). */
-export const SCAGLIONE_DEFAULT = 5
+/** Lead per giro (il cron gira una volta all'ora, alle :40). */
+export const SCAGLIONE_DEFAULT = 10
 
-/** Lead al giorno, al massimo, sommando i giri. */
-export const TETTO_GIORNALIERO_DEFAULT = 30
+/** Lead per finestra (mattina o pomeriggio), al massimo, sommando i giri: 10 per numero. */
+export const TETTO_FINESTRA_DEFAULT = 30
+
+/**
+ * Le due finestre, in ore di Roma [inizio, fine). Il cron gira alle :40: la mattina
+ * fa 09:40, 10:40, 11:40, 12:40; il pomeriggio 15:40, 16:40, 17:40, 18:40. Con
+ * scaglione 10 e tetto 30 la finestra si riempie ai primi tre giri.
+ */
+export const FINESTRE = [
+    { nome: 'mattina', inizio: 9, fine: 13 },
+    { nome: 'pomeriggio', inizio: 15, fine: 19 },
+] as const
+
+export type Finestra = (typeof FINESTRE)[number]
+
+/** L'ora di Roma (0-23). */
+export function oraRoma(d: Date): number {
+    return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Rome', hour: '2-digit', hourCycle: 'h23' }).format(d))
+}
+
+/** La finestra in cui cade quell'istante, o null fuori finestra. */
+export function finestraCodaAlBot(d: Date): Finestra | null {
+    const h = oraRoma(d)
+    return FINESTRE.find((f) => h >= f.inizio && h < f.fine) ?? null
+}
 
 const OFF_VALUES = new Set(['off', 'none', 'disabled', 'false', '0'])
 
 export interface ConfigCodaAlBot {
     attivo: boolean
     scaglione: number
-    tettoGiornaliero: number
+    tettoFinestra: number
 }
 
 function interoDaEnv(env: Record<string, string | undefined>, nome: string, ripiego: number): number {
@@ -38,15 +67,16 @@ function interoDaEnv(env: Record<string, string | undefined>, nome: string, ripi
 }
 
 /**
- * Acceso di default (decisione del PO): `MKT_CODA_BOT=off` lo spegne senza
- * deploy. Scaglione e tetto da `MKT_CODA_BOT_BATCH` e `MKT_CODA_BOT_DAILY`.
+ * Acceso di default (decisione del PO): `MKT_CODA_BOT=off` lo spegne (env su
+ * Vercel + redeploy). Scaglione e tetto per finestra da `MKT_CODA_BOT_BATCH` e
+ * `MKT_CODA_BOT_FINESTRA`.
  */
 export function leggiConfigCodaAlBot(env: Record<string, string | undefined> = process.env): ConfigCodaAlBot {
     const raw = env.MKT_CODA_BOT?.trim().toLowerCase()
     return {
         attivo: !(raw && OFF_VALUES.has(raw)),
         scaglione: interoDaEnv(env, 'MKT_CODA_BOT_BATCH', SCAGLIONE_DEFAULT),
-        tettoGiornaliero: interoDaEnv(env, 'MKT_CODA_BOT_DAILY', TETTO_GIORNALIERO_DEFAULT),
+        tettoFinestra: interoDaEnv(env, 'MKT_CODA_BOT_FINESTRA', TETTO_FINESTRA_DEFAULT),
     }
 }
 
@@ -82,19 +112,19 @@ export interface PianoCoda {
 }
 
 /**
- * I primi `scaglione` spostabili, senza superare il tetto del giorno. L'ordine
+ * I primi `scaglione` spostabili, senza superare il tetto della finestra. L'ordine
  * lo decide la query (i più recenti per primi), qui il taglio è stabile.
  */
 export function pianificaCodaAlBot(args: {
     candidati: CandidatoCoda[]
     config: ConfigCodaAlBot
-    giaOggi: number
+    giaNellaFinestra: number
 }): PianoCoda {
-    const { candidati, config, giaOggi } = args
+    const { candidati, config, giaNellaFinestra } = args
     if (!config.attivo) return { daSpostare: [], residui: 0, motivo: 'spento' }
     const buoni = candidati.filter(spostabileAlBot)
     if (buoni.length === 0) return { daSpostare: [], residui: 0, motivo: 'nessun_candidato' }
-    const resta = Math.min(config.scaglione, Math.max(0, config.tettoGiornaliero - giaOggi))
+    const resta = Math.min(config.scaglione, Math.max(0, config.tettoFinestra - giaNellaFinestra))
     if (resta === 0) return { daSpostare: [], residui: buoni.length, motivo: 'tetto_raggiunto' }
     const daSpostare = buoni.slice(0, resta).map((l) => l.id)
     return { daSpostare, residui: buoni.length - daSpostare.length, motivo: 'ok' }

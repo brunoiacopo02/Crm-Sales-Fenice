@@ -1,32 +1,36 @@
 import { NextResponse } from 'next/server'
-import { and, asc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import crypto from 'node:crypto'
 import { db } from '@/db'
 import { leads, users, leadEvents } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { MARKETING_QUEUE_BUCKET } from '@/lib/marketingQueue/applica'
-import { leggiConfigCodaAlBot, pianificaCodaAlBot, funnelPerIlBot, type CandidatoCoda } from '@/lib/marketingQueue/alBot'
+import { leggiConfigCodaAlBot, pianificaCodaAlBot, funnelPerIlBot, finestraCodaAlBot, type CandidatoCoda } from '@/lib/marketingQueue/alBot'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 const FENICE = 'fenice'
 
-/** Solo i lead della coda arrivati da qui in poi (mezzanotte di Roma del 29/10/2026). */
-const CODA_AL_BOT_DAL = new Date('2026-10-28T23:00:00Z')
-
 /**
- * Coda marketing al bot (PO 29/10/2026): uno scaglione all'ora dei lead MKT_CODA
- * senza assegnatario passa al bot, come un lead di ActiveCampaign. Da lì vale
- * il giro di sempre: timer 96h, restituzione ai GDO, parcheggio dei mai risposto.
+ * Coda marketing al bot (PO 29/10/2026): i lead MKT_CODA senza assegnatario
+ * passano al bot, come un lead di ActiveCampaign. Da lì vale il giro di sempre:
+ * timer 96h, restituzione ai GDO, parcheggio dei mai risposto.
+ *
+ * Ritmo (PO 29/10/2026, sessione qualita' numeri): 30 nella finestra della
+ * mattina (09-13) e 30 in quella del pomeriggio (15-19), 10 per giro, anche i
+ * vecchi. Il push porta `codaMarketing: true`: il bot li divide alla pari sui 3
+ * numeri delle aperture a freddo (10 a numero per finestra), mai dal 3199.
  *
  * Interruttore `MKT_CODA_BOT` (acceso se assente, `off` lo spegne),
- * scaglione `MKT_CODA_BOT_BATCH` (5), tetto al giorno `MKT_CODA_BOT_DAILY` (30).
+ * scaglione `MKT_CODA_BOT_BATCH` (10), tetto per finestra `MKT_CODA_BOT_FINESTRA` (30).
  * Le regole stanno in src/lib/marketingQueue/alBot.ts.
  */
-export async function eseguiCodaAlBot() {
+export async function eseguiCodaAlBot(adesso: Date = new Date()) {
     const config = leggiConfigCodaAlBot()
     if (!config.attivo) return { ok: true as const, spostati: 0, motivo: 'spento' as const }
+    const finestra = finestraCodaAlBot(adesso)
+    if (!finestra) return { ok: true as const, spostati: 0, motivo: 'fuori_finestra' as const }
 
     const [bot] = await db.select({ id: users.id }).from(users).where(and(
         eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isBot, true), eq(users.isActive, true),
@@ -57,11 +61,8 @@ export async function eseguiCodaAlBot() {
     }).from(leads).where(and(
         eq(leads.companyId, FENICE),
         eq(leads.launchBucket, MARKETING_QUEUE_BUCKET),
-        // STOP sui vecchi (29/10/2026, sessione qualita' numeri): il 3199 e' di
-        // nuovo LOW per troppe aperture a freddo. Entrano solo i lead arrivati
-        // dalla coda da oggi in poi; i ~154 vecchi restano nel pool finche'
-        // Bruno non decide (lotti da 30/g con numeri HIGH, oppure ai GDO).
-        gte(leads.createdAt, CODA_AL_BOT_DAL),
+        // Anche i vecchi (PO 29/10/2026): il ritmo li protegge, 60 al giorno
+        // divisi sui 3 numeri delle aperture a freddo.
         eq(leads.isTest, false),
         isNull(leads.assignedToId),
         eq(leads.status, 'NEW'),
@@ -80,19 +81,20 @@ export async function eseguiCodaAlBot() {
         phoneSuspicious: Boolean(r.phoneSuspicious),
     }))
 
-    // Quanti ne ha già spostati oggi questo giro: si contano gli eventi, non i
-    // lead del bot (che arrivano anche dal webhook AC).
-    const [{ n: giaOggi }] = await db.select({ n: sql<number>`COUNT(*)::int` }).from(leadEvents).where(and(
+    // Quanti ne ha già spostati questa finestra: si contano gli eventi, non i
+    // lead del bot (che arrivano anche dal webhook AC). Inizio finestra = oggi
+    // alle `finestra.inizio` di Roma.
+    const [{ n: giaNellaFinestra }] = await db.select({ n: sql<number>`COUNT(*)::int` }).from(leadEvents).where(and(
         eq(leadEvents.companyId, FENICE),
         eq(leadEvents.eventType, 'ASSIGNED'),
         sql`${leadEvents.metadata}->>'via' = 'coda_marketing'`,
-        sql`${leadEvents.timestamp} >= (date_trunc('day', now() AT TIME ZONE 'Europe/Rome') AT TIME ZONE 'Europe/Rome')`,
+        sql`${leadEvents.timestamp} >= ((date_trunc('day', now() AT TIME ZONE 'Europe/Rome') + make_interval(hours => ${finestra.inizio}::int)) AT TIME ZONE 'Europe/Rome')`,
     ))
 
-    const piano = pianificaCodaAlBot({ candidati, config, giaOggi })
-    console.log(`[coda-marketing-bot] pescati=${righe.length} giaOggi=${giaOggi}/${config.tettoGiornaliero} daSpostare=${piano.daSpostare.length} residui=${piano.residui} motivo=${piano.motivo}`)
+    const piano = pianificaCodaAlBot({ candidati, config, giaNellaFinestra })
+    console.log(`[coda-marketing-bot] finestra=${finestra.nome} pescati=${righe.length} gia=${giaNellaFinestra}/${config.tettoFinestra} daSpostare=${piano.daSpostare.length} residui=${piano.residui} motivo=${piano.motivo}`)
     if (piano.daSpostare.length === 0) {
-        return { ok: true as const, spostati: 0, residui: piano.residui, motivo: piano.motivo, giaOggi }
+        return { ok: true as const, spostati: 0, residui: piano.residui, motivo: piano.motivo, finestra: finestra.nome, giaNellaFinestra }
     }
 
     const now = new Date()
@@ -115,7 +117,7 @@ export async function eseguiCodaAlBot() {
                 eventType: 'ASSIGNED' as const,
                 userId: bot.id,
                 timestamp: now,
-                metadata: { via: 'coda_marketing', source: 'marketing', assignedToUser: bot.id, motivo: 'PO 29/10/2026: coda marketing al bot come i lead AC' },
+                metadata: { via: 'coda_marketing', source: 'marketing', assignedToUser: bot.id, finestra: finestra.nome, motivo: 'PO 29/10/2026: coda marketing al bot, 10 a numero per finestra' },
                 companyId: FENICE,
             })))
         }
@@ -134,6 +136,7 @@ export async function eseguiCodaAlBot() {
             const esito = await pushLeadToBot({
                 leadId: r.id, name: r.name, phone: r.phone, email: r.email,
                 funnel: funnelPerIlBot(r.funnel), companyId: FENICE,
+                codaMarketing: true,
             })
             if (esito.result === 'sent' || esito.result === 'duplicate') inviati++
             else falliti.push(`${id}:${esito.result}`)
@@ -145,8 +148,8 @@ export async function eseguiCodaAlBot() {
 
     return {
         ok: true as const, spostati: spostati.length, inviatiAlBot: inviati, falliti: falliti.length,
-        dettaglioFalliti: falliti.slice(0, 10), residui: piano.residui, giaOggi: giaOggi + spostati.length,
-        tettoGiornaliero: config.tettoGiornaliero,
+        dettaglioFalliti: falliti.slice(0, 10), residui: piano.residui, finestra: finestra.nome,
+        giaNellaFinestra: giaNellaFinestra + spostati.length, tettoFinestra: config.tettoFinestra,
     }
 }
 

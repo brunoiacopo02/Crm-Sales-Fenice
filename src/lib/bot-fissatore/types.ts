@@ -61,4 +61,10 @@ export interface BotIntakePayload {
      * li' si verifica.
      */
     numeroBot?: 1 | 2;
+    /**
+     * Lead della coda marketing (PO 29/10/2026): il bot lo apre solo dai numeri
+     * delle aperture a freddo (mai il 3199) e divide alla pari i lead della coda
+     * fra quei numeri. Assente = lead ordinario.
+     */
+    codaMarketing?: boolean;
 }
