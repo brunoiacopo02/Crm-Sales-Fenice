@@ -27,13 +27,13 @@ const FENICE = 'fenice'
  * Le regole stanno in src/lib/marketingQueue/alBot.ts.
  */
 /**
- * TEMPORANEO, SOLO 29/10/2026 (richiesta PO delle 16:25): 4 giri in piu' da 10
- * lead alle 17:30, 18:00, 18:30 e 19:00 di Roma (UTC+1), oltre alle finestre
+ * TEMPORANEO, SOLO 29/10/2026 (richiesta PO delle 16:25): 5 giri in piu' da 10
+ * lead alle 17:00, 17:30, 18:00, 18:30 e 19:00 di Roma (UTC+1), oltre alle finestre
  * normali. Contati a parte (`via: coda_marketing_extra`) per non mangiare la
  * finestra del pomeriggio. Le date sono fisse: dal 30/10 non scatta piu' niente,
  * e il commit va comunque ritirato.
  */
-const GIRI_EXTRA_29_10 = ['2026-10-29T16:30:00Z', '2026-10-29T17:00:00Z', '2026-10-29T17:30:00Z', '2026-10-29T18:00:00Z']
+const GIRI_EXTRA_29_10 = ['2026-10-29T16:00:00Z', '2026-10-29T16:30:00Z', '2026-10-29T17:00:00Z', '2026-10-29T17:30:00Z', '2026-10-29T18:00:00Z']
     .map((s) => new Date(s))
 const LEAD_PER_GIRO_EXTRA = 10
 
