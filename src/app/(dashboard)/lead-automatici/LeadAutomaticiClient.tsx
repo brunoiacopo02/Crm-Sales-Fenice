@@ -34,7 +34,7 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
     },
     bot_first: {
         titolo: 'Fascia mista',
-        spiega: 'orario dei GDO: i lead vanno ai GDO, ma il bot passa avanti finché non ha raggiunto il minimo giornaliero.',
+        spiega: 'orario dei GDO: prima i 10 vergini a testa dei GDO, poi il bot fino alla sua soglia del giorno, oltre la soglia di nuovo ai GDO.',
         tono: 'border-sky-200 bg-sky-50 text-sky-900',
     },
     gdo_only: {

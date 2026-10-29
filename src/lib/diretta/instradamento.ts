@@ -77,8 +77,16 @@ export function ordineRipiegoFreschi(routing: string): readonly LivelloFreschi[]
  * prima i GDO sotto il loro tetto, poi il bot con la sua soglia, poi la catena
  * dei freschi di sempre (scorte, bot, umani senza tetto). Il tetto dei GDO è
  * piccolo (10 a testa), quindi il bot perde pochi lead al giorno.
+ *
+ * PO 29/10/2026 sera: quando il bot ha raggiunto la soglia del giorno
+ * (`BOT_DAILY_LEADS`, la sua capacità di aperture a freddo) i lead in più della
+ * fascia mista vanno ai GDO dei vergini anche oltre il loro tetto
+ * ('umani_oltre_tetto', a giro), invece di finire comunque al bot. Prima la
+ * catena dei freschi li riportava al bot e la soglia non contava niente.
+ * La catena dei freschi resta l'ultima rete (bot compreso): se non c'è nessun
+ * GDO abilitato il lead va al bot, mai senza padrone.
  */
-export const ORDINE_FASCIA_MISTA = ['umani_sotto_tetto', 'bot_sotto_soglia', 'catena_freschi'] as const
+export const ORDINE_FASCIA_MISTA = ['umani_sotto_tetto', 'bot_sotto_soglia', 'umani_oltre_tetto', 'catena_freschi'] as const
 export type LivelloFasciaMista = (typeof ORDINE_FASCIA_MISTA)[number]
 
 export interface ScelteInstradamento {

@@ -74,6 +74,12 @@ test('fascia mista: i vergini dei GDO sotto tetto passano davanti al bot (PO 29/
     assert.equal(o[o.length - 1], 'catena_freschi')
 })
 
+test('fascia mista: a soglia del bot raggiunta i lead in più vanno ai GDO, non di nuovo al bot (PO 29/10/2026)', () => {
+    const o = [...ORDINE_FASCIA_MISTA]
+    assert.ok(o.indexOf('bot_sotto_soglia') < o.indexOf('umani_oltre_tetto'))
+    assert.ok(o.indexOf('umani_oltre_tetto') < o.indexOf('catena_freschi'))
+})
+
 // ------------------------------------------------------------- piano di go-live
 
 /** La squadra com'è il 25/10/2026 prima del go-live. */

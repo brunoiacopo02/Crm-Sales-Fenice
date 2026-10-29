@@ -1384,11 +1384,13 @@ export async function POST(req: NextRequest) {
                     if (eligible.length === 0) { eligible = await selectBotPool(false); fallbackUsed = true; }
                 } else if (routing === 'bot_first') {
                     // PO 29/10/2026: prima i vergini dei GDO sotto tetto, poi il
-                    // bot con la sua soglia, poi la catena dei freschi. L'ordine
+                    // bot con la sua soglia, poi (bot a soglia piena) i GDO dei
+                    // vergini oltre il tetto, poi la catena dei freschi. L'ordine
                     // sta in `ORDINE_FASCIA_MISTA` (testato).
                     const livelliMisti: Record<LivelloFasciaMista, () => Promise<{ id: string; isBot: boolean }[]>> = {
                         umani_sotto_tetto: selectHumanPool,
                         bot_sotto_soglia: () => selectBotPool(true),
+                        umani_oltre_tetto: selectHumanPoolNoCap,
                         catena_freschi: selectFreshWithOverflow,
                     };
                     for (const livello of ORDINE_FASCIA_MISTA) {
