@@ -47,6 +47,11 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
         spiega: 'il bot prende un lead solo finché oggi ne ha meno della metà; il resto ai GDO. Finestra a scadenza, si spegne da sola.',
         tono: 'border-amber-200 bg-amber-50 text-amber-900',
     },
+    solo_gdo: {
+        titolo: 'Fascia solo GDO (temporanea)',
+        spiega: "lun–ven 13:30–19:00 e sabato 10:00–14:30: tutti i lead ai GDO a giro pareggiato, oltre 30 a testa anche Lavinia; il bot solo se non c'è nessuno. Si spegne con FASCIA_SOLO_GDO=off.",
+        tono: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    },
     legacy: {
         titolo: 'Regola oraria spenta',
         spiega: "l'env BOT_ROUTING è su off: vale il round-robin storico, bot e GDO nello stesso giro.",

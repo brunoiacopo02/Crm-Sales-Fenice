@@ -83,7 +83,13 @@ export type RoutingWindow =
      * Metà e metà: il bot prende un lead solo se oggi ne ha meno della metà.
      * Tappa intermedia del rientro dopo il flood, non una fascia del calendario.
      */
-    | 'bot_half';
+    | 'bot_half'
+    /**
+     * Fascia "solo GDO" della regola temporanea del 29/10/2026 (interruttore
+     * `FASCIA_SOLO_GDO`): tutti i lead ai GDO a giro pareggiato, il bot solo
+     * come rete finale.
+     */
+    | 'solo_gdo';
 
 /** 'legacy' = interruttore spento, vale il round-robin storico a pool unico. */
 export type LeadRouting = RoutingWindow | 'legacy';
@@ -201,6 +207,36 @@ export function finestraRientro(now: Date): 'gdo_only' | 'bot_half' | null {
 }
 
 /**
+ * Regola TEMPORANEA del PO (29/10/2026), finché i numeri WhatsApp non tornano
+ * HIGH. Si accende con l'env `FASCIA_SOLO_GDO=on` (+ redeploy) e si spegne
+ * togliendola o mettendola a `off`: torna la regola di prima, senza toccare
+ * nient'altro.
+ *
+ *   lun–ven 13:30 → 19:00   'solo_gdo': tutti i lead ai GDO, nessuno al bot
+ *   sabato  10:00 → 14:30   'solo_gdo'
+ *   tutti gli altri orari   'bot_only'
+ *   domenica                null: decide `freschiSoloAlBot` (tutto al bot)
+ *
+ * Interruttore spento = null, e vale il resto del routing come prima.
+ */
+const SOLO_GDO_FERIALE = { inizio: 13 * 60 + 30, fine: 19 * 60 } as const;
+const SOLO_GDO_SABATO = { inizio: 10 * 60, fine: 14 * 60 + 30 } as const;
+const ON_VALUES = new Set(['on', 'true', '1', 'si', 'sì']);
+
+export function fasciaSoloGdoAccesa(env: Record<string, string | undefined> = process.env): boolean {
+    const raw = env.FASCIA_SOLO_GDO?.trim().toLowerCase();
+    return !!raw && ON_VALUES.has(raw);
+}
+
+export function regolaSoloGdo(now: Date, env: Record<string, string | undefined> = process.env): 'solo_gdo' | 'bot_only' | null {
+    if (!fasciaSoloGdoAccesa(env)) return null;
+    const { weekday, minutes } = romeClock(now);
+    if (weekday === 0) return null;
+    const f = weekday === 6 ? SOLO_GDO_SABATO : SOLO_GDO_FERIALE;
+    return minutes >= f.inizio && minutes < f.fine ? 'solo_gdo' : 'bot_only';
+}
+
+/**
  * La regola in vigore adesso.
  *
  * Rollback senza deploy con l'env BOT_ROUTING:
@@ -217,6 +253,9 @@ export function finestraRientro(now: Date): 'gdo_only' | 'bot_half' | null {
 export function getLeadRouting(now: Date): LeadRouting {
     // Domenica: tutto al bot, prima di qualunque interruttore (PO 25/10/2026).
     if (freschiSoloAlBot(now)) return 'bot_only';
+    // Regola temporanea del 29/10/2026: se accesa vince su tutto il resto.
+    const soloGdo = regolaSoloGdo(now);
+    if (soloGdo) return soloGdo;
     const raw = process.env.BOT_ROUTING?.trim().toLowerCase();
     if (raw && OFF_VALUES.has(raw)) return 'legacy';
     const rientro = finestraRientro(now);

@@ -196,3 +196,10 @@ test('lancio: lo riconosce da bucket, funnel, pool o gruppo di prova', () => {
 test('lancio: i pool database non sono il lancio', () => {
     assert.equal(eLeadDelLancio({ launchBucket: 'DB_2026_07', funnel: 'Database', lancioPool: null, humanTestCohort: null }), false)
 })
+
+test('solo GDO: tetto 30, riserva Lavinia 116, il bot è solo la rete finale', async () => {
+    const { SOLO_GDO_TETTO, SOLO_GDO_RISERVA, ORDINE_SOLO_GDO } = await import('./instradamento')
+    assert.equal(SOLO_GDO_TETTO, 30)
+    assert.deepEqual([...SOLO_GDO_RISERVA], [116])
+    assert.deepEqual([...ORDINE_SOLO_GDO], ['principali_sotto_tetto', 'principali_e_riserva', 'bot'])
+})

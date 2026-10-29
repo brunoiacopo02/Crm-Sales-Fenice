@@ -16,9 +16,9 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, finestraRientro, freschiSoloAlBot, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
-import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, type LivelloFreschi, type LivelloFasciaMista } from "@/lib/diretta/instradamento";
+import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_RISERVA, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
 import { inviaNotificaAppenaArrivato } from "@/lib/diretta/notificaArrivoDb";
 
 /**
@@ -51,7 +51,7 @@ import {
 } from "@/lib/lancio/intake";
 import { db } from "@/db";
 import { leads, leadEvents, users, acIntakeFailures, notifications } from "@/db/schema";
-import { eq, and, asc, sql, isNull, gte, lt, desc, or, like } from "drizzle-orm";
+import { eq, and, asc, sql, isNull, gte, lt, desc, or, like, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
@@ -1225,6 +1225,23 @@ export async function POST(req: NextRequest) {
                 botUnderHalf,
             ));
 
+            /**
+             * Regola temporanea "solo GDO" (PO 29/10/2026): giro PAREGGIATO sui
+             * lead nati oggi e assegnati a ciascuno (i ridati sono nati prima e
+             * non contano). Prima i GDO dei vergini sotto `SOLO_GDO_TETTO`, poi
+             * anche la riserva, poi il bot come rete finale.
+             */
+            const freschiOggi = sql`(
+                SELECT count(*) FROM leads l
+                WHERE l."assignedToId" = ${users.id}
+                  AND l."companyId" = ${FENICE_COMPANY}
+                  AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+            )`;
+            const selectSoloGdo = (where: ReturnType<typeof and>) => tx.select({
+                id: users.id,
+                isBot: users.isBot,
+            }).from(users).where(where).orderBy(asc(freschiOggi), ...roundRobinOrder);
+
             // La finestra ferie, quando attiva, vince su tutto: nessun umano al lavoro.
             //
             // ECCEZIONE dal 15/09/2026: il rientro graduale del bot vince sulla
@@ -1237,10 +1254,13 @@ export async function POST(req: NextRequest) {
             // rientro non partirebbe mai — verificato sul campo: dopo il deploy
             // delle env, 12 lead su 12 stavano ancora andando al bot.
             const rientro = finestraRientro(now);
-            const holidayWindow = !rientro && isBotHolidayWindow(now);
+            // Regola temporanea "solo GDO" (PO 29/10/2026): se accesa vince anche
+            // sulla finestra ferie; la domenica resta comunque tutta del bot.
+            const soloGdo = regolaSoloGdo(now);
+            const holidayWindow = !rientro && !soloGdo && isBotHolidayWindow(now);
             // Domenica (PO 25/10/2026): i freschi solo al bot, mai ai GDO, qualunque flag.
             const domenicaSoloBot = freschiSoloAlBot(now);
-            const routing: LeadRouting = holidayWindow || domenicaSoloBot ? 'bot_only' : getLeadRouting(now);
+            const routing: LeadRouting = domenicaSoloBot ? 'bot_only' : (soloGdo ?? (holidayWindow ? 'bot_only' : getLeadRouting(now)));
 
             // Pipeline autonoma venditore: i primi N lead freschi vanno a lui, poi
             // tutto torna esattamente come prima.
@@ -1367,7 +1387,24 @@ export async function POST(req: NextRequest) {
             let eligible: { id: string; isBot: boolean }[] = [];
             let fallbackUsed = false;
             if (!divertedTo) {
-                if (routing === 'legacy') {
+                if (routing === 'solo_gdo') {
+                    const livelliSoloGdo: Record<LivelloSoloGdo, () => Promise<{ id: string; isBot: boolean }[]>> = {
+                        principali_sotto_tetto: () => selectSoloGdo(and(
+                            gdoBase, eq(users.isBot, false), inSquadra,
+                            eq(users.acAutoIntake, true),
+                            sql`${freschiOggi} < ${SOLO_GDO_TETTO}`,
+                        )),
+                        principali_e_riserva: () => selectSoloGdo(and(
+                            gdoBase, eq(users.isBot, false), inSquadra,
+                            or(eq(users.acAutoIntake, true), inArray(users.gdoCode, [...SOLO_GDO_RISERVA])),
+                        )),
+                        bot: () => selectBotPool(false),
+                    };
+                    for (const livello of ORDINE_SOLO_GDO) {
+                        eligible = await livelliSoloGdo[livello]();
+                        if (eligible.length > 0) { fallbackUsed = livello === 'bot'; break; }
+                    }
+                } else if (routing === 'legacy') {
                     eligible = await selectLegacyPool();
                 } else if (routing === 'gdo_only') {
                     // Fascia protetta del sabato: il bot non entra nemmeno se è

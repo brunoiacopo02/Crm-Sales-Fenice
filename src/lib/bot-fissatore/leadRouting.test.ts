@@ -327,3 +327,44 @@ test('lunedi-sabato: invariato, i freschi possono andare ai GDO', () => {
         assert.equal(getLeadRouting(utc('2026-10-26T14:00:00Z')), 'gdo_only');
     });
 });
+
+// ------------------------------------------------ regola temporanea "solo GDO"
+import { regolaSoloGdo, fasciaSoloGdoAccesa } from './leadRouting';
+
+test('solo GDO: spenta (env assente o off) non cambia niente', () => {
+    assert.equal(regolaSoloGdo(utc('2026-10-30T14:00:00Z'), {}), null);
+    assert.equal(regolaSoloGdo(utc('2026-10-30T14:00:00Z'), { FASCIA_SOLO_GDO: 'off' }), null);
+    assert.equal(fasciaSoloGdoAccesa({ FASCIA_SOLO_GDO: ' ON ' }), true);
+    assert.equal(fasciaSoloGdoAccesa({ FASCIA_SOLO_GDO: 'boh' }), false);
+});
+
+test('solo GDO: feriale 13:30-19:00 di Roma ai GDO, il resto al bot', () => {
+    const on = { FASCIA_SOLO_GDO: 'on' };
+    // venerdì 30/10/2026, Roma = UTC+1
+    assert.equal(regolaSoloGdo(utc('2026-10-30T12:29:00Z'), on), 'bot_only');   // 13:29
+    assert.equal(regolaSoloGdo(utc('2026-10-30T12:30:00Z'), on), 'solo_gdo');   // 13:30
+    assert.equal(regolaSoloGdo(utc('2026-10-30T17:59:00Z'), on), 'solo_gdo');   // 18:59
+    assert.equal(regolaSoloGdo(utc('2026-10-30T18:00:00Z'), on), 'bot_only');   // 19:00
+    assert.equal(regolaSoloGdo(utc('2026-10-30T08:00:00Z'), on), 'bot_only');   // 09:00
+});
+
+test('solo GDO: sabato 10:00-14:30, domenica non la riguarda (tutto al bot)', () => {
+    const on = { FASCIA_SOLO_GDO: 'on' };
+    assert.equal(regolaSoloGdo(utc('2026-10-31T08:59:00Z'), on), 'bot_only');   // sab 09:59
+    assert.equal(regolaSoloGdo(utc('2026-10-31T09:00:00Z'), on), 'solo_gdo');   // sab 10:00
+    assert.equal(regolaSoloGdo(utc('2026-10-31T13:29:00Z'), on), 'solo_gdo');   // sab 14:29
+    assert.equal(regolaSoloGdo(utc('2026-10-31T13:30:00Z'), on), 'bot_only');   // sab 14:30
+    assert.equal(regolaSoloGdo(utc('2026-11-01T14:00:00Z'), on), null);         // domenica
+});
+
+test('solo GDO: accesa vince su getLeadRouting, ma la domenica resta del bot', () => {
+    const prev = process.env.FASCIA_SOLO_GDO;
+    process.env.FASCIA_SOLO_GDO = 'on';
+    try {
+        assert.equal(getLeadRouting(utc('2026-10-30T14:00:00Z')), 'solo_gdo');
+        assert.equal(getLeadRouting(utc('2026-10-30T12:10:00Z')), 'bot_only'); // 13:10, prima era bot_first
+        assert.equal(getLeadRouting(utc('2026-11-01T14:00:00Z')), 'bot_only');
+    } finally {
+        if (prev === undefined) delete process.env.FASCIA_SOLO_GDO; else process.env.FASCIA_SOLO_GDO = prev;
+    }
+});

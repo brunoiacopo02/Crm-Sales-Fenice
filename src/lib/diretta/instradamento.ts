@@ -89,6 +89,19 @@ export function ordineRipiegoFreschi(routing: string): readonly LivelloFreschi[]
 export const ORDINE_FASCIA_MISTA = ['umani_sotto_tetto', 'bot_sotto_soglia', 'umani_oltre_tetto', 'catena_freschi'] as const
 export type LivelloFasciaMista = (typeof ORDINE_FASCIA_MISTA)[number]
 
+/**
+ * Regola temporanea "solo GDO" (PO 29/10/2026, interruttore `FASCIA_SOLO_GDO`
+ * in leadRouting.ts). In fascia tutti i lead vanno ai GDO dei vergini
+ * (`acAutoIntake`) a giro PAREGGIATO: chi oggi ne ha di meno, poi il round-robin
+ * di sempre. Il tetto dei vergini (`dailyFreshCap`) qui non vale: vale
+ * `SOLO_GDO_TETTO`. Quando tutti lo hanno raggiunto entra anche la riserva
+ * (Lavinia, 116), sempre pareggiando. Rete finale: il bot, mai un lead orfano.
+ */
+export const SOLO_GDO_TETTO = 30
+export const SOLO_GDO_RISERVA: readonly number[] = [116]
+export const ORDINE_SOLO_GDO = ['principali_sotto_tetto', 'principali_e_riserva', 'bot'] as const
+export type LivelloSoloGdo = (typeof ORDINE_SOLO_GDO)[number]
+
 export interface ScelteInstradamento {
     /** Codici GDO che non ricevono i ridati. */
     ridatiEsclusi: number[]
