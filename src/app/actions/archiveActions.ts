@@ -5,6 +5,7 @@ import { leads, users } from "@/db/schema";
 import { and, desc, eq, gte, lte, or, sql, getTableColumns } from "drizzle-orm";
 import { aliasedTable } from "drizzle-orm";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { leadsPerGdo } from "@/lib/diretta/noteBotDb";
 import { leadDelMondoDiAccount } from "@/lib/prova/sql";
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
 
@@ -106,6 +107,9 @@ export async function getArchiveLeads({
         }
 
         const whereCondition = and(...conditions);
+        // Un GDO non riceve mai le note del bot (PO 25/10 e 29/10/2026).
+        const perRuolo = <T extends { id: string; lastCallNote: string | null }>(righe: T[]) =>
+            ctx.role === 'GDO' ? leadsPerGdo(righe) : Promise.resolve(righe)
 
         const gdoUser = aliasedTable(users, 'gdoUser');
         const salesUser = aliasedTable(users, 'salesUser');
@@ -128,7 +132,7 @@ export async function getArchiveLeads({
         .orderBy(desc(leads[dateFilterType]));
 
         if (exportAll) {
-            const data = await baseQuery;
+            const data = await perRuolo(await baseQuery);
             return { data, totalCount: data.length, totalPages: 1 };
         } else {
             const offset = (page - 1) * limit;
@@ -141,7 +145,7 @@ export async function getArchiveLeads({
             const totalCount = Number(countResult[0]?.count || 0);
             const totalPages = Math.ceil(totalCount / limit);
 
-            const data = await baseQuery.limit(limit).offset(offset);
+            const data = await perRuolo(await baseQuery.limit(limit).offset(offset));
 
             return {
                 data,

@@ -18,6 +18,8 @@ import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 import { reverseFissato, riallineaScaliniDopoUscita, syncLeadPiume } from "@/lib/economy/awards";
 import { leadDelMondoDiAccount } from "@/lib/prova/sql";
 import { daRifissareDalleConferme, dividiRifissaggi, notaConfermePerGdo } from "@/lib/diretta/daRifissare";
+import { leadsPerGdo, noteDelBotSulLead } from "@/lib/diretta/noteBotDb";
+import { notaDaSalvareDalGdo } from "@/lib/diretta/noteBotPerGdo";
 export async function getAppointments() {
     const supabase = await createClient();
     const { data: { user: supabaseUser } } = await supabase.auth.getUser();
@@ -42,10 +44,13 @@ export async function getAppointments() {
     if (vistaDa) conditions.push(vistaDa)
 
     // Fetch only leads with status = APPOINTMENT
-    const allAppointments = await db.select()
+    const allAppointmentsDb = await db.select()
             .from(leads)
             .where(and(...conditions))
             .orderBy(desc(leads.appointmentCreatedAt)) // default order by newest booked
+    // Al GDO le note del bot non arrivano al browser (PO 25/10 e 29/10/2026):
+    // data, ora e "da rifissare" restano, sparisce solo il testo del bot.
+    const allAppointments = isGdo ? await leadsPerGdo(allAppointmentsDb) : allAppointmentsDb
         
 
     const now = new Date()
@@ -132,7 +137,8 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     const updated = await db.update(leads).set({
         ...confermeReset,
         appointmentDate: dateObj,
-        appointmentNote: note,
+        // Il GDO non ha visto la nota del bot: se salva senza nota, resta quella.
+        appointmentNote: notaDaSalvareDalGdo(note, lead.appointmentNote, await noteDelBotSulLead(leadId)),
         ...appointmentMoveStamp(lead.appointmentDate, dateObj),
         version: lead.version + 1,
         updatedAt: new Date(),

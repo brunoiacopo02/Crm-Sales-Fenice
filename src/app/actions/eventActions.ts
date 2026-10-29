@@ -9,6 +9,8 @@ import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { assegnatarioPerGdo, eventoTimelinePerGdo } from "@/lib/diretta/vistaGdo"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 import { daRifissareDalleConferme, notaConfermePerGdo } from "@/lib/diretta/daRifissare"
+import { noteDelBotSulLead } from "@/lib/diretta/noteBotDb"
+import { leadPerGdo, notaDaSalvareDalGdo } from "@/lib/diretta/noteBotPerGdo"
 
 export async function getLeadProfile(leadId: string) {
     const ctx = await currentTenant()
@@ -81,8 +83,15 @@ export async function getLeadProfile(leadId: string) {
     // browser non passa né un'etichetta né un metadata del bot. Per admin,
     // manager e Conferme la scheda resta quella di sempre.
     if (ctx.role === 'GDO') {
+        // Le note del bot (ultima chiamata, appuntamento, motivo di scarto) non
+        // arrivano al browser: si riconoscono dalla fonte, non dalle parole
+        // (PO 29/10/2026). Se la lettura fallisce, via le note: mai una in più.
+        const noteBot = await noteDelBotSulLead(leadId).catch(() => null)
+        const leadGdo = noteBot
+            ? leadPerGdo(lead, noteBot)
+            : { ...lead, lastCallNote: null, appointmentNote: null, discardReason: null }
         return {
-            lead: { ...lead, assignedToName: assegnatarioPerGdo(lead.assignedToName, assignedToIsBot) },
+            lead: { ...leadGdo, assignedToName: assegnatarioPerGdo(lead.assignedToName, assignedToIsBot) },
             events: events.flatMap(e => {
                 const v = eventoTimelinePerGdo(e, ctx.userId)
                 return v ? [{
@@ -136,16 +145,22 @@ export async function updateLeadContactInfo(
         if (!name) return { success: false, error: "Il nome è obbligatorio." }
         if (phone.length < 5) return { success: false, error: "Il telefono deve avere almeno 5 cifre." }
 
-        const [corrente] = await db.select({ isTest: leads.isTest }).from(leads)
+        const [corrente] = await db.select({ isTest: leads.isTest, lastCallNote: leads.lastCallNote }).from(leads)
             .where(and(eq(leads.id, leadId), eq(leads.companyId, ctx.companyId))).limit(1)
         const rifiuto = corrente ? await rifiutoMondoDiverso(corrente, ctx.userId) : null
         if (rifiuto) return { success: false, error: rifiuto }
+
+        // Il GDO non ha visto la nota del bot (campo vuoto nella scheda): se salva
+        // i dati di contatto senza scrivere una nota, quella del bot resta.
+        const notaSalvata = ctx.role === 'GDO' && corrente
+            ? notaDaSalvareDalGdo(lastCallNote || null, corrente.lastCallNote, await noteDelBotSulLead(leadId))
+            : (lastCallNote || null)
 
         const updated = await db.update(leads).set({
             name,
             phone,
             email: email || null,
-            lastCallNote: lastCallNote || null,
+            lastCallNote: notaSalvata,
             version: currentVersion + 1,
             updatedAt: new Date(),
         }).where(

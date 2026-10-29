@@ -6,6 +6,8 @@ import { leads } from "@/db/schema"
 import { eq, and, ne, isNotNull, asc, lte, or, inArray } from "drizzle-orm"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
+import { leadsPerGdo, noteDelBotSulLead } from "@/lib/diretta/noteBotDb"
+import { notaDaSalvareDalGdo } from "@/lib/diretta/noteBotPerGdo"
 export async function getRecallLeads() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
@@ -34,10 +36,12 @@ export async function getRecallLeads() {
 
     if (isGdo) conditions.push(eq(leads.assignedToId, userId))
 
-    const allRecalls = await db.select()
+    const allRecallsDb = await db.select()
             .from(leads)
             .where(and(...conditions))
             .orderBy(asc(leads.recallDate))
+    // Al GDO le note del bot non arrivano al browser (PO 25/10 e 29/10/2026).
+    const allRecalls = isGdo ? await leadsPerGdo(allRecallsDb) : allRecallsDb
         
 
     // Split into "Scaduti/Da Fare Ora" and "In Arrivo"
@@ -62,6 +66,7 @@ export async function updateRecallDetails(leadId: string, recallDate: Date, note
         isTest: leads.isTest,
         assignedToId: leads.assignedToId,
         recallDate: leads.recallDate,
+        recallNote: leads.recallNote,
         version: leads.version,
     })
         .from(leads)
@@ -77,10 +82,16 @@ export async function updateRecallDetails(leadId: string, recallDate: Date, note
         return { success: false as const, error: 'Il lead non ha un richiamo attivo' }
     }
 
+    // Il GDO non ha visto la nota del bot: se salva il richiamo senza nota, quella
+    // resta per le Conferme e gli admin invece di sparire.
+    const notaDaSalvare = ctx.role === 'GDO'
+        ? notaDaSalvareDalGdo(note, lead.recallNote, await noteDelBotSulLead(leadId))
+        : note
+
     await db.update(leads)
         .set({
             recallDate,
-            recallNote: note,
+            recallNote: notaDaSalvare,
             recallMissedAt: null,
             version: lead.version + 1,
             updatedAt: new Date(),

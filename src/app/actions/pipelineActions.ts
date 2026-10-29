@@ -8,6 +8,8 @@ import { contaNeiKpiSql } from "@/lib/intakeBatch"
 import { isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
 import { oraArrivo, eVergineDelGiorno, ordinaPrimaChiamata, type EventoLead } from "@/lib/diretta/arrivo"
 import { paroleDelLead } from "@/lib/diretta/vistaGdo"
+import { leadsPerGdo, noteDelBotPerLead } from "@/lib/diretta/noteBotDb"
+import { notaPerGdo } from "@/lib/diretta/noteBotPerGdo"
 import { eLeadDelLancio } from "@/lib/diretta/instradamento"
 import { dayBoundsRome } from "@/lib/dateUtils"
 import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } from "drizzle-orm"
@@ -140,10 +142,13 @@ export async function getPipelineLeads() {
     ]
     if (isGdo) pipelineBaseConditions.push(eq(leads.assignedToId, userId))
 
-    const pipelineLeads = await db.select()
+    const pipelineLeadsDb = await db.select()
         .from(leads)
         .where(and(...pipelineBaseConditions))
         .orderBy(desc(leads.createdAt), leads.id)  // più recenti in cima — `id` come tiebreaker per ordine stabile fra lead con stesso createdAt (es. bulk CSV import)
+    // Al GDO le note del bot non arrivano nemmeno al browser (PO 25/10 e 29/10/2026):
+    // si riconoscono dalla fonte (callLog di un utente bot), non dalle parole.
+    const pipelineLeads = isGdo ? await leadsPerGdo(pipelineLeadsDb) : pipelineLeadsDb
 
 
     // Un lead che ci ha cercato sta in 1ª chiamata qualunque sia il suo callCount:
@@ -180,10 +185,11 @@ export async function getPipelineLeads() {
     ]
     if (isGdo) recallBaseConditions.push(eq(leads.assignedToId, userId))
 
-    const recallsLeads = await db.select()
+    const recallsLeadsDb = await db.select()
         .from(leads)
         .where(and(...recallBaseConditions))
         .orderBy(leads.recallDate, leads.id)
+    const recallsLeads = isGdo ? await leadsPerGdo(recallsLeadsDb) : recallsLeadsDb
 
     // PIPELINE SNAPSHOT: scrive un record in pipelineSnapshots ogni volta che cambia
     // la composizione delle tab per un GDO. Serve per diagnosticare "lead spariti" confrontando
@@ -280,6 +286,7 @@ export async function getPipelineLeads() {
                 // I lead del lancio sono tolti ai GDO (PO 24-25/10/2026), anche
                 // quelli scartati che il recupero rimetterebbe in board.
                 .filter(l => !eLeadDelLancio(l))
+            fourthCallLeads = await leadsPerGdo(fourthCallLeads)
 
         }
     }
@@ -516,6 +523,8 @@ export async function getLeadsWithSamePhone(leadId: string) {
     // Al GDO un numero in mano al bot si mostra come "In lavorazione", senza
     // nome (PO 25/10/2026). Admin e manager vedono l'assegnatario come prima.
     const perGdo = ctx.role === 'GDO'
+    // E il motivo di scarto scritto dal bot non arriva al GDO.
+    const noteBot = perGdo ? await noteDelBotPerLead(rows.map(r => r.id)).catch(() => null) : null
     return {
         success: true as const,
         duplicates: rows.map(r => {
@@ -530,7 +539,7 @@ export async function getLeadsWithSamePhone(leadId: string) {
                 recallDate: r.recallDate ? r.recallDate.toISOString() : null,
                 appointmentDate: r.appointmentDate ? r.appointmentDate.toISOString() : null,
                 salespersonOutcome: r.salespersonOutcome,
-                discardReason: r.discardReason,
+                discardReason: perGdo ? (noteBot ? notaPerGdo(r.discardReason, noteBot.get(r.id) ?? new Set()) : null) : r.discardReason,
                 // Nome vero del collega (firstName) prima del codice "GDO 1xx" (PO 25/10/2026).
                 assignedToName: inLavorazione ? null : (r.assignedToFirstName?.trim() || r.assignedToRealName || r.assignedToName || 'Non assegnato'),
                 inLavorazione,
