@@ -41,6 +41,12 @@ export function AppointmentBoard({
         if (!editingLead) return
         const newDate = new Date(`${dateStr}T${timeStr}:00`)
         const result = await updateGdoAppointment(editingLead.id, newDate, noteStr, editingLead.version)
+        if (result && !result.success && result.error === 'RIFISSANO_LE_CONFERME') {
+            alert(result.message)
+            setEditingLead(null)
+            router.refresh()
+            return
+        }
         if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
             alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
             router.refresh()
@@ -106,7 +112,7 @@ export function AppointmentBoard({
                                 </div>
                             </div>
                         </div>
-                        {(isUpcoming || isRifissaggio) && (
+                        {(isUpcoming || (isRifissaggio && !conConferme)) && (
                             <button
                                 type="button"
                                 onClick={() => setEditingLead(lead)}
@@ -283,7 +289,7 @@ export function AppointmentBoard({
             {isRifissaggio && <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500"></div>}
 
             {/* Pulsante Modifica Veloce (per i rifissaggi è il modo per fissare la nuova data) */}
-            {(isUpcoming || isRifissaggio) && (
+            {(isUpcoming || (isRifissaggio && !lead.rifissaggioConferme)) && (
                 <button 
                     onClick={() => setEditingLead(lead)}
                     className="absolute right-2 top-2 p-1.5 text-ash-400 hover:text-brand-orange hover:bg-orange-50 rounded-full transition-colors opacity-0 group-hover:opacity-100 z-10 bg-white shadow-sm border border-ash-100"

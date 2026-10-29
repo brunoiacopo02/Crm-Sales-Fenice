@@ -100,6 +100,12 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
     ));
     if (!lead) throw new Error("Lead not found or unassigned");
 
+    // PO 29/10/2026: un appuntamento messo "da rifissare" dalle Conferme lo
+    // rifissano solo loro. Il GDO lo vede ma non ci rimette la data.
+    if (daRifissareDalleConferme(lead)) {
+        return { success: false, error: 'RIFISSANO_LE_CONFERME', message: "Questo appuntamento lo stanno rifissando le Conferme: la data nuova la mettono loro." };
+    }
+
     // Optimistic locking check
     if (currentVersion !== undefined && lead.version !== currentVersion) {
         return { success: false, error: 'CONCURRENCY_ERROR' };

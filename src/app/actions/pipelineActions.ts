@@ -21,6 +21,7 @@ import { notifyAppointmentToBot } from "@/lib/agendaBot"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
+import { daRifissareDalleConferme } from "@/lib/diretta/daRifissare"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
 
 /**
@@ -614,6 +615,13 @@ export async function updateLeadOutcome(
     // sessione, non lo `userId` passato dal client.
     const rifiuto = await rifiutoMondoDiverso(lead, serviceCtx ? serviceCtx.actorUserId : sessionUserId)
     if (rifiuto) return { success: false, error: rifiuto }
+
+    // PO 29/10/2026: un appuntamento messo "da rifissare" dalle Conferme lo
+    // rifissano solo loro: il GDO non ci rimette la data da qui (drawer,
+    // richiami). Conferme, manager e admin non passano da questo blocco.
+    if (!serviceCtx && actorRole === 'GDO' && outcome === 'APPUNTAMENTO' && daRifissareDalleConferme(lead)) {
+        return { success: false, error: "Questo appuntamento lo stanno rifissando le Conferme: la data nuova la mettono loro." }
+    }
 
     // Optimistic locking check
     if (currentVersion !== undefined && lead.version !== currentVersion) {
