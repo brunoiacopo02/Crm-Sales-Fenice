@@ -26,10 +26,28 @@ const FENICE = 'fenice'
  * scaglione `MKT_CODA_BOT_BATCH` (10), tetto per finestra `MKT_CODA_BOT_FINESTRA` (30).
  * Le regole stanno in src/lib/marketingQueue/alBot.ts.
  */
+/**
+ * TEMPORANEO, SOLO 29/10/2026 (richiesta PO delle 16:25): 4 giri in piu' da 10
+ * lead alle 17:30, 18:00, 18:30 e 19:00 di Roma (UTC+1), oltre alle finestre
+ * normali. Contati a parte (`via: coda_marketing_extra`) per non mangiare la
+ * finestra del pomeriggio. Le date sono fisse: dal 30/10 non scatta piu' niente,
+ * e il commit va comunque ritirato.
+ */
+const GIRI_EXTRA_29_10 = ['2026-10-29T16:30:00Z', '2026-10-29T17:00:00Z', '2026-10-29T17:30:00Z', '2026-10-29T18:00:00Z']
+    .map((s) => new Date(s))
+const LEAD_PER_GIRO_EXTRA = 10
+
+function giroExtra(d: Date): Date | null {
+    return GIRI_EXTRA_29_10.find((g) => d >= g && d.getTime() < g.getTime() + 10 * 60_000) ?? null
+}
+
 export async function eseguiCodaAlBot(adesso: Date = new Date()) {
-    const config = leggiConfigCodaAlBot()
-    if (!config.attivo) return { ok: true as const, spostati: 0, motivo: 'spento' as const }
-    const finestra = finestraCodaAlBot(adesso)
+    const configBase = leggiConfigCodaAlBot()
+    if (!configBase.attivo) return { ok: true as const, spostati: 0, motivo: 'spento' as const }
+    const extra = giroExtra(adesso)
+    const config = extra ? { ...configBase, scaglione: LEAD_PER_GIRO_EXTRA, tettoFinestra: LEAD_PER_GIRO_EXTRA } : configBase
+    const via = extra ? 'coda_marketing_extra' : 'coda_marketing'
+    const finestra = extra ? { nome: 'extra_29_10', inizio: 0 } : finestraCodaAlBot(adesso)
     if (!finestra) return { ok: true as const, spostati: 0, motivo: 'fuori_finestra' as const }
 
     const [bot] = await db.select({ id: users.id }).from(users).where(and(
@@ -87,8 +105,10 @@ export async function eseguiCodaAlBot(adesso: Date = new Date()) {
     const [{ n: giaNellaFinestra }] = await db.select({ n: sql<number>`COUNT(*)::int` }).from(leadEvents).where(and(
         eq(leadEvents.companyId, FENICE),
         eq(leadEvents.eventType, 'ASSIGNED'),
-        sql`${leadEvents.metadata}->>'via' = 'coda_marketing'`,
-        sql`${leadEvents.timestamp} >= ((date_trunc('day', now() AT TIME ZONE 'Europe/Rome') + make_interval(hours => ${finestra.inizio}::int)) AT TIME ZONE 'Europe/Rome')`,
+        sql`${leadEvents.metadata}->>'via' = ${via}`,
+        extra
+            ? sql`${leadEvents.timestamp} >= ${extra.toISOString()}::timestamptz`
+            : sql`${leadEvents.timestamp} >= ((date_trunc('day', now() AT TIME ZONE 'Europe/Rome') + make_interval(hours => ${finestra.inizio}::int)) AT TIME ZONE 'Europe/Rome')`,
     ))
 
     const piano = pianificaCodaAlBot({ candidati, config, giaNellaFinestra })
@@ -117,7 +137,7 @@ export async function eseguiCodaAlBot(adesso: Date = new Date()) {
                 eventType: 'ASSIGNED' as const,
                 userId: bot.id,
                 timestamp: now,
-                metadata: { via: 'coda_marketing', source: 'marketing', assignedToUser: bot.id, finestra: finestra.nome, motivo: 'PO 29/10/2026: coda marketing al bot, 10 a numero per finestra' },
+                metadata: { via, source: 'marketing', assignedToUser: bot.id, finestra: finestra.nome, motivo: 'PO 29/10/2026: coda marketing al bot, 10 a numero per finestra' },
                 companyId: FENICE,
             })))
         }
