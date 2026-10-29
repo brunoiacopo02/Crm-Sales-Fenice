@@ -415,7 +415,8 @@ export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
     const leaderboard = allVenditori.map(user => ({
         userId: user.id,
         gdoCode: user.gdoCode,
-        displayName: user.displayName || user.name || 'Venditore',
+        // Nome vero (users.firstName, PO 29/10/2026), poi il codice "Sales 0xx".
+        displayName: user.firstName?.trim() || user.displayName || user.name || 'Venditore',
         avatarUrl: user.avatarUrl,
         appointmentCount: fatturato.get(user.id) || 0,
         metricValue: fatturato.get(user.id) || 0,

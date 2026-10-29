@@ -7,6 +7,7 @@ import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
 import { cohortClosing } from "@/lib/kpi/salesCohort"
+import { personName } from "@/lib/diretta/config"
 
 // Normalizza il funnel come nel resto del codebase: trim + UPPER, vuoto/null → SCONOSCIUTO
 const normFunnel = (f: string | null | undefined) => (f ?? '').trim().toUpperCase() || 'SCONOSCIUTO'
@@ -55,7 +56,9 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         id: users.id,
         name: users.name,
         displayName: users.displayName,
+        firstName: users.firstName,
         salesTargetEur: users.salesTargetEur,
+        salesTarget2Eur: users.salesTarget2Eur,
     }).from(users).where(and(eq(users.role, 'VENDITORE'), companyScope(ctx, users.companyId)))
 
     // Una sola lettura per DUE metriche che vivono su date diverse (PO 2026-09-10):
@@ -136,7 +139,11 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
 
         return {
             id: v.id,
-            name: v.displayName || v.name,
+            // Nome vero (users.firstName, PO 29/10/2026) per tutti, venditori
+            // compresi: la classifica non e' piu' anonima. Il codice "Sales 0xx"
+            // resta accanto per chi lo usa (riconciliazione, gestionale).
+            name: personName(v),
+            code: v.displayName || v.name,
             chiusi,
             nonChiusi,
             sparito,
@@ -147,6 +154,7 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
             closingRate: coorte.closingPct,
             fatturato,
             salesTargetEur: v.salesTargetEur,
+            salesTarget2Eur: v.salesTarget2Eur,
         }
     })
 

@@ -88,7 +88,7 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-ash-200 to-ash-300 flex items-center justify-center shadow-card border-2 border-ash-300 mb-2">
                             <Medal className="w-7 h-7 text-ash-600" />
                         </div>
-                        <div className="text-sm font-bold text-ash-700 text-center max-w-[100px] truncate">{isManager || top3[1].id === currentUserId ? top3[1].name : 'Venditore'}</div>
+                        <div className="text-sm font-bold text-ash-700 text-center max-w-[100px] truncate">{top3[1].name}</div>
                         <div className="text-xs text-ash-500 mt-0.5">€ {top3[1].fatturato.toLocaleString('it-IT')}</div>
                         <div className="w-20 h-20 bg-gradient-to-t from-ash-200 to-ash-100 rounded-t-lg mt-2 flex items-center justify-center">
                             <div className="text-2xl font-black text-ash-500">2°</div>
@@ -99,7 +99,7 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gold-300 to-brand-orange-400 flex items-center justify-center shadow-glow-orange border-2 border-gold-400 mb-2">
                             <Crown className="w-9 h-9 text-white" />
                         </div>
-                        <div className="text-sm font-bold text-ash-800 text-center max-w-[120px] truncate">{isManager || top3[0].id === currentUserId ? top3[0].name : 'Venditore'}</div>
+                        <div className="text-sm font-bold text-ash-800 text-center max-w-[120px] truncate">{top3[0].name}</div>
                         <div className="text-xs font-semibold text-gold-600 mt-0.5">€ {top3[0].fatturato.toLocaleString('it-IT')}</div>
                         <div className="w-24 h-28 bg-gradient-to-t from-gold-200 to-gold-100 rounded-t-lg mt-2 flex items-center justify-center shadow-soft">
                             <div className="text-3xl font-black text-gold-600">1°</div>
@@ -110,7 +110,7 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-orange-200 to-brand-orange-300 flex items-center justify-center shadow-card border-2 border-brand-orange-300 mb-2">
                             <Medal className="w-7 h-7 text-brand-orange-700" />
                         </div>
-                        <div className="text-sm font-bold text-ash-700 text-center max-w-[100px] truncate">{isManager || top3[2].id === currentUserId ? top3[2].name : 'Venditore'}</div>
+                        <div className="text-sm font-bold text-ash-700 text-center max-w-[100px] truncate">{top3[2].name}</div>
                         <div className="text-xs text-ash-500 mt-0.5">€ {top3[2].fatturato.toLocaleString('it-IT')}</div>
                         <div className="w-20 h-16 bg-gradient-to-t from-brand-orange-100 to-brand-orange-50 rounded-t-lg mt-2 flex items-center justify-center">
                             <div className="text-2xl font-black text-brand-orange-500">3°</div>
@@ -153,7 +153,6 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                 ) : (
                                     kpiData.map((row, idx) => {
                                         const isMe = row.id === currentUserId
-                                        const showName = isManager || isMe
 
                                         return (
                                             <tr
@@ -172,9 +171,12 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                                 <td className="px-6 py-4 whitespace-nowrap font-medium text-ash-800">
                                                     <div className="flex flex-col">
                                                         <div className="flex items-center gap-2">
-                                                            {showName ? row.name : `Venditore Misterioso`}
+                                                            {row.name}
                                                             {isMe && <div className="text-[10px] bg-brand-orange-100 text-brand-orange-700 px-2 py-0.5 rounded-full font-bold border border-brand-orange-200/50">TU</div>}
                                                         </div>
+                                                        {isManager && row.code && row.code !== row.name && (
+                                                            <div className="text-[10px] font-normal text-ash-400">{row.code}</div>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -183,32 +185,49 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center text-ash-500">
-                                                    {row.salesTargetEur != null
-                                                        ? `€ ${row.salesTargetEur.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`
-                                                        : <div className="text-ash-300">—</div>
-                                                    }
+                                                    {row.salesTargetEur != null ? (
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <div>1° € {row.salesTargetEur.toLocaleString('it-IT')}</div>
+                                                            {row.salesTarget2Eur != null && (
+                                                                <div className="text-xs text-ash-400">2° € {row.salesTarget2Eur.toLocaleString('it-IT')}</div>
+                                                            )}
+                                                        </div>
+                                                    ) : <div className="text-ash-300">—</div>}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                                     {row.salesTargetEur != null && row.salesTargetEur > 0 ? (
                                                         (() => {
-                                                            const pct = Math.round((row.fatturato / row.salesTargetEur) * 100)
-                                                            const barColor = pct >= 100 ? 'bg-emerald-500' : pct >= 70 ? 'bg-gold-500' : 'bg-ember-500'
-                                                            const textColor = pct >= 100 ? 'text-emerald-700' : pct >= 70 ? 'text-gold-700' : 'text-ember-600'
+                                                            // Due obiettivi (PO 29/10/2026): la barra arriva al
+                                                            // secondo, la tacca segna il primo. Senza secondo
+                                                            // resta la barra di sempre sul primo.
+                                                            const primo: number = row.salesTargetEur
+                                                            const secondo: number | null = row.salesTarget2Eur != null && row.salesTarget2Eur > primo ? row.salesTarget2Eur : null
+                                                            const fondo = secondo ?? primo
+                                                            const pct = Math.round((row.fatturato / primo) * 100)
+                                                            const preso1 = row.fatturato >= primo
+                                                            const preso2 = secondo != null && row.fatturato >= secondo
+                                                            const larghezza = Math.min((row.fatturato / fondo) * 100, 100)
+                                                            const tacca = secondo != null ? (primo / secondo) * 100 : null
+                                                            const barColor = preso1 ? 'bg-emerald-500' : pct >= 70 ? 'bg-gold-500' : 'bg-ember-500'
+                                                            const textColor = preso1 ? 'text-emerald-700' : pct >= 70 ? 'text-gold-700' : 'text-ember-600'
                                                             return (
                                                                 <div className="flex flex-col items-center gap-1">
                                                                     <div className="flex items-center gap-2">
-                                                                        <div className="w-24 h-2.5 bg-ash-100 rounded-full overflow-hidden">
+                                                                        <div className="relative w-24 h-2.5 bg-ash-100 rounded-full overflow-hidden">
                                                                             <div
                                                                                 className={`h-full rounded-full transition-[width] duration-700 ${barColor}`}
-                                                                                style={{ width: `${Math.min(pct, 100)}%` }}
+                                                                                style={{ width: `${larghezza}%` }}
                                                                             />
+                                                                            {tacca != null && (
+                                                                                <div className="absolute inset-y-0 w-0.5 bg-ash-500/70" style={{ left: `${tacca}%` }} />
+                                                                            )}
                                                                         </div>
                                                                         <div className={`text-xs font-bold ${textColor}`}>{pct}%</div>
                                                                     </div>
-                                                                    {pct >= 100 && (
+                                                                    {preso1 && (
                                                                         <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200/50 animate-fade-in">
                                                                             <Award className="w-3 h-3" />
-                                                                            BONUS RAGGIUNTO
+                                                                            {preso2 ? '2° OBIETTIVO RAGGIUNTO' : '1° OBIETTIVO RAGGIUNTO'}
                                                                         </div>
                                                                     )}
                                                                 </div>

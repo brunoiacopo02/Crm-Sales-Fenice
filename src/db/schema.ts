@@ -55,7 +55,8 @@ export const users = pgTable('users', {
     confermeExtraTier2: real('confermeExtraTier2').default(0).notNull(),
 
     // --- GAME & FINANCIAL FIELDS ---
-    salesTargetEur: real('salesTargetEur'), // Target fatturato venditore (nullable)
+    salesTargetEur: real('salesTargetEur'), // PRIMO obiettivo di fatturato mensile del venditore (nullable; PO 29/10/2026: 74.000)
+    salesTarget2Eur: real('salesTarget2Eur'), // SECONDO obiettivo di fatturato mensile del venditore (nullable; PO 29/10/2026: 86.500), migr. 0056
     baseSalaryEur: real('baseSalaryEur').default(1350).notNull(),
     level: integer('level').default(1).notNull(),
     experience: integer('experience').default(0).notNull(),
