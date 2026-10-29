@@ -34,7 +34,7 @@ export function VenditorePerformanceView({ data }: { data: VenditorePerformanceD
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <Kpi label="Closing rate" value={`${c.closingPct}%`} sub={closingSub} />
                 <Kpi
-                    label="Fatturato"
+                    label="Firmato"
                     value={eur(c.fatturato)}
                     sub={`Ticket medio ${eur(c.ticketMedio)}`}
                     action={

@@ -35,7 +35,7 @@ type PlayerOfWeek = {
 const ROLE_TABS: { id: LeaderboardRole; label: string; icon: typeof Trophy; unit: string; sublabel: string }[] = [
     { id: 'GDO', label: 'GDO', icon: Phone, unit: 'Appuntamenti', sublabel: 'Appuntamenti fissati' },
     { id: 'CONFERME', label: 'Conferme', icon: CheckCircle, unit: 'Conferme', sublabel: 'Appuntamenti confermati' },
-    { id: 'VENDITORE', label: 'Venditori', icon: DollarSign, unit: '€ Fatturato', sublabel: 'Fatturato generato' },
+    { id: 'VENDITORE', label: 'Venditori', icon: DollarSign, unit: '€ Firmato', sublabel: 'Firmato nel periodo' },
 ]
 
 const METRIC_TABS: { id: LeaderboardMetric; label: string; icon: typeof Trophy; unit: string }[] = [

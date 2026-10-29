@@ -55,8 +55,7 @@ export const users = pgTable('users', {
     confermeExtraTier2: real('confermeExtraTier2').default(0).notNull(),
 
     // --- GAME & FINANCIAL FIELDS ---
-    salesTargetEur: real('salesTargetEur'), // PRIMO obiettivo di fatturato mensile del venditore (nullable; PO 29/10/2026: 74.000)
-    salesTarget2Eur: real('salesTarget2Eur'), // SECONDO obiettivo di fatturato mensile del venditore (nullable; PO 29/10/2026: 86.500), migr. 0056
+    // Gli obiettivi di fatturato dei venditori sono per mese in salesMonthlyTargets (migr. 0057).
     baseSalaryEur: real('baseSalaryEur').default(1350).notNull(),
     level: integer('level').default(1).notNull(),
     experience: integer('experience').default(0).notNull(),
@@ -883,6 +882,21 @@ export const manualAdjustments = pgTable('manualAdjustments', {
 // baselineSetAt is the timestamp at which the baseline was last saved: only leads
 // created AFTER this timestamp are summed on top of the baseline (to avoid
 // double-counting leads that were already part of the baseline snapshot).
+// Obiettivi di fatturato INDIVIDUALI dei venditori, per mese (PO 29/10/2026,
+// migr. 0057). Un mese senza riga prende l'ultima riga precedente del venditore
+// (src/lib/venditore/obiettivi.ts). Si cambiano da /kpi-venditori.
+export const salesMonthlyTargets = pgTable('salesMonthlyTargets', {
+    salesUserId: text('salesUserId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    yearMonth: text('yearMonth').notNull(), // 'YYYY-MM' (Europe/Rome)
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    target1Eur: real('target1Eur'),
+    target2Eur: real('target2Eur'),
+    updatedAt: timestamp('updatedAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    updatedBy: text('updatedBy'),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.salesUserId, table.yearMonth] }),
+}));
+
 export const monthlyLeadTargets = pgTable('monthlyLeadTargets', {
     id: text('id').primaryKey(),
     yearMonth: text('yearMonth').notNull().unique(), // 'YYYY-MM' (Europe/Rome)

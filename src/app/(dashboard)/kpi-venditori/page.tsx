@@ -1,6 +1,8 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { KpiVenditoriClient } from "@/components/KpiVenditoriClient"
+import { ObiettiviGuadagniVenditori } from "@/components/venditore/ObiettiviGuadagniVenditori"
+import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 
 export default async function KpiVenditoriPage() {
     const supabase = await createClient();
@@ -22,12 +24,15 @@ export default async function KpiVenditoriPage() {
             <div className="flex items-center justify-between max-w-7xl mx-auto">
                 <div>
                     <div className="text-sm text-ash-500 mt-1">
-                        Monitoraggio del fatturato, closing rate e performance del team di Closer.
+                        Monitoraggio del firmato, closing rate e performance del team di Closer.
                     </div>
                 </div >
             </div >
 
             <KpiVenditoriClient currentUserRole={session.user.role} currentUserId={session.user.id} />
+
+            {/* Solo manager/admin: guadagni di tutti e modifica degli obiettivi del mese. */}
+            <ObiettiviGuadagniVenditori meseCorrente={currentYearMonthRome()} />
         </div >
     )
 }

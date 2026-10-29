@@ -766,7 +766,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                     confirmClear ? (
                         <div className="mr-auto flex flex-wrap items-center gap-2">
                             <span className="text-xs text-ash-600 max-w-xs">
-                                Spariscono esito, tentativo{lead?.salespersonOutcome === 'Chiuso' ? ' e fatturato' : ''} e presenza: il lead torna &quot;Da esitare&quot;.
+                                Spariscono esito, tentativo{lead?.salespersonOutcome === 'Chiuso' ? ' e firmato' : ''} e presenza: il lead torna &quot;Da esitare&quot;.
                             </span>
                             <button
                                 type="button"

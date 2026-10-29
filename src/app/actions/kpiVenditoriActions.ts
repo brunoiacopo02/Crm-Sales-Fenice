@@ -8,6 +8,7 @@ import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
 import { cohortClosing } from "@/lib/kpi/salesCohort"
 import { personName } from "@/lib/diretta/config"
+import { obiettiviPerVenditori } from "@/lib/venditore/obiettiviDb"
 
 // Normalizza il funnel come nel resto del codebase: trim + UPPER, vuoto/null → SCONOSCIUTO
 const normFunnel = (f: string | null | undefined) => (f ?? '').trim().toUpperCase() || 'SCONOSCIUTO'
@@ -57,9 +58,14 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         name: users.name,
         displayName: users.displayName,
         firstName: users.firstName,
-        salesTargetEur: users.salesTargetEur,
-        salesTarget2Eur: users.salesTarget2Eur,
     }).from(users).where(and(eq(users.role, 'VENDITORE'), companyScope(ctx, users.companyId)))
+
+    // Obiettivi INDIVIDUALI del mese (PO 29/10/2026, salesMonthlyTargets): quelli
+    // del mese del periodo, o dell'ultimo mese prima che li ha. Si misurano sul
+    // FIRMATO del mese: con "oggi"/"settimana" la barra confronta il firmato del
+    // periodo con l'obiettivo del mese, come prima.
+    const meseObiettivi = period === 'custom' && customStart ? customStart.slice(0, 7) : currentYearMonthRome(now)
+    const obiettivi = await obiettiviPerVenditori(meseObiettivi, venditori.map(v => v.id))
 
     // Una sola lettura per DUE metriche che vivono su date diverse (PO 2026-09-10):
     //
@@ -153,8 +159,8 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
             chiusiCoorte: coorte.chiusi,
             closingRate: coorte.closingPct,
             fatturato,
-            salesTargetEur: v.salesTargetEur,
-            salesTarget2Eur: v.salesTarget2Eur,
+            salesTargetEur: obiettivi.get(v.id)?.target1Eur ?? null,
+            salesTarget2Eur: obiettivi.get(v.id)?.target2Eur ?? null,
         }
     })
 

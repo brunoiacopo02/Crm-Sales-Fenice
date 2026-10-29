@@ -6,6 +6,8 @@ import { loadSellerMonth, loadLastOkAt } from "@/lib/gestionale/queries"
 import { MonthSelect } from "@/components/gestionale/MonthSelect"
 import { AtRiskTable } from "@/components/gestionale/AtRiskTable"
 import { formatEur, formatDate } from "@/components/gestionale/format"
+import { loadGuadagniMese } from "@/lib/venditore/obiettiviDb"
+import { GuadagnoVenditoreCard } from "@/components/gestionale/GuadagnoVenditore"
 
 export const dynamic = "force-dynamic"
 
@@ -27,7 +29,9 @@ export default async function MieiIncassiPage({ searchParams }: { searchParams: 
     const current = currentYearMonthRome()
     const mese = pickMonth((await searchParams).mese, current)
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" })
-    const [view, lastOk] = await Promise.all([loadSellerMonth(user.id, mese, today), loadLastOkAt()])
+    // Il venditore vede SOLO il proprio guadagno (soloUserId = chi e' loggato).
+    const [view, lastOk, guadagni] = await Promise.all([loadSellerMonth(user.id, mese, today), loadLastOkAt(), loadGuadagniMese(mese, { soloUserId: user.id })])
+    const mioGuadagno = guadagni[0]
     const s = view.summary
 
     return (
@@ -41,6 +45,8 @@ export default async function MieiIncassiPage({ searchParams }: { searchParams: 
                 </div>
                 <MonthSelect months={monthsFrom(FIRST_MONTH, current)} value={mese} />
             </div>
+
+            {mioGuadagno && <GuadagnoVenditoreCard g={mioGuadagno} />}
 
             {!view.hasData ? (
                 <div className="rounded-xl border border-ash-200 bg-white p-8 text-center text-ash-500">

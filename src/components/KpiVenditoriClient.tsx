@@ -133,8 +133,8 @@ export function KpiVenditoriClient({ currentUserRole, currentUserId }: KpiVendit
                                 <tr>
                                     <th scope="col" className="px-6 py-4">Posizione</th>
                                     <th scope="col" className="px-6 py-4">Venditore</th>
-                                    <th scope="col" className="px-6 py-4 text-center">Fatturato</th>
-                                    <th scope="col" className="px-6 py-4 text-center">Target</th>
+                                    <th scope="col" className="px-6 py-4 text-center">Firmato</th>
+                                    <th scope="col" className="px-6 py-4 text-center">Obiettivi (firmato)</th>
                                     <th scope="col" className="px-6 py-4 text-center">Progresso</th>
                                     <th scope="col" className="px-6 py-4 text-center">Chiusi</th>
                                     <th scope="col" className="px-6 py-4 text-center">Non Chiusi</th>

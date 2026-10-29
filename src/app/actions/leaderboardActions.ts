@@ -420,7 +420,7 @@ export async function getVenditoriLeaderboard(period: LeaderboardPeriod) {
         avatarUrl: user.avatarUrl,
         appointmentCount: fatturato.get(user.id) || 0,
         metricValue: fatturato.get(user.id) || 0,
-        metricLabel: 'Fatturato €',
+        metricLabel: 'Firmato €',
         firstApptTime: Infinity,
         equippedSkinCss: user.equippedItemId ? (skinMap.get(user.equippedItemId) || null) : null,
         activeTitle: user.activeTitle || null,
