@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 import crypto from 'node:crypto'
 import { db } from '@/db'
 import { leads, users, leadEvents } from '@/db/schema'
@@ -11,6 +11,9 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 const FENICE = 'fenice'
+
+/** Solo i lead della coda arrivati da qui in poi (mezzanotte di Roma del 29/10/2026). */
+const CODA_AL_BOT_DAL = new Date('2026-10-28T23:00:00Z')
 
 /**
  * Coda marketing al bot (PO 29/10/2026): uno scaglione all'ora dei lead MKT_CODA
@@ -54,6 +57,11 @@ export async function eseguiCodaAlBot() {
     }).from(leads).where(and(
         eq(leads.companyId, FENICE),
         eq(leads.launchBucket, MARKETING_QUEUE_BUCKET),
+        // STOP sui vecchi (29/10/2026, sessione qualita' numeri): il 3199 e' di
+        // nuovo LOW per troppe aperture a freddo. Entrano solo i lead arrivati
+        // dalla coda da oggi in poi; i ~154 vecchi restano nel pool finche'
+        // Bruno non decide (lotti da 30/g con numeri HIGH, oppure ai GDO).
+        gte(leads.createdAt, CODA_AL_BOT_DAL),
         eq(leads.isTest, false),
         isNull(leads.assignedToId),
         eq(leads.status, 'NEW'),
