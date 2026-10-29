@@ -12,7 +12,9 @@ const FENICE = 'fenice';
 
 
 
-export type ReassignReason = 'mai_risposto' | 'chat_interrotta';
+/** `rifiutato_dal_bot` (PO 29/10/2026): il bot ha risposto `accettato:false` al push
+ *  (fisso, numero scritto male): non ha mai avuto il lead, va al giro dei ridati. */
+export type ReassignReason = 'mai_risposto' | 'chat_interrotta' | 'rifiutato_dal_bot';
 
 type ReassignResult =
     | { ok: true; assignedToId: string }

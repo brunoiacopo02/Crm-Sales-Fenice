@@ -39,6 +39,14 @@
     {
       "path": "/api/cron/marketing-coda-bot",
       "schedule": "40 6-19 * * *"
+    },
+    {
+      "path": "/api/cron/marketing-coda-bot",
+      "schedule": "30 16,17 29 10 *"
+    },
+    {
+      "path": "/api/cron/marketing-coda-bot",
+      "schedule": "0 16,17,18 29 10 *"
     }
   ]
 }
