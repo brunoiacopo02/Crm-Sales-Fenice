@@ -47,6 +47,13 @@ export type Guadagno = {
     attualeCents: number       // alla percentuale raggiunta
     bonusCents: number         // attuale - base
     prossimo: { numero: 1 | 2; obiettivoEur: number; mancaEur: number; pct: number; guadagnoCents: number } | null
+    /** Incassato senza IVA (÷ 1,22), in centesimi. */
+    senzaIvaCents: number
+    /** Obiettivo raggiunto sul firmato: 0 nessuno, 1 o 2. */
+    raggiunto: 0 | 1 | 2
+    /** Commissione se raggiunge il 1° / 2° obiettivo, con il firmato che manca (0 se gia' preso). Null se l'obiettivo non c'e'. */
+    se1: { cents: number; mancaEur: number } | null
+    se2: { cents: number; mancaEur: number } | null
 }
 
 export function calcolaGuadagno(input: { incassatoCents: number; firmatoEur: number; obiettivi: Pick<Obiettivi, 'target1Eur' | 'target2Eur'> }): Guadagno {
@@ -60,7 +67,14 @@ export function calcolaGuadagno(input: { incassatoCents: number; firmatoEur: num
     } else if (pct < PCT_SECONDO && o.target2Eur != null && o.target2Eur > 0) {
         prossimo = { numero: 2, obiettivoEur: o.target2Eur, mancaEur: o.target2Eur - firmatoEur, pct: PCT_SECONDO, guadagnoCents: guadagnoCents(incassatoCents, PCT_SECONDO) }
     }
-    return { pct, baseCents, attualeCents, bonusCents: attualeCents - baseCents, prossimo }
+    const se = (t: number | null, p: number) => (t != null && t > 0 ? { cents: guadagnoCents(incassatoCents, p), mancaEur: Math.max(0, t - firmatoEur) } : null)
+    return {
+        pct, baseCents, attualeCents, bonusCents: attualeCents - baseCents, prossimo,
+        senzaIvaCents: Math.round(incassatoCents / IVA),
+        raggiunto: pct === PCT_SECONDO ? 2 : pct === PCT_PRIMO ? 1 : 0,
+        se1: se(o.target1Eur, PCT_PRIMO),
+        se2: se(o.target2Eur, PCT_SECONDO),
+    }
 }
 
 /** Validazione dell'input della schermata obiettivi. */

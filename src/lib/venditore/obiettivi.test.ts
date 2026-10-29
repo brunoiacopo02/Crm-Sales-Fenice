@@ -44,6 +44,19 @@ test('calcolaGuadagno con prossimo obiettivo', () => {
     const g3 = calcolaGuadagno({ incassatoCents: 1000000, firmatoEur: 90000, obiettivi: { target1Eur: 74000, target2Eur: 86500 } })
     assert.equal(g3.pct, 12)
     assert.equal(g3.prossimo, null)
+    assert.equal(g3.raggiunto, 2)
+    assert.deepEqual(g3.se1, { cents: guadagnoCents(1000000, 11), mancaEur: 0 })
+})
+
+test('calcolaGuadagno: senza IVA e scenari 11/12% con il firmato che manca', () => {
+    const g = calcolaGuadagno({ incassatoCents: 5612900, firmatoEur: 66185, obiettivi: { target1Eur: 74000, target2Eur: 86500 } })
+    assert.equal(g.raggiunto, 0)
+    assert.equal(g.senzaIvaCents, 4600738)
+    assert.deepEqual(g.se1, { cents: 506081, mancaEur: 7815 })
+    assert.deepEqual(g.se2, { cents: 552089, mancaEur: 20315 })
+    const n = calcolaGuadagno({ incassatoCents: 1000, firmatoEur: 0, obiettivi: { target1Eur: null, target2Eur: null } })
+    assert.equal(n.se1, null)
+    assert.equal(n.se2, null)
 })
 
 test('validaObiettivi', () => {

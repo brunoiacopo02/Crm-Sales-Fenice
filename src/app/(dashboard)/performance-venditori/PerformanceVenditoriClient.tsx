@@ -5,6 +5,8 @@ import { getVenditorePerformance, type VenditorePerformanceData } from "@/app/ac
 import { VenditorePerformanceView } from "@/components/venditore-performance/VenditorePerformanceView"
 import { SalesWeeklyFocusEditor } from "@/components/venditore-performance/SalesWeeklyFocusEditor"
 import { VenditoriRisposteTab } from "@/components/venditore-performance/VenditoriRisposteTab"
+import { CommissioniVenditoriTab } from "@/components/venditore-performance/CommissioniVenditoriTab"
+import { mesiSelezionabili } from "@/components/venditore/ObiettiviVenditoriEditor"
 
 interface Props {
     venditori: { id: string; name: string }[]
@@ -26,7 +28,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 export function PerformanceVenditoriClient({ venditori, initialYearMonth, weekStart, readOnly }: Props) {
-    const [tab, setTab] = useState<'performance' | 'risposte'>('performance')
+    const [tab, setTab] = useState<'performance' | 'risposte' | 'commissioni'>('performance')
     const [sel, setSel] = useState<string>(venditori[0]?.id ?? "")
     const [ym, setYm] = useState<string>(initialYearMonth)
     const [data, setData] = useState<VenditorePerformanceData | null>(null)
@@ -48,6 +50,7 @@ export function PerformanceVenditoriClient({ venditori, initialYearMonth, weekSt
             <div className="flex border-b border-ash-100">
                 <TabBtn active={tab === 'performance'} onClick={() => setTab('performance')}>Performance</TabBtn>
                 <TabBtn active={tab === 'risposte'} onClick={() => setTab('risposte')}>Risposte</TabBtn>
+                <TabBtn active={tab === 'commissioni'} onClick={() => setTab('commissioni')}>Incassi e commissioni</TabBtn>
             </div>
 
             {tab === 'performance' && (
@@ -83,6 +86,10 @@ export function PerformanceVenditoriClient({ venditori, initialYearMonth, weekSt
 
                     {data ? <VenditorePerformanceView data={data} /> : <div className="text-center text-gray-400 py-12">Caricamento…</div>}
                 </div>
+            )}
+
+            {tab === 'commissioni' && (
+                <CommissioniVenditoriTab mesi={mesiSelezionabili(initialYearMonth, '2026-09', 0)} initialYearMonth={initialYearMonth} />
             )}
 
             {tab === 'risposte' && (

@@ -44,7 +44,7 @@ const toView = (r: IncassoRaw): IncassoView => ({
     cliente: [r.nome, r.cognome].filter(Boolean).join(' ') || '—',
 })
 
-async function multeByUser(mese: string, salesUserId?: string): Promise<Map<string, number>> {
+export async function multeByUser(mese: string, salesUserId?: string): Promise<Map<string, number>> {
     const rows = await db.select({ u: salesLatePenalties.salesUserId, eur: sql<number>`coalesce(sum(${salesLatePenalties.amountEur}), 0)` })
         .from(salesLatePenalties)
         .where(and(
@@ -111,17 +111,26 @@ export async function loadAdminMonth(mese: string, today: string): Promise<Admin
     }
 }
 
+/** Incassi che maturano commissione nel mese (mese commissione del gestionale), di uno o di tutti i venditori. */
+export async function incassiCommissioneMese(mese: string, salesUserId?: string): Promise<IncassoView[]> {
+    const rows = await db.select(incassoCols).from(gestionaleIncassi)
+        .leftJoin(gestionaleContratti, eq(gestionaleContratti.id, gestionaleIncassi.contrattoId))
+        .where(and(
+            isNull(gestionaleIncassi.deletedAt),
+            salesUserId ? eq(gestionaleIncassi.salesUserId, salesUserId) : undefined,
+            eq(gestionaleIncassi.meseCommissione, mese),
+        ))
+        .orderBy(desc(gestionaleIncassi.data))
+    return rows.map(toView)
+}
+
 export async function loadSellerMonth(salesUserId: string, mese: string, today: string): Promise<SellerMonthView> {
-    const [incassiRaw, commRows, multe, atRisk] = await Promise.all([
-        db.select(incassoCols).from(gestionaleIncassi)
-            .leftJoin(gestionaleContratti, eq(gestionaleContratti.id, gestionaleIncassi.contrattoId))
-            .where(and(isNull(gestionaleIncassi.deletedAt), eq(gestionaleIncassi.salesUserId, salesUserId), eq(gestionaleIncassi.meseCommissione, mese)))
-            .orderBy(desc(gestionaleIncassi.data)),
+    const [incassi, commRows, multe, atRisk] = await Promise.all([
+        incassiCommissioneMese(mese, salesUserId),
         db.select().from(gestionaleCommissioni).where(and(eq(gestionaleCommissioni.mese, mese), eq(gestionaleCommissioni.salesUserId, salesUserId))),
         multeByUser(mese, salesUserId),
         atRiskFor(salesUserId, today),
     ])
-    const incassi = incassiRaw.map(toView)
     return {
         summary: sellerMonthSummary(commRows[0], multe.get(salesUserId) ?? 0),
         incassi,

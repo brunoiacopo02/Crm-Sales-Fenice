@@ -122,3 +122,22 @@ export async function loadGuadagniMese(ym: string, opts: { soloUserId?: string; 
         .map(({ attivo: _a, ...r }) => r)
         .sort((a, b) => a.codice.localeCompare(b.codice))
 }
+
+export type ObiettiviVenditore = { salesUserId: string; nome: string; codice: string; obiettivi: Obiettivi }
+
+/** Solo gli obiettivi del mese (schermata di modifica), senza soldi. */
+export async function loadObiettiviMese(ym: string, companyFilter?: SQL): Promise<ObiettiviVenditore[]> {
+    const where = [eq(users.role, 'VENDITORE'), eq(users.isActive, true)]
+    if (companyFilter) where.push(companyFilter)
+    const venditori = await db.select({ id: users.id, name: users.name, displayName: users.displayName, firstName: users.firstName })
+        .from(users).where(and(...where))
+    const ob = await obiettiviPerVenditori(ym, venditori.map(v => v.id))
+    return venditori
+        .map(v => ({
+            salesUserId: v.id,
+            nome: personName(v),
+            codice: v.displayName || v.name || '',
+            obiettivi: ob.get(v.id) ?? { target1Eur: null, target2Eur: null, daMese: null },
+        }))
+        .sort((a, b) => a.codice.localeCompare(b.codice))
+}

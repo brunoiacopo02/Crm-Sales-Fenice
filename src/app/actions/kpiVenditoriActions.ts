@@ -9,6 +9,7 @@ import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
 import { cohortClosing } from "@/lib/kpi/salesCohort"
 import { personName } from "@/lib/diretta/config"
 import { obiettiviPerVenditori } from "@/lib/venditore/obiettiviDb"
+import { haRuoloDb } from "@/lib/auth/ruoloDb"
 
 // Normalizza il funnel come nel resto del codebase: trim + UPPER, vuoto/null → SCONOSCIUTO
 const normFunnel = (f: string | null | undefined) => (f ?? '').trim().toUpperCase() || 'SCONOSCIUTO'
@@ -65,7 +66,15 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
     // FIRMATO del mese: con "oggi"/"settimana" la barra confronta il firmato del
     // periodo con l'obiettivo del mese, come prima.
     const meseObiettivi = period === 'custom' && customStart ? customStart.slice(0, 7) : currentYearMonthRome(now)
-    const obiettivi = await obiettiviPerVenditori(meseObiettivi, venditori.map(v => v.id))
+    // PRIVACY (PO 29/10/2026): questa action la usa anche il venditore nella sua
+    // "Team Classifica". Gli obiettivi degli ALTRI non devono arrivare al suo
+    // browser: solo ADMIN/MANAGER (verificati sul DB, non sui metadati) li
+    // ricevono tutti, il venditore riceve solo i propri.
+    const vedeTutti = await haRuoloDb(ctx.userId, ['ADMIN', 'MANAGER'])
+    const obiettivi = await obiettiviPerVenditori(
+        meseObiettivi,
+        venditori.map(v => v.id).filter(id => vedeTutti || id === ctx.userId),
+    )
 
     // Una sola lettura per DUE metriche che vivono su date diverse (PO 2026-09-10):
     //

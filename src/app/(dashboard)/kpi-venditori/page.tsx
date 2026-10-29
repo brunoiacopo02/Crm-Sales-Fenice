@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { KpiVenditoriClient } from "@/components/KpiVenditoriClient"
-import { ObiettiviGuadagniVenditori } from "@/components/venditore/ObiettiviGuadagniVenditori"
+import { ObiettiviVenditoriEditor } from "@/components/venditore/ObiettiviVenditoriEditor"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 
 export default async function KpiVenditoriPage() {
@@ -31,8 +31,8 @@ export default async function KpiVenditoriPage() {
 
             <KpiVenditoriClient currentUserRole={session.user.role} currentUserId={session.user.id} />
 
-            {/* Solo manager/admin: guadagni di tutti e modifica degli obiettivi del mese. */}
-            <ObiettiviGuadagniVenditori meseCorrente={currentYearMonthRome()} />
+            {/* Solo manager/admin: modifica degli obiettivi del mese (incassi e commissioni in /performance-venditori). */}
+            <ObiettiviVenditoriEditor meseCorrente={currentYearMonthRome()} />
         </div >
     )
 }

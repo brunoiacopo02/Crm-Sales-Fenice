@@ -11,7 +11,8 @@ import { createClient } from "@/utils/supabase/server"
 import { haRuoloDb } from "@/lib/auth/ruoloDb"
 import { currentTenant, assertSalesArea, companyScope, type TenantContext } from "@/lib/tenancy"
 import { validaObiettivi } from "@/lib/venditore/obiettivi"
-import { loadGuadagniMese, type GuadagnoVenditore } from "@/lib/venditore/obiettiviDb"
+import { loadGuadagniMese, loadObiettiviMese, type GuadagnoVenditore, type ObiettiviVenditore } from "@/lib/venditore/obiettiviDb"
+import { incassiCommissioneMese, multeByUser, type IncassoView } from "@/lib/gestionale/queries"
 import { revalidatePath } from "next/cache"
 
 const RUOLI = ["ADMIN", "MANAGER"] as const
@@ -28,11 +29,38 @@ async function requireManager(): Promise<{ id: string; ctx: TenantContext }> {
     return { id: user.id, ctx }
 }
 
-/** Obiettivi, firmato, incassato e guadagno di tutti i venditori nel mese. */
-export async function getObiettiviEGuadagni(ym: string): Promise<GuadagnoVenditore[]> {
+/** Solo gli obiettivi del mese, per la schermata di modifica in /kpi-venditori. */
+export async function getObiettiviMese(ym: string): Promise<ObiettiviVenditore[]> {
     const { ctx } = await requireManager()
     if (!YM.test(ym)) throw new Error("Mese non valido")
-    return loadGuadagniMese(ym, { companyFilter: companyScope(ctx, users.companyId) })
+    return loadObiettiviMese(ym, companyScope(ctx, users.companyId))
+}
+
+export type CommissioneVenditore = GuadagnoVenditore & {
+    multeCents: number
+    incassi: Pick<IncassoView, "id" | "data" | "cliente" | "importoCents" | "voce" | "contaCommissione">[]
+}
+
+/**
+ * Commissioni del mese di TUTTI i venditori (Performance venditori, per
+ * controllare le fatture). Stesso calcolo di "I miei incassi"
+ * (loadGuadagniMese), piu' multe e incassi riga per riga.
+ */
+export async function getCommissioniVenditori(ym: string): Promise<CommissioneVenditore[]> {
+    const { ctx } = await requireManager()
+    if (!YM.test(ym)) throw new Error("Mese non valido")
+    const [righe, multe, incassi] = await Promise.all([
+        loadGuadagniMese(ym, { companyFilter: companyScope(ctx, users.companyId) }),
+        multeByUser(ym),
+        incassiCommissioneMese(ym),
+    ])
+    return righe.map(r => ({
+        ...r,
+        multeCents: Math.round((multe.get(r.salesUserId) ?? 0) * 100),
+        incassi: incassi
+            .filter(i => i.salesUserId === r.salesUserId)
+            .map(i => ({ id: i.id, data: i.data, cliente: i.cliente, importoCents: i.importoCents, voce: i.voce, contaCommissione: i.contaCommissione })),
+    }))
 }
 
 /**
@@ -73,5 +101,6 @@ export async function saveObiettiviVenditori(
     })
     revalidatePath("/kpi-venditori")
     revalidatePath("/miei-incassi")
+    revalidatePath("/performance-venditori")
     return { ok: true }
 }
