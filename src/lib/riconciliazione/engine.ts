@@ -20,6 +20,7 @@ import { parseCsv } from '@/lib/riconciliazione/csv';
 import { reconcile, type CrmClosure, type DiffEntry } from '@/lib/riconciliazione/match';
 import type { ConfrontoResult, ApplyResult, AnnullaRunResult, RiconciliazioneRunSummary } from '@/lib/riconciliazione/types';
 import { resolveAttemptWrite } from '@/lib/venditorePerformance/guard';
+import { buildLeadAssenteRow } from '@/lib/riconciliazione/leadAssente';
 import { logLeadEvent } from '@/lib/eventLogger';
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 import { syncPiumeForLeads } from '@/lib/economy/awards';
@@ -385,24 +386,18 @@ export async function applicaCorrezioniCome(adminUserId: string, monthKey: strin
                         attemptNumber: attemptWrite.mode === 'insert' ? attemptWrite.attemptNumber : 0,
                     };
 
-                    await tx.insert(leads).values({
-                        id: leadId,
+                    // salespersonUserId va sul lead, non solo su salesAttempts: le
+                    // KPI venditori sommano su leads.salespersonUserId (vedi
+                    // buildLeadAssenteRow). Resta fuori da `leadAfter` di proposito:
+                    // l'annullamento confronta solo i campi di quello snapshot, e
+                    // le run già registrate non lo contengono.
+                    await tx.insert(leads).values(buildLeadAssenteRow({
+                        leadId,
                         companyId: COMPANY_ID,
-                        name: leadAfter.name,
-                        phone: leadAfter.phone,
-                        email: leadAfter.email,
-                        // Origine dedicata: il contratto entra nel fatturato totale ma
-                        // resta distinguibile nelle statistiche per funnel. `status`
-                        // resta al suo default ('NEW'): non va indovinato.
-                        funnel: leadAfter.funnel,
-                        salespersonOutcome: leadAfter.salespersonOutcome,
-                        salespersonOutcomeAt: leadAfter.salespersonOutcomeAt,
-                        closeAmountEur: leadAfter.closeAmountEur,
-                        salespersonAssigned: leadAfter.salespersonAssigned,
-                        // Nessun presentedAt, nessun appointmentDate, nessuna presenza:
-                        // questo contratto non è passato dal funnel GDO/Conferme e non
-                        // deve gonfiare i tassi di nessuno dei due team.
-                    });
+                        phone,
+                        sheet,
+                        salesUserId,
+                    }));
                     await tx.insert(salesAttempts).values({
                         id: attemptId,
                         leadId,
