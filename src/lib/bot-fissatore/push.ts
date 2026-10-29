@@ -18,6 +18,8 @@ import {
 } from './retryAfter';
 import { prossimoInvio } from './pacing';
 import { leadDiProva } from '@/lib/prova/sql';
+import { rifiutoDalCorpo } from './rifiutoBot';
+import { gestisciRifiutoBot, type EsitoRifiuto } from './rifiutoBotDb';
 
 /** Esito del tentativo di push, persistito su leadEvents.metadata per audit dal DB. */
 type PushResult =
@@ -26,6 +28,9 @@ type PushResult =
     | { result: 'skipped_prova' }
     | { result: 'missing_env' }
     | { result: 'sent'; status: number; urlHost?: string; tentativi?: number }
+    /** 2xx con `accettato:false` (PO 29/10/2026): il bot non ha preso il lead. `gestione`
+     *  dice dove è finito (ridato ai GDO, chiuso come numero non valido, lasciato). */
+    | { result: 'not_accepted'; status: number; motivo: string; gestione?: EsitoRifiuto | 'errore'; urlHost?: string; tentativi?: number }
     /** Il fornitore lo aveva gia': risposta a un nostro ritento. Ne' nuovo ne' scarto. */
     | { result: 'duplicate'; status: number; urlHost?: string; tentativi: number }
     | { result: 'http_error'; status: number; urlHost?: string; tentativi?: number }
@@ -257,6 +262,20 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResu
                 // `duplicato:true` = il lead era gia' entrato da loro (guardia di
                 // idempotenza): e' la risposta a un nostro ritento andato a segno.
                 const okBody = await res.text().catch(() => null);
+                // 200 anche quando scarta (`accettato:false`): fino al 29/10 lo leggevamo
+                // come `sent` e il lead restava fermo sul bot per sempre. Ora non resta lì.
+                const rifiuto = rifiutoDalCorpo(okBody);
+                if (rifiuto) {
+                    let gestione: EsitoRifiuto | 'errore';
+                    try {
+                        gestione = await gestisciRifiutoBot(payload.leadId, rifiuto.motivo);
+                    } catch (e) {
+                        console.error(`[bot-fissatore] gestione rifiuto fallita for lead ${payload.leadId}`, e);
+                        gestione = 'errore';
+                    }
+                    meta = { result: 'not_accepted', status: res.status, motivo: rifiuto.motivo, gestione, urlHost, tentativi };
+                    break;
+                }
                 meta = isDuplicate(okBody)
                     ? { result: 'duplicate', status: res.status, urlHost, tentativi }
                     : { result: 'sent', status: res.status, urlHost, tentativi };

@@ -22,9 +22,10 @@ export type InstradamentoRidato = 'parcheggia' | 'giro_gdo'
 
 /** Dove va un lead restituito dal bot, dato il motivo e la nota del bot. */
 export function instradamentoRidato(
-    reason: 'mai_risposto' | 'chat_interrotta',
+    reason: 'mai_risposto' | 'chat_interrotta' | 'rifiutato_dal_bot',
     botNote: string | null | undefined,
 ): InstradamentoRidato {
-    if (reason === 'chat_interrotta') return 'giro_gdo'
+    // Il lead che il bot non ha nemmeno preso (PO 29/10) va chiamato: nessuno ci ha parlato.
+    if (reason === 'chat_interrotta' || reason === 'rifiutato_dal_bot') return 'giro_gdo'
     return isWhatsappMaiConsegnato(botNote) ? 'giro_gdo' : 'parcheggia'
 }
