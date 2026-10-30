@@ -14,13 +14,13 @@
 // nessuna chiamata al bot.
 
 import { db } from "@/db"
-import { leads, leadEvents, users } from "@/db/schema"
+import { leads, leadEvents } from "@/db/schema"
 import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { revalidatePath } from "next/cache"
 import { currentTenant, assertSalesArea, assertSingleCompany } from "@/lib/tenancy"
 import { contaNeiKpiSql } from "@/lib/intakeBatch"
-import { isTeamMember } from "@/lib/diretta/config"
+import { gdoAssegnabili, type GdoAssegnabile } from "@/lib/diretta/gdoAssegnabili"
 import { EVENTO_RIDATO_PARCHEGGIATO } from "@/lib/bot-fissatore/iaVocale"
 import { LANCIO_BUCKET, LANCIO_FUNNEL } from "@/lib/lancio/intake"
 import { MAX_ACCANTONATI_PER_VOLTA, quantiDaAssegnare, raggruppaMotivi } from "@/lib/diretta/accantonati"
@@ -28,7 +28,7 @@ import { MAX_ACCANTONATI_PER_VOLTA, quantiDaAssegnare, raggruppaMotivi } from "@
 /** Quanti dei più recenti si mostrano nella card. */
 const QUANTI_IN_ELENCO = 10
 
-export type GdoPerAccantonati = { id: string; nome: string }
+export type GdoPerAccantonati = GdoAssegnabile
 
 export type AccantonatiStato = {
     totale: number
@@ -84,25 +84,6 @@ async function contestoAdmin() {
     assertSalesArea(ctx)
     if (ctx.role !== 'ADMIN') return null
     return ctx
-}
-
-/** GDO della squadra assegnabili nell'azienda attiva: attivi, umani, con nome vero. */
-async function gdoAssegnabili(companyId: string): Promise<GdoPerAccantonati[]> {
-    const righe = await db.select({
-        id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
-        firstName: users.firstName,
-    }).from(users).where(and(
-        eq(users.role, 'GDO'),
-        eq(users.isActive, true),
-        or(
-            sql`${companyId} = ANY(${users.allowedCompanies})`,
-            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, companyId)),
-        ),
-    ))
-    return righe
-        .filter(u => isTeamMember({ ...u, isActive: !!u.isActive }))
-        .map(u => ({ id: u.id, nome: u.firstName!.trim() }))
-        .sort((a, b) => a.nome.localeCompare(b.nome, 'it'))
 }
 
 const iso = (v: Date | string | null): string | null => {

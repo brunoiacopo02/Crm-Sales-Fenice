@@ -19,6 +19,7 @@ import { LeadRedistributionCard } from "@/components/LeadRedistributionCard"
 import { BlackSummerPoolCard } from "@/components/BlackSummerPoolCard"
 import { DatabasePoolSection } from "@/components/DatabasePoolSection"
 import { AccantonatiPoolCard } from "@/components/AccantonatiPoolCard"
+import { PunteggioAltoPoolCard } from "@/components/PunteggioAltoPoolCard"
 import { ScortaMonitorCard } from "@/components/ScortaMonitorCard"
 
 export function ImportClient() {
@@ -539,6 +540,7 @@ export function ImportClient() {
 
             <LeadRedistributionCard />
             <AccantonatiPoolCard />
+            <PunteggioAltoPoolCard />
             <ScortaMonitorCard />
             <BlackSummerPoolCard />
             <DatabasePoolSection />
