@@ -501,12 +501,18 @@ export async function getPipelineLeads() {
                 }))
                 if (cercatiLetti && eventiLetti) {
                     lista = applicaScritti(lista, await classificaEScrivi(ctx.companyId, userId, lista, now), now)
-                    if (!haDaChiamare(lista) && lista.some(l => l.scortaStato === 'scorta')) {
+                    if (!haDaChiamare(lista, now) && lista.some(l => l.scortaStato === 'scorta')) {
                         const sbloccati = new Set(await sbloccaSeVuota(ctx.companyId, userId, now))
                         if (sbloccati.size) lista = lista.map(l => sbloccati.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: null } : l)
                     }
                 }
-                const visibili = new Set(lista.filter(visibileInPrimaChiamata).map(l => l.id))
+                // Arrivi non caldi da classificare (null): mai visibili, nemmeno
+                // in grazia (PO 30/10/2026). Senza "Ti ha cercato" o eventi letti
+                // non si sa se un null è caldo: si mostra solo il già deciso.
+                const classificabile = cercatiLetti && eventiLetti
+                const visibili = new Set(lista
+                    .filter(l => classificabile ? visibileInPrimaChiamata(l, now) : (l.cercato || l.scortaStato === 'visibile'))
+                    .map(l => l.id))
                 const perId = new Map(lista.map(l => [l.id, l]))
                 primaVisibile = firstCall.filter(l => visibili.has(l.id))
                 // Sotto la priorità della board, i vergini della settimana e poi

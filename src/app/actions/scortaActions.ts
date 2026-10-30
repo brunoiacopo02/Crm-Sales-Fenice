@@ -6,9 +6,12 @@
 // fra quanti giorni finisce la scorta. Regole in src/lib/diretta/scorta.ts,
 // movimenti scritti da src/lib/diretta/scortaDb.ts.
 //
-// Sola lettura: l'interruttore si accende e si spegne con lo script
-// scripts/diretta/scorta-prima-assegnazione.ts, che fa anche la prima
-// assegnazione dei visibili.
+// Comandi admin (PO 30/10/2026): per ogni GDO della squadra "Accendi scorta"
+// (la stessa prima assegnazione dello script
+// scripts/diretta/scorta-prima-assegnazione.ts, via accendiScorta), "Spegni
+// scorta" (tutti i suoi lead tornano visibili) e "Sblocca 30 ora". Il ruolo
+// ADMIN si verifica qui, lato server, a ogni comando; il GDO deve essere della
+// squadra dell'azienda attiva. Tutto sotto il lock consultivo per GDO di scortaDb.
 
 import { db } from "@/db"
 import { leads, users } from "@/db/schema"
@@ -17,7 +20,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isTeamMember } from "@/lib/diretta/config"
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 import { stimaGiorni } from "@/lib/diretta/scorta"
-import { movimentiDal } from "@/lib/diretta/scortaDb"
+import { accendiScorta, movimentiDal, sbloccaManuale, spegniScorta } from "@/lib/diretta/scortaDb"
 
 const GIORNI = 7
 
@@ -44,24 +47,35 @@ export type ScortaMonitor = {
     lettoAlle: string
 }
 
-/** Stato letto adesso. null = non ADMIN (la card non compare). */
-export async function getScortaMonitor(): Promise<ScortaMonitor | null> {
+async function contestoAdmin() {
     const ctx = await currentTenant()
     assertSalesArea(ctx)
     if (ctx.role !== 'ADMIN') return null
+    return ctx
+}
 
-    const ora = new Date()
-    const squadra = (await db.select({
+/** GDO della squadra nell'azienda attiva: attivi, umani, con nome vero. */
+async function squadraDi(companyId: string) {
+    return (await db.select({
         id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
         firstName: users.firstName, scortaAttiva: users.scortaAttiva,
     }).from(users).where(and(
         eq(users.role, 'GDO'),
         eq(users.isActive, true),
         or(
-            sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
-            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
+            sql`${companyId} = ANY(${users.allowedCompanies})`,
+            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, companyId)),
         ),
     ))).filter(u => isTeamMember({ ...u, isActive: !!u.isActive }))
+}
+
+/** Stato letto adesso. null = non ADMIN (la card non compare). */
+export async function getScortaMonitor(): Promise<ScortaMonitor | null> {
+    const ctx = await contestoAdmin()
+    if (!ctx) return null
+
+    const ora = new Date()
+    const squadra = await squadraDi(ctx.companyId)
 
     const ids = squadra.map(u => u.id)
     if (ids.length === 0) return { gdo: [], giorni: [], lettoAlle: ora.toISOString() }
@@ -105,7 +119,7 @@ export async function getScortaMonitor(): Promise<ScortaMonitor | null> {
         if (m.tipo === 'consumato') d.consumati += m.quanti
         else if (m.tipo === 'vergini') { d.vergini += m.quanti; d.arrivi += m.quanti }
         else if (m.tipo === 'caldi' || m.tipo === 'nascosti') d.arrivi += m.quanti
-        else if (m.tipo === 'sblocco') d.sblocchi += 1
+        else if (m.tipo === 'sblocco' || m.tipo === 'sblocco_manuale') d.sblocchi += 1
     }
 
     const righe: ScortaGdo[] = squadra.map(u => {
@@ -132,4 +146,40 @@ export async function getScortaMonitor(): Promise<ScortaMonitor | null> {
     }).sort((a, b) => Number(b.accesa) - Number(a.accesa) || a.nome.localeCompare(b.nome, 'it'))
 
     return { gdo: righe, giorni, lettoAlle: ora.toISOString() }
+}
+
+export type ComandoScorta = 'accendi' | 'spegni' | 'sblocca'
+export type EsitoComandoScorta = { ok: true; messaggio: string } | { ok: false; errore: string }
+
+/**
+ * Comando admin sulla scorta di un GDO: accendi (prima assegnazione: sempre
+ * visibili + i migliori 40, il resto in scorta), spegni (tutto torna visibile)
+ * o sblocca 30 adesso. Solo ADMIN, solo GDO della squadra dell'azienda attiva.
+ */
+export async function comandoScorta(gdoId: string, comando: ComandoScorta): Promise<EsitoComandoScorta> {
+    const ctx = await contestoAdmin()
+    if (!ctx) return { ok: false, errore: "Solo un admin può farlo." }
+    if (comando !== 'accendi' && comando !== 'spegni' && comando !== 'sblocca') return { ok: false, errore: "Comando sconosciuto." }
+    const gdo = (await squadraDi(ctx.companyId)).find(u => u.id === gdoId)
+    if (!gdo) return { ok: false, errore: "GDO non trovato nella squadra." }
+    const nome = gdo.firstName!.trim()
+    const ora = new Date()
+
+    try {
+        if (comando === 'accendi') {
+            const r = await accendiScorta(ctx.companyId, gdo.id, ora, undefined, { soloSeSpenta: true })
+            if (!r) return { ok: false, errore: `La scorta di ${nome} è già accesa.` }
+            return { ok: true, messaggio: `Scorta accesa per ${nome}: ${r.visibili.length} lead visibili, ${r.scorta.length} nella scorta.` }
+        }
+        if (comando === 'spegni') {
+            const n = await spegniScorta(ctx.companyId, gdo.id, ora)
+            return { ok: true, messaggio: `Scorta spenta per ${nome}: ${n} lead tornati come prima, vede tutta la prima chiamata.` }
+        }
+        const ids = await sbloccaManuale(ctx.companyId, gdo.id, ora)
+        if (ids.length === 0) return { ok: false, errore: `Niente da sbloccare per ${nome}: scorta spenta o vuota.` }
+        return { ok: true, messaggio: `Sbloccati ${ids.length} lead per ${nome}.` }
+    } catch (e) {
+        console.error('[scorta] comando admin', comando, e)
+        return { ok: false, errore: "Comando non riuscito. Riprova." }
+    }
 }

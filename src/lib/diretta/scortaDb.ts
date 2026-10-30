@@ -20,7 +20,7 @@ import { db } from '@/db'
 import { botContactRequests, gdoScortaMovimenti, leadEvents, leads, users } from '@/db/schema'
 import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import {
-    classificaArrivi, daSbloccare, applicaScritti, datiDaEventi, eVergine, primaAssegnazione,
+    classificaArrivi, daSbloccare, applicaScritti, datiDaEventi, eVergine, primaAssegnazione, primiDellaScorta,
     SBLOCCO, VISIBILI_INIZIALI, type EventoScorta, type LeadScorta,
 } from './scorta'
 
@@ -28,7 +28,10 @@ import {
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Esecutore = typeof db | Tx
 
-export type TipoMovimento = 'iniziale' | 'iniziale_scorta' | 'nascosti' | 'sblocco' | 'consumato' | 'vergini' | 'caldi' | 'spenta'
+// 'sblocco_manuale': sblocco chiesto dall'admin dal monitor di /import. La
+// tabella dei movimenti non ha una colonna per le note (e la migrazione 0059 è
+// già in prod): il tipo stesso è la nota. Il monitor lo conta come uno sblocco.
+export type TipoMovimento = 'iniziale' | 'iniziale_scorta' | 'nascosti' | 'sblocco' | 'sblocco_manuale' | 'consumato' | 'vergini' | 'caldi' | 'spenta'
 
 const LOTTO = 1000
 function lotti<T>(lista: readonly T[], n = LOTTO): T[][] {
@@ -186,7 +189,7 @@ export async function sbloccaSeVuota(companyId: string, userId: string, ora: Dat
         const lista = await leggiPrimeChiamate(companyId, userId, tx)
         const scritti = await classificaEScrivi(companyId, userId, lista, ora, tx)
         const dopo = applicaScritti(lista, scritti)
-        const ids = daSbloccare(dopo, SBLOCCO)
+        const ids = daSbloccare(dopo, ora, SBLOCCO)
         if (ids.length === 0) return []
         const sbloccati = await scriviStato(tx, userId, ids, 'visibile', 'scorta', ora)
         await registra(tx, companyId, userId, 'sblocco', sbloccati, ora)
@@ -235,14 +238,39 @@ export async function dopoEsitoPrimaChiamata(companyId: string, gdoId: string, l
 }
 
 /**
- * Accensione per un GDO (script di prima assegnazione): vergini, stelle e
- * "Ti ha cercato" visibili, i migliori 40 del resto visibili, gli altri in
- * scorta, e l'interruttore acceso. Tutto in una transazione con lo stesso lock
- * dello sblocco. Restituisce cosa ha scritto.
+ * Sblocco manuale (admin, monitor di /import): i primi 30 della scorta tornano
+ * visibili anche se il GDO ha ancora lead da chiamare. Stesso lock dello
+ * sblocco automatico; prima classifica gli arrivi, così chi è appena finito in
+ * fondo resta in fondo. Restituisce gli id sbloccati (vuoto = scorta spenta o
+ * vuota).
  */
-export async function accendiScorta(companyId: string, userId: string, ora: Date = new Date(), quanti = VISIBILI_INIZIALI) {
+export async function sbloccaManuale(companyId: string, userId: string, ora: Date = new Date(), quanti = SBLOCCO): Promise<string[]> {
     return db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'scorta:' + userId}))`)
+        if (!(await scortaAccesa(userId, tx))) return []
+        const lista = await leggiPrimeChiamate(companyId, userId, tx)
+        const dopo = applicaScritti(lista, await classificaEScrivi(companyId, userId, lista, ora, tx), ora)
+        const ids = primiDellaScorta(dopo, quanti)
+        if (ids.length === 0) return []
+        const sbloccati = await scriviStato(tx, userId, ids, 'visibile', 'scorta', ora)
+        await registra(tx, companyId, userId, 'sblocco_manuale', sbloccati, ora)
+        return sbloccati
+    })
+}
+
+/**
+ * Accensione per un GDO (script di prima assegnazione e bottone "Accendi
+ * scorta" del monitor di /import): vergini, stelle e "Ti ha cercato" visibili,
+ * i migliori 40 del resto visibili, gli altri in scorta, e l'interruttore
+ * acceso. Tutto in una transazione con lo stesso lock dello sblocco.
+ * Restituisce cosa ha scritto; null se `soloSeSpenta` e l'interruttore era già
+ * acceso (dal monitor una seconda accensione rifarebbe la prima assegnazione
+ * da capo: non si fa).
+ */
+export async function accendiScorta(companyId: string, userId: string, ora: Date = new Date(), quanti = VISIBILI_INIZIALI, opzioni: { soloSeSpenta?: boolean } = {}) {
+    return db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'scorta:' + userId}))`)
+        if (opzioni.soloSeSpenta && await scortaAccesa(userId, tx)) return null
         const lista = await leggiPrimeChiamate(companyId, userId, tx)
         const piano = primaAssegnazione(lista, ora, quanti)
         const visibili = await scriviStato(tx, userId, piano.visibili, 'visibile', 'qualunque', ora)

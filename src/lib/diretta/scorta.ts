@@ -11,6 +11,11 @@
 // Quando non ha più niente in prima chiamata (vergini compresi) se ne sbloccano
 // altri 30, i migliori. Gli arrivi successivi non caldi vanno in fondo.
 //
+// Arrivi (PO 30/10/2026): un lead che arriva al GDO o va IN CIMA (vergine,
+// stella, "Ti ha cercato": visibile subito) o va IN FONDO alla scorta, senza
+// mai comparire per un attimo. Un arrivo non caldo ancora da classificare
+// (scortaStato null) quindi non si vede, nemmeno durante la grazia.
+//
 // La distribuzione non cambia: un lead nascosto resta assegnato al GDO, con lo
 // stesso stato e gli stessi tentativi, quindi ogni conteggio che la usa lo vede
 // come prima.
@@ -22,9 +27,11 @@ export const VISIBILI_INIZIALI = 40
 /** Quanti lead escono dalla scorta a ogni sblocco. */
 export const SBLOCCO = 30
 /**
- * Un lead arrivato da meno di così non si classifica ancora: chi lo assegna
- * scrive il lead e poi l'evento che dice se è caldo, e la stella non deve
- * perdersi a metà. Nel frattempo si vede, come ogni lead da classificare.
+ * Un lead arrivato da meno di così non si SCRIVE ancora in scorta: chi lo
+ * assegna scrive il lead e poi l'evento che dice se è caldo, e la stella non
+ * deve perdersi a metà. Nel frattempo NON si vede (PO 30/10/2026): se diventa
+ * caldo, alla lettura dopo è sempre visibile e compare in cima; altrimenti
+ * finita la grazia va in fondo alla scorta.
  */
 export const GRAZIA_MS = 20_000
 /** Un vergine che il GDO trova dopo un giorno di assenza resta un vergine. */
@@ -126,9 +133,16 @@ export function ordinaScorta<T extends LeadScorta>(lista: readonly T[]): T[] {
     })
 }
 
-/** È in prima chiamata e si vede? (null = da classificare: si vede come prima). */
-export function visibileInPrimaChiamata(l: Pick<LeadScorta, 'scortaStato' | 'cercato'>): boolean {
-    return l.cercato || l.scortaStato !== 'scorta'
+/**
+ * È in prima chiamata e si vede? 'visibile' sì, 'scorta' no (salvo un "Ti ha
+ * cercato"), null (arrivo da classificare) solo se è sempre visibile: vergine,
+ * stella o "Ti ha cercato". Un arrivo non caldo non compare mai, neanche
+ * durante la grazia (PO 30/10/2026).
+ */
+export function visibileInPrimaChiamata(l: LeadScorta, ora: Date): boolean {
+    if (l.cercato || l.scortaStato === 'visibile') return true
+    if (l.scortaStato === 'scorta') return false
+    return sempreVisibile(l, ora)
 }
 
 /**
@@ -150,14 +164,25 @@ export function classificaArrivi(lista: readonly LeadScorta[], ora: Date): { vis
 }
 
 /**
- * C'è ancora qualcosa da chiamare in prima chiamata? Un lead visibile mai
- * chiamato (i lead ancora da classificare contano come visibili). Un "Ti ha
- * cercato" che ha già dei tentativi alle spalle resta sulla board finché
- * l'admin non chiude la richiesta, e da solo non deve tenere ferma la scorta:
- * non conta.
+ * C'è ancora qualcosa da chiamare in prima chiamata? Un lead VISIBILE mai
+ * chiamato, con la stessa regola della board (visibileInPrimaChiamata): conta
+ * solo quello che il GDO ha davanti.
+ *
+ * Arrivi in grazia (PO 30/10/2026): un arrivo non caldo ancora da classificare
+ * non si vede e quindi NON conta. Se il GDO è a zero lo sblocco parte subito e
+ * fa uscire 30 lead dalla scorta già esistente; l'arrivo, finita la grazia,
+ * va in fondo alla scorta, cioè esattamente dove sarebbe andato comunque. Così
+ * il GDO non resta mai con la board vuota ad aspettare la grazia, e lo
+ * sblocco non dipende dagli arrivi: niente doppio sblocco (l'arrivo non è
+ * "da chiamare" né prima né dopo) e nessun lead saltato. Un arrivo caldo
+ * invece è visibile subito e conta.
+ *
+ * Un "Ti ha cercato" che ha già dei tentativi alle spalle resta sulla board
+ * finché l'admin non chiude la richiesta, e da solo non deve tenere ferma la
+ * scorta: non conta.
  */
-export function haDaChiamare(lista: readonly Pick<LeadScorta, 'callCount' | 'scortaStato' | 'cercato'>[]): boolean {
-    return lista.some(l => l.callCount === 0 && visibileInPrimaChiamata(l))
+export function haDaChiamare(lista: readonly LeadScorta[], ora: Date): boolean {
+    return lista.some(l => l.callCount === 0 && visibileInPrimaChiamata(l, ora))
 }
 
 /**
@@ -166,8 +191,17 @@ export function haDaChiamare(lista: readonly Pick<LeadScorta, 'callCount' | 'sco
  *
  * `lista` sono i lead in prima chiamata DOPO la classificazione degli arrivi.
  */
-export function daSbloccare<T extends LeadScorta>(lista: readonly T[], quanti = SBLOCCO): string[] {
-    if (haDaChiamare(lista)) return []
+export function daSbloccare<T extends LeadScorta>(lista: readonly T[], ora: Date, quanti = SBLOCCO): string[] {
+    if (haDaChiamare(lista, ora)) return []
+    return primiDellaScorta(lista, quanti)
+}
+
+/**
+ * I primi `quanti` della scorta nell'ordine di uscita, senza guardare se il
+ * GDO ha ancora da chiamare: lo sblocco automatico (daSbloccare) e quello
+ * manuale dell'admin dal monitor di /import.
+ */
+export function primiDellaScorta<T extends LeadScorta>(lista: readonly T[], quanti = SBLOCCO): string[] {
     return ordinaScorta(lista.filter(l => l.scortaStato === 'scorta' && !l.cercato)).slice(0, quanti).map(l => l.id)
 }
 

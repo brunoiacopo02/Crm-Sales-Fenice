@@ -90,41 +90,69 @@ test('scorta: classificazione arrivi (grazia, caldi visibili, resto in scorta, g
     assert.deepEqual(r.scorta, [freddo.id])
 })
 
+test('scorta: arrivi in cima o in fondo, mai visibili per un attimo (PO 30/10)', () => {
+    const appena = new Date(ORA.getTime() - 1000)
+    // Arrivo non caldo da classificare: non si vede né in grazia né dopo.
+    const freddoInGrazia = lead({ updatedAt: appena })
+    const freddoDopo = lead()
+    assert.equal(visibileInPrimaChiamata(freddoInGrazia, ORA), false, 'in grazia non compare')
+    assert.equal(visibileInPrimaChiamata(freddoDopo, ORA), false)
+    assert.equal(haDaChiamare([freddoInGrazia], ORA), false, 'e non conta come da chiamare')
+    // In grazia non si scrive (la stella può arrivare un attimo dopo), finita la grazia va in fondo.
+    assert.deepEqual(classificaArrivi([freddoInGrazia], ORA), { visibili: [], scorta: [] })
+    assert.deepEqual(classificaArrivi([freddoDopo], ORA).scorta, [freddoDopo.id])
+    // Caldi e vergini: in cima subito, anche da classificare e in grazia.
+    for (const caldo of [vergine({ updatedAt: appena }), stella({ updatedAt: appena }), lead({ cercato: true, updatedAt: appena })]) {
+        assert.equal(visibileInPrimaChiamata(caldo, ORA), true)
+        assert.equal(haDaChiamare([caldo], ORA), true)
+        assert.deepEqual(classificaArrivi([caldo], ORA).visibili, [caldo.id])
+    }
+    // Diventa caldo durante la grazia (arriva l'evento della stella): alla lettura dopo compare.
+    const diventaStella = { ...freddoInGrazia, ultimoMotivo: 'chat_interrotta', passatoDalBot: true }
+    assert.equal(visibileInPrimaChiamata(diventaStella, ORA), true)
+    assert.deepEqual(classificaArrivi([diventaStella], ORA).visibili, [diventaStella.id])
+})
+
 test('scorta: sblocco solo a zero da chiamare, i primi 30 per ingresso poi priorità', () => {
     const vecchi = Array.from({ length: 25 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(48), arrivedAt: oreFa(i) }))
     const vecchiLetti = Array.from({ length: 5 }, () => lettoJs({ scortaStato: 'scorta', scortaDal: oreFa(48) }))
     const nuovi = Array.from({ length: 10 }, () => lettoJs({ scortaStato: 'scorta', scortaDal: oreFa(1) }))
     const tutti = [...nuovi, ...vecchi, ...vecchiLetti]
-    const ids = daSbloccare(tutti)
+    const ids = daSbloccare(tutti, ORA)
     assert.equal(ids.length, SBLOCCO)
     // Prima gli ingressi più vecchi (anche se i nuovi sono letti): i 30 vecchi.
     assert.deepEqual(new Set(ids), new Set([...vecchi, ...vecchiLetti].map(l => l.id)))
     assert.deepEqual(ids.slice(0, 5).sort(), vecchiLetti.map(l => l.id).sort(), 'dentro lo stesso ingresso, i letti prima')
 
-    assert.deepEqual(daSbloccare([...tutti, lead({ scortaStato: 'visibile' })]), [], 'un visibile da chiamare: niente sblocco')
-    assert.deepEqual(daSbloccare([...tutti, lead()]), [], 'un arrivo da classificare conta come visibile')
-    assert.equal(daSbloccare([...tutti, lead({ cercato: true, callCount: 2 })]).length, SBLOCCO,
+    assert.deepEqual(daSbloccare([...tutti, lead({ scortaStato: 'visibile' })], ORA), [], 'un visibile da chiamare: niente sblocco')
+    const inGrazia = lead({ updatedAt: new Date(ORA.getTime() - 5000) })
+    const conArrivo = daSbloccare([...tutti, inGrazia], ORA)
+    assert.equal(conArrivo.length, SBLOCCO, 'un arrivo non caldo in grazia non si vede e non tiene ferma la scorta')
+    assert.ok(!conArrivo.includes(inGrazia.id), "l'arrivo in grazia non esce con lo sblocco: andrà in fondo")
+    assert.deepEqual(daSbloccare([...tutti, vergine()], ORA), [], 'un vergine appena arrivato (null) è da chiamare')
+    assert.deepEqual(daSbloccare([...tutti, stella()], ORA), [], 'una stella appena arrivata (null) è da chiamare')
+    assert.equal(daSbloccare([...tutti, lead({ cercato: true, callCount: 2 })], ORA).length, SBLOCCO,
         'un "Ti ha cercato" con tentativi alle spalle non tiene ferma la scorta')
-    assert.deepEqual(daSbloccare([...tutti, lead({ cercato: true, scortaStato: 'scorta' })]), [],
+    assert.deepEqual(daSbloccare([...tutti, lead({ cercato: true, scortaStato: 'scorta' })], ORA), [],
         'un "Ti ha cercato" mai chiamato è da chiamare, anche se era in scorta')
-    assert.deepEqual(daSbloccare([]), [])
-    assert.equal(daSbloccare(vecchi.slice(0, 7)).length, 7, 'fino a esaurimento')
+    assert.deepEqual(daSbloccare([], ORA), [])
+    assert.equal(daSbloccare(vecchi.slice(0, 7), ORA).length, 7, 'fino a esaurimento')
+    assert.deepEqual(daSbloccare([inGrazia], ORA), [], 'solo arrivi in grazia e scorta vuota: niente da sbloccare')
 })
 
 test('scorta: idempotenza logica, dopo lo sblocco un secondo calcolo non sblocca altro', () => {
     const lista = Array.from({ length: 80 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(10), arrivedAt: oreFa(i) }))
-    const primo = daSbloccare(lista)
+    const primo = daSbloccare(lista, ORA)
     assert.equal(primo.length, SBLOCCO)
     const dopo = applicaScritti(lista, { visibili: primo, scorta: [] })
-    assert.equal(haDaChiamare(dopo), true)
-    assert.deepEqual(daSbloccare(dopo), [])
+    assert.equal(haDaChiamare(dopo, ORA), true)
+    assert.deepEqual(daSbloccare(dopo, ORA), [])
 })
 
 test('scorta: visibilità e ordine di uscita', () => {
-    assert.equal(visibileInPrimaChiamata({ scortaStato: null, cercato: false }), true)
-    assert.equal(visibileInPrimaChiamata({ scortaStato: 'visibile', cercato: false }), true)
-    assert.equal(visibileInPrimaChiamata({ scortaStato: 'scorta', cercato: false }), false)
-    assert.equal(visibileInPrimaChiamata({ scortaStato: 'scorta', cercato: true }), true)
+    assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'visibile' }), ORA), true)
+    assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'scorta' }), ORA), false)
+    assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'scorta', cercato: true }), ORA), true)
     const a = lead({ id: 'a', scortaStato: 'scorta', scortaDal: oreFa(2) })
     const b = lead({ id: 'b', scortaStato: 'scorta', scortaDal: oreFa(3) })
     assert.deepEqual(ordinaScorta([a, b]).map(l => l.id), ['b', 'a'])

@@ -8,6 +8,8 @@
  * assegnati al GDO con stato e tentativi invariati, la ricerca li trova, e si
  * sbloccano 30 alla volta quando il GDO non ha più niente da chiamare.
  * Poi si accende l'interruttore users.scortaAttiva. Regole: src/lib/diretta/scorta.ts.
+ * La stessa accensione (accendiScorta di scortaDb) c'è per un GDO alla volta nel
+ * monitor di /import (solo ADMIN), con Spegni e Sblocca 30.
  *
  * Scrive solo users.scortaAttiva, leads.scortaStato/scortaDal e i movimenti
  * (gdoScortaMovimenti). Assegnatari, stati, tentativi, updatedAt e version non si
@@ -125,7 +127,8 @@ async function main() {
 
     // ── Scrittura: un GDO alla volta, ognuno nella sua transazione ─────────
     for (const g of gdo) {
-        const r = await accendiScorta(FENICE, g.id, new Date())
+        // Senza soloSeSpenta accendiScorta non restituisce mai null.
+        const r = (await accendiScorta(FENICE, g.id, new Date()))!
         console.log(`${g.firstName?.trim()} (${g.gdoCode}): ${r.visibili.length} visibili, ${r.scorta.length} in scorta, interruttore acceso.`)
     }
     console.log(`Per annullare: --ripristina --file=${file} --esegui`)
