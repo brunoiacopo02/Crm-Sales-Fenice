@@ -15,6 +15,8 @@
 // stesso stato e gli stessi tentativi, quindi ogni conteggio che la usa lo vede
 // come prima.
 
+import { destinatarioAssegnazione } from './arrivo'
+
 /** Quanti lead non vergini restano visibili alla prima assegnazione. */
 export const VISIBILI_INIZIALI = 40
 /** Quanti lead escono dalla scorta a ogni sblocco. */
@@ -148,15 +150,25 @@ export function classificaArrivi(lista: readonly LeadScorta[], ora: Date): { vis
 }
 
 /**
- * Sblocco: se in prima chiamata non resta niente di visibile (vergini compresi,
- * e i lead ancora da classificare contano come visibili), i primi `quanti`
- * della scorta tornano visibili. Lista vuota = niente da fare.
+ * C'è ancora qualcosa da chiamare in prima chiamata? Un lead visibile mai
+ * chiamato (i lead ancora da classificare contano come visibili). Un "Ti ha
+ * cercato" che ha già dei tentativi alle spalle resta sulla board finché
+ * l'admin non chiude la richiesta, e da solo non deve tenere ferma la scorta:
+ * non conta.
+ */
+export function haDaChiamare(lista: readonly Pick<LeadScorta, 'callCount' | 'scortaStato' | 'cercato'>[]): boolean {
+    return lista.some(l => l.callCount === 0 && visibileInPrimaChiamata(l))
+}
+
+/**
+ * Sblocco: se in prima chiamata non resta niente da chiamare (vergini compresi),
+ * i primi `quanti` della scorta tornano visibili. Lista vuota = niente da fare.
  *
  * `lista` sono i lead in prima chiamata DOPO la classificazione degli arrivi.
  */
 export function daSbloccare<T extends LeadScorta>(lista: readonly T[], quanti = SBLOCCO): string[] {
-    if (lista.some(visibileInPrimaChiamata)) return []
-    return ordinaScorta(lista.filter(l => l.scortaStato === 'scorta')).slice(0, quanti).map(l => l.id)
+    if (haDaChiamare(lista)) return []
+    return ordinaScorta(lista.filter(l => l.scortaStato === 'scorta' && !l.cercato)).slice(0, quanti).map(l => l.id)
 }
 
 /**
@@ -175,16 +187,72 @@ export function primaAssegnazione(lista: readonly LeadScorta[], ora: Date, quant
 }
 
 /**
- * Stima dei giorni per finire la scorta: scorta diviso quanti lead la scorta
- * perde in media al giorno (prime chiamate esitate meno vergini ricevuti, sui
- * giorni in cui il GDO ha lavorato). null = al ritmo attuale non si esaurisce
- * o non ci sono ancora dati.
+ * Stima dei giorni per finire la scorta: scorta diviso quanto la scorta cala in
+ * media al giorno. Ogni prima chiamata esitata ne consuma una, ogni lead che
+ * arriva (vergine, caldo o messo in fondo alla scorta) ne rimette una: il calo
+ * netto è consumati meno arrivi, sui giorni in cui il GDO ha lavorato.
+ * null = al ritmo attuale non si esaurisce, o non ci sono ancora dati.
  */
-export function stimaGiorni(scorta: number, giorni: ReadonlyArray<{ consumati: number; vergini: number }>): number | null {
+export function stimaGiorni(scorta: number, giorni: ReadonlyArray<{ consumati: number; arrivi: number }>): number | null {
     if (scorta <= 0) return 0
     const lavorati = giorni.filter(g => g.consumati > 0)
     if (lavorati.length === 0) return null
-    const media = lavorati.reduce((s, g) => s + g.consumati - g.vergini, 0) / lavorati.length
+    const media = lavorati.reduce((s, g) => s + g.consumati - g.arrivi, 0) / lavorati.length
     if (media <= 0) return null
     return Math.ceil(scorta / media)
+}
+
+/**
+ * Priorità aggiuntiva in prima chiamata quando la scorta è accesa: sopra i
+ * vergini della settimana (quelli del giorno stanno già in cima), poi l'ordine
+ * della scorta (letti JOB SIMULATOR/TELEGRAM, poi letti CORSO 10 ORE). Si somma
+ * sotto la priorità della board, che resta quella che decide per prima.
+ */
+export function prioritaScorta(l: LeadScorta, ora: Date): number {
+    return (eVergine(l, ora) ? 4 : 0) + rangoScorta(l)
+}
+
+/** Evento letto dal DB per ricostruire i dati di scorta di un lead. */
+export interface EventoScorta {
+    eventType: string
+    userId: string | null
+    timestamp: Date | string
+    reason?: string | null
+    instradato?: string | null
+    toAssigneeId?: string | null
+    assignedToUser?: string | null
+}
+
+const msDi = (d: Date | string) => (d instanceof Date ? d.getTime() : Date.parse(d))
+
+/**
+ * Dagli eventi di un lead (in qualunque ordine): motivo e instradamento
+ * dell'ULTIMA restituzione dal bot, se è passato dal bot, e l'ora di arrivo al
+ * proprietario attuale (stessa regola di oraArrivo in arrivo.ts).
+ */
+export function datiDaEventi(eventi: readonly EventoScorta[], proprietario: string | null, assignedAt: Date | null, createdAt: Date):
+    Pick<LeadScorta, 'ultimoMotivo' | 'ultimoInstradato' | 'passatoDalBot' | 'arrivedAt'> {
+    let ultimoRidato: EventoScorta | null = null
+    let passatoDalBot = false
+    let arrivo = -Infinity
+    for (const e of eventi) {
+        if (e.eventType === 'BOT_PUSHED') { passatoDalBot = true; continue }
+        if (e.eventType === 'REASSIGNED_FROM_BOT' && (!ultimoRidato || msDi(e.timestamp) > msDi(ultimoRidato.timestamp))) ultimoRidato = e
+        if (proprietario && destinatarioAssegnazione(e) === proprietario) arrivo = Math.max(arrivo, msDi(e.timestamp))
+    }
+    return {
+        ultimoMotivo: ultimoRidato ? (ultimoRidato.reason ?? null) : null,
+        ultimoInstradato: ultimoRidato ? (ultimoRidato.instradato ?? null) : null,
+        passatoDalBot,
+        arrivedAt: arrivo > -Infinity ? new Date(arrivo) : new Date((assignedAt ?? createdAt).getTime()),
+    }
+}
+
+/** La lista con gli stati appena scritti. */
+export function applicaScritti<T extends LeadScorta>(lista: readonly T[], scritti: { visibili: string[]; scorta: string[] }, quando: Date = new Date()): T[] {
+    const v = new Set(scritti.visibili)
+    const s = new Set(scritti.scorta)
+    return lista.map(l => v.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: null }
+        : s.has(l.id) ? { ...l, scortaStato: 'scorta', scortaDal: quando }
+            : l)
 }

@@ -25,6 +25,8 @@ import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 import { daRifissareDalleConferme } from "@/lib/diretta/daRifissare"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
+import { applicaScritti, haDaChiamare, prioritaScorta, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
+import { classificaEScrivi, dopoEsitoPrimaChiamata, sbloccaSeVuota, scortaAccesa } from "@/lib/diretta/scortaDb"
 
 /**
  * La quarta chiamata ("4ª Recupero") si vede solo a chi fissa poco: regola e
@@ -100,6 +102,10 @@ export async function getPipelineLeads() {
      */
     const cercati = new Map<string, { category: string; reason: string }>()
     let recoverIds = new Set<string>()
+    // Scorta (PO 29/10/2026): senza la lettura dei "Ti ha cercato" o degli
+    // eventi la classificazione sbaglierebbe (un caldo finirebbe nascosto):
+    // in quel caso non si scrive niente e si mostra quello che è già deciso.
+    let cercatiLetti = false
     try {
         const rows = await db.select({
             leadId: botContactRequests.leadId,
@@ -115,6 +121,7 @@ export async function getPipelineLeads() {
         // è quello di inserimento, quindi l'ultima scrittura sovrascrive).
         for (const r of rows) cercati.set(r.leadId, { category: r.category, reason: r.reason })
         recoverIds = new Set(rows.filter(r => isRecoverableCategory(r.category)).map(r => r.leadId))
+        cercatiLetti = true
     } catch (e) {
         console.error('[pipeline] lettura richieste contatto fallita', e)
     }
@@ -349,11 +356,15 @@ export async function getPipelineLeads() {
     const eventiAssegnazione = new Map<string, EventoLead[]>()
     const ridatiDalBot = new Set<string>()
     const passatiDalBot = new Set<string>()
+    // Motivo e instradamento dell'ultima restituzione dal bot: la stella e la
+    // priorità della scorta (letti JOB SIMULATOR/TELEGRAM, CORSO 10 ORE).
+    const ultimoMotivo = new Map<string, string | null>()
+    const ultimoInstradato = new Map<string, string | null>()
+    let eventiLetti = false
     try {
         // Solo per la board di un GDO: la vista admin prende i lead di tutta la
         // company e leggerne gli eventi a ogni caricamento costerebbe troppo.
         const candidati = isGdo ? pipelineLeads.map(l => l.id) : []
-        const ultimoMotivo = new Map<string, string | null>()
         for (let i = 0; i < candidati.length; i += 1000) {
             const rows = await db.select({
                 leadId: leadEvents.leadId,
@@ -363,6 +374,7 @@ export async function getPipelineLeads() {
                 reason: sql<string | null>`${leadEvents.metadata}->>'reason'`,
                 toAssigneeId: sql<string | null>`${leadEvents.metadata}->>'toAssigneeId'`,
                 assignedToUser: sql<string | null>`${leadEvents.metadata}->>'assignedToUser'`,
+                instradato: sql<string | null>`${leadEvents.metadata}->>'instradato'`,
             })
                 .from(leadEvents)
                 .where(and(
@@ -374,7 +386,10 @@ export async function getPipelineLeads() {
                 if (r.eventType === 'BOT_PUSHED') { passatiDalBot.add(r.leadId); continue }
                 if (r.eventType === 'REASSIGNED_FROM_BOT') {
                     ridatiDalBot.add(r.leadId)
-                    if (!ultimoMotivo.has(r.leadId)) ultimoMotivo.set(r.leadId, r.reason)
+                    if (!ultimoMotivo.has(r.leadId)) {
+                        ultimoMotivo.set(r.leadId, r.reason)
+                        ultimoInstradato.set(r.leadId, r.instradato)
+                    }
                 }
                 const lista = eventiAssegnazione.get(r.leadId)
                 if (lista) lista.push(r)
@@ -384,6 +399,7 @@ export async function getPipelineLeads() {
         // La stella resta sui soli lead fuori dai pool, come prima del 25/10.
         const fuoriDaiPool = new Set(pipelineLeads.filter(l => !l.launchBucket).map(l => l.id))
         for (const [id, reason] of ultimoMotivo) if (reason === 'chat_interrotta' && fuoriDaiPool.has(id)) chatInterrotta.add(id)
+        eventiLetti = true
     } catch (e) {
         console.error('[pipeline] lettura eventi di assegnazione fallita', e)
     }
@@ -454,10 +470,65 @@ export async function getPipelineLeads() {
     const starredFirst = <T extends PerRank>(arr: T[]) =>
         [...arr].sort((a, b) => (Number(b.chiamaPerPrimo) * 4 + urgentRank(b)) - (Number(a.chiamaPerPrimo) * 4 + urgentRank(a)))
 
+    /**
+     * Scorta delle prime chiamate (PO 29/10/2026, regole in @/lib/diretta/scorta).
+     * Solo per il GDO con l'interruttore acceso e solo la 1ª chiamata: vergini,
+     * stelle e "Ti ha cercato" si vedono sempre, del resto una parte; gli altri
+     * restano suoi ma nascosti (la ricerca e la ContactDrawer li trovano, i
+     * conteggi della distribuzione li contano come prima). Gli arrivi si
+     * classificano qui; a zero lead da chiamare se ne sbloccano 30, sotto lock
+     * (sbloccaSeVuota). Con gli stati già decisi costa una lettura in più.
+     */
+    let primaVisibile = firstCall
+    let prioritaPrima: (l: PerRank & { id: string }) => number = lancioRank
+    if (isGdo) {
+        try {
+            if (await scortaAccesa(userId)) {
+                let lista: LeadScorta[] = firstCall.map(l => ({
+                    id: l.id, status: l.status, callCount: l.callCount, source: l.source,
+                    launchBucket: l.launchBucket, funnel: l.funnel, createdAt: l.createdAt,
+                    updatedAt: l.updatedAt, scortaStato: l.scortaStato, scortaDal: l.scortaDal,
+                    cercato: cercati.has(l.id),
+                    ultimoMotivo: ultimoMotivo.get(l.id) ?? null,
+                    ultimoInstradato: ultimoInstradato.get(l.id) ?? null,
+                    passatoDalBot: passatiDalBot.has(l.id),
+                    arrivedAt: oraArrivo({
+                        eventi: eventiAssegnazione.get(l.id) ?? [],
+                        proprietario: l.assignedToId,
+                        assignedAt: l.assignedAt,
+                        createdAt: l.createdAt,
+                    }),
+                }))
+                if (cercatiLetti && eventiLetti) {
+                    lista = applicaScritti(lista, await classificaEScrivi(ctx.companyId, userId, lista, now), now)
+                    if (!haDaChiamare(lista) && lista.some(l => l.scortaStato === 'scorta')) {
+                        const sbloccati = new Set(await sbloccaSeVuota(ctx.companyId, userId, now))
+                        if (sbloccati.size) lista = lista.map(l => sbloccati.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: null } : l)
+                    }
+                }
+                const visibili = new Set(lista.filter(visibileInPrimaChiamata).map(l => l.id))
+                const perId = new Map(lista.map(l => [l.id, l]))
+                primaVisibile = firstCall.filter(l => visibili.has(l.id))
+                // Sotto la priorità della board, i vergini della settimana e poi
+                // l'ordine della scorta (letti JOB SIMULATOR/TELEGRAM, CORSO 10 ORE).
+                prioritaPrima = (l) => {
+                    const s = perId.get(l.id)
+                    return lancioRank(l) * 8 + (s ? prioritaScorta(s, now) : 0)
+                }
+            }
+        } catch (e) {
+            // Se la scorta non si legge il GDO vede la prima chiamata intera, come prima.
+            console.error('[scorta] pipeline', e)
+            primaVisibile = firstCall
+            prioritaPrima = lancioRank
+        }
+    }
+
     return {
         // 1ª chiamata (PO 25/10/2026): vergini del giorno in cima appena arrivano,
         // poi le priorità di prima, poi l'ora di arrivo più recente, `id` come spareggio.
-        firstCall: ordinaPrimaChiamata(withArrivo(withDupFlag(firstCall)), lancioRank),
+        // Con la scorta accesa solo i lead visibili (PO 29/10/2026).
+        firstCall: ordinaPrimaChiamata(withArrivo(withDupFlag(primaVisibile)), prioritaPrima),
         secondCall: lancioOnTop(withArrivo(withDupFlag(secondCall))),
         thirdCall: starredFirst(withArrivo(withDupFlag(thirdCall))),
         fourthCall: fourthCallLeads,
@@ -856,6 +927,14 @@ export async function updateLeadOutcome(
                 byBot: isBotActor,
             },
         }).catch((e: unknown) => console.error("Marketing webhook (lead.rejected GDO) err:", e));
+    }
+
+    // Scorta (PO 29/10/2026): un esito su una prima chiamata consuma un lead del
+    // GDO che lo ha in mano; se è rimasto senza niente da chiamare se ne
+    // sbloccano 30. Solo con la scorta accesa per quel GDO (lo controlla
+    // dopoEsitoPrimaChiamata), mai per gli esiti del bot; non lancia mai.
+    if (!serviceCtx && lead.callCount === 0 && lead.assignedToId) {
+        await dopoEsitoPrimaChiamata(ctx.companyId, lead.assignedToId, leadId, now)
     }
 
     // Un altro esito ha tolto l'appuntamento: la home Diretta rilegge subito

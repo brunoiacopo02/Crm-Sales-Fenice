@@ -18,7 +18,8 @@ create table if not exists public."gdoScortaMovimenti" (
     "id" text primary key,
     "companyId" text not null,
     "userId" text not null references public.users(id) on delete cascade,
-    -- 'iniziale' | 'nascosti' | 'sblocco' | 'consumato'
+    -- 'iniziale' | 'iniziale_scorta' (accensione), 'nascosti' | 'vergini' | 'caldi'
+    -- (arrivi classificati), 'sblocco', 'consumato' (esito in 1a chiamata), 'spenta'
     "tipo" text not null,
     "quanti" integer not null,
     "leadIds" jsonb,

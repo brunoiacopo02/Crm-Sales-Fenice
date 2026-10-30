@@ -598,9 +598,10 @@ export const pipelineSnapshots = pgTable('pipelineSnapshots', {
 });
 
 // Movimenti della scorta delle prime chiamate (migr. 0059, PO 29/10/2026):
-// 'iniziale' (prima assegnazione dei visibili), 'nascosti' (arrivi messi in
-// scorta), 'sblocco' (30 tornati visibili), 'consumato' (un esito in prima
-// chiamata). Li legge il monitor di /import.
+// 'iniziale' / 'iniziale_scorta' (accensione: visibili e nascosti), 'vergini',
+// 'caldi', 'nascosti' (arrivi classificati), 'sblocco' (30 tornati visibili),
+// 'consumato' (un esito in prima chiamata), 'spenta'. Li legge il monitor di
+// /import; tipi in src/lib/diretta/scortaDb.ts.
 export const gdoScortaMovimenti = pgTable('gdoScortaMovimenti', {
     id: text('id').primaryKey(),
     companyId: text('companyId').notNull(),

@@ -19,6 +19,7 @@ import { LeadRedistributionCard } from "@/components/LeadRedistributionCard"
 import { BlackSummerPoolCard } from "@/components/BlackSummerPoolCard"
 import { DatabasePoolSection } from "@/components/DatabasePoolSection"
 import { AccantonatiPoolCard } from "@/components/AccantonatiPoolCard"
+import { ScortaMonitorCard } from "@/components/ScortaMonitorCard"
 
 export function ImportClient() {
     const router = useRouter()
@@ -538,6 +539,7 @@ export function ImportClient() {
 
             <LeadRedistributionCard />
             <AccantonatiPoolCard />
+            <ScortaMonitorCard />
             <BlackSummerPoolCard />
             <DatabasePoolSection />
         </div>
