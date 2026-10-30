@@ -17,6 +17,7 @@ import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils";
 import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
+import { nonToltoAlBotSql } from "@/lib/toltiAlBot";
 import { accountVero, leadVero } from "@/lib/prova/sql";
 import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
 import { inizioPeriodo, leadConta } from "@/lib/diretta/inizioAccount";
@@ -214,6 +215,8 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
                 leadVero(),
                 isNull(leads.assignedToId),
                 inArray(leads.status, ['NEW', 'IN_PROGRESS']),
+                // Tolti ai GDO per decisione PO: non sono da assegnare.
+                nonToltoAlBotSql(),
             ));
         const unassigned = unassignedRow?.c || 0;
 

@@ -6,6 +6,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { contaNeiKpiSql } from "@/lib/intakeBatch"
+import { nonToltoAlBotSql } from "@/lib/toltiAlBot"
 import crypto from "crypto"
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -56,10 +57,14 @@ export type RedistributionExecuteResult = {
     perTarget?: Record<string, number>
 }
 
-// Sorgente virtuale: '__unassigned__' = lead non ancora assegnati (assignedToId IS NULL).
+// Sorgente virtuale: '__unassigned__' = lead non ancora assegnati (assignedToId IS NULL),
+// tranne quelli tolti ai GDO per decisione PO (TOLTO_AL_BOT, lancio ARCHIVIATO):
+// "Da assegnare" non deve poterli ridare a nessuno.
 const UNASSIGNED_SOURCE = '__unassigned__'
 function sourceMatch(sourceGdoId: string) {
-    return sourceGdoId === UNASSIGNED_SOURCE ? isNull(leads.assignedToId) : eq(leads.assignedToId, sourceGdoId)
+    return sourceGdoId === UNASSIGNED_SOURCE
+        ? and(isNull(leads.assignedToId), nonToltoAlBotSql())!
+        : eq(leads.assignedToId, sourceGdoId)
 }
 
 function buildSectionConditions(section: RedistributionSection) {
