@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Send, X, Briefcase, Users, CheckCircle2, Loader2, Sparkles, AlertTriangle, MessageCircle } from "lucide-react"
 import { sendAgendaToLead } from "@/app/actions/activeCampaignActions"
 import { sendAgendaSerenamente } from "@/app/actions/serenamenteAgendaActions"
@@ -45,6 +45,15 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
     // Il lead aveva già risposto e il video della variante precedente è partito:
     // non è più correggibile via software, deve saperlo il GDO.
     const [videoGiaInviato, setVideoGiaInviato] = useState(false)
+    // L'ultimo invio è fallito perché il numero non ha WhatsApp: ritentare sullo
+    // stesso numero è inutile, serve quello giusto nel campo "altro numero".
+    const [senzaWhatsapp, setSenzaWhatsapp] = useState(false)
+    const waInputId = variant === 'diretta' || variant === 'diretta-testo' ? 'agenda-wa-diretta' : `agenda-wa-${leadId}`
+
+    // Il campo si apre da solo: cursore dentro, pronto per il numero nuovo.
+    useEffect(() => {
+        if (showModal && senzaWhatsapp && !loading) document.getElementById(waInputId)?.focus()
+    }, [showModal, senzaWhatsapp, loading, waInputId])
 
     const status = (sentNowStatus ?? agendaStatus ?? null) as AgendaStatus | null
     const alreadySent = !!agendaSentAt || sentNowStatus === 'consegnato' || sentNowStatus === 'inviato'
@@ -64,6 +73,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
         setWhatsapp("")
         setSuccessMsg(null)
         setErrorMsg(null)
+        setSenzaWhatsapp(false)
     }
 
     const handleClose = () => {
@@ -111,6 +121,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
         if (!offertaDelMese && (lavora === null || haFamiglia === null)) return
         setLoading(true)
         setErrorMsg(null)
+        setSenzaWhatsapp(false)
         try {
             const result = await sendAgendaToLead(leadId, {
                 lavora: lavora ?? false,
@@ -138,6 +149,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                 }
             } else {
                 if (result.esito === 'fallito') setSentNowStatus('fallito')
+                setSenzaWhatsapp(result.motivo === 'numero_senza_whatsapp')
                 setErrorMsg(result.error || "Errore sconosciuto")
             }
         } catch (e: any) {
@@ -215,6 +227,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                     toggleOffertaDelMese={toggleOffertaDelMese}
                     whatsapp={whatsapp}
                     setWhatsapp={setWhatsapp}
+                    senzaWhatsapp={senzaWhatsapp}
                     loading={loading}
                     successMsg={successMsg}
                     errorMsg={errorMsg}
@@ -258,7 +271,7 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
 
                         {/* Body */}
                         <div className="p-5 space-y-5">
-                            {isFailed && !successMsg && (
+                            {isFailed && !successMsg && !senzaWhatsapp && (
                                 <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg px-3 py-2">
                                     ⚠️ L'ultimo invio a questo lead non è andato a buon fine. Verifica che il numero sia corretto e attivo su WhatsApp.
                                 </div>
@@ -364,16 +377,20 @@ export function AgendaButton({ leadId, leadName, leadPhone, agendaSentAt, agenda
                                             <MessageCircle className="w-3.5 h-3.5" /> WhatsApp su un altro numero?
                                         </label>
                                         <input
-                                            id={`agenda-wa-${leadId}`}
+                                            id={waInputId}
                                             type="tel"
                                             inputMode="tel"
                                             value={whatsapp}
                                             onChange={(e) => setWhatsapp(e.target.value)}
                                             disabled={loading}
                                             placeholder={`Vuoto = ${leadPhone}`}
-                                            className="w-full rounded-lg border border-ash-200 px-3 py-2 text-sm text-ash-900 placeholder:text-ash-400 focus:border-blue-400 focus:outline-none disabled:opacity-50"
+                                            className={`w-full rounded-lg border px-3 py-2 text-sm text-ash-900 placeholder:text-ash-400 focus:outline-none disabled:opacity-50 ${senzaWhatsapp
+                                                ? 'border-red-400 ring-2 ring-red-200 focus:border-red-500'
+                                                : 'border-ash-200 focus:border-blue-400'}`}
                                         />
-                                        <div className="mt-1 text-[11px] text-ash-500">Scrivilo solo se il lead ha WhatsApp su un numero diverso da quello che hai chiamato.</div>
+                                        {senzaWhatsapp
+                                            ? <div className="mt-1 text-[11px] font-semibold text-red-700">Scrivi qui il numero su cui il lead ha WhatsApp.</div>
+                                            : <div className="mt-1 text-[11px] text-ash-500">Scrivilo solo se il lead ha WhatsApp su un numero diverso da quello che hai chiamato.</div>}
                                     </div>
 
                                     {/* Promemoria operativo: senza una risposta del lead il video non parte.
@@ -505,6 +522,7 @@ function AgendaModalDiretta(p: {
     toggleOffertaDelMese: () => void
     whatsapp: string
     setWhatsapp: (v: string) => void
+    senzaWhatsapp: boolean
     loading: boolean
     successMsg: string | null
     errorMsg: string | null
@@ -549,7 +567,7 @@ function AgendaModalDiretta(p: {
                 </div>
 
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-5 pt-1">
-                    {p.isFailed && !p.successMsg && (
+                    {p.isFailed && !p.successMsg && !p.senzaWhatsapp && (
                         <div className="flex items-start gap-2 rounded-lg border-2 border-[#FF9330] px-3 py-2.5 text-[13px] text-[#F2F2F2]">
                             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#FF9330]" strokeWidth={1.75} aria-hidden="true" />
                             <div>L&apos;ultimo invio a questo lead non è andato a buon fine. Verifica che il numero sia corretto e attivo su WhatsApp.</div>
@@ -625,9 +643,11 @@ function AgendaModalDiretta(p: {
                                     onChange={(e) => p.setWhatsapp(e.target.value)}
                                     disabled={loading}
                                     placeholder={`Vuoto = ${p.leadPhone}`}
-                                    className="min-h-11 w-full rounded-lg border-2 border-[#3D3D3D] bg-transparent px-3 py-2 text-[14px] text-[#F2F2F2] placeholder:text-[#8C8C8C] focus:border-[#FF9330] focus:outline-none disabled:opacity-50"
+                                    className={`min-h-11 w-full rounded-lg border-2 bg-transparent px-3 py-2 text-[14px] text-[#F2F2F2] placeholder:text-[#8C8C8C] focus:border-[#FF9330] focus:outline-none disabled:opacity-50 ${p.senzaWhatsapp ? 'border-[#FF9330]' : 'border-[#3D3D3D]'}`}
                                 />
-                                <div className="mt-1 text-[12px] text-[#8C8C8C]">Scrivilo solo se il lead ha WhatsApp su un numero diverso da quello che hai chiamato.</div>
+                                {p.senzaWhatsapp
+                                    ? <div className="mt-1 text-[12px] font-medium text-[#FF9330]">Scrivi qui il numero su cui il lead ha WhatsApp.</div>
+                                    : <div className="mt-1 text-[12px] text-[#8C8C8C]">Scrivilo solo se il lead ha WhatsApp su un numero diverso da quello che hai chiamato.</div>}
                             </div>
 
                             <div className="flex items-start gap-2 rounded-lg bg-[#262626] px-3 py-2.5">

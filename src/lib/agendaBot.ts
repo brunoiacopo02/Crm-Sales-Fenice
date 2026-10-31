@@ -8,6 +8,7 @@
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import { formatRomeAppointmentLabel, toRomeIso } from '@/lib/dateUtils'
 import { leadDiProva } from '@/lib/prova/sql'
+import { motivoAgenda, type AgendaMotivo } from '@/lib/agendaMotivo'
 
 const AGENDA_BOT_URL = process.env.AGENDA_BOT_URL
     ?? 'https://web-app-messaggistica.vercel.app/api/send-agenda'
@@ -70,6 +71,8 @@ export type SendAgendaViaBotResult =
          */
         videoGiaInviato: boolean
         message?: string
+        /** Solo su `fallito`, quando la causa è certa (contratto v1.12). */
+        motivo?: AgendaMotivo
         conversationId?: number | null
         sid?: string | null
     }
@@ -151,6 +154,7 @@ export async function sendAgendaViaBot(input: SendAgendaViaBotInput): Promise<Se
         varianteAggiornata: data.varianteAggiornata === true,
         videoGiaInviato: data.videoGiaInviato === true,
         message: typeof data.message === 'string' ? data.message : undefined,
+        motivo: data.esito === 'fallito' ? motivoAgenda(data.motivo) : undefined,
         conversationId: data.conversationId ?? null,
         sid: data.sid ?? null,
     }

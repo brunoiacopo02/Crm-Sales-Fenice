@@ -8,6 +8,7 @@ import { logLeadEvent } from "@/lib/eventLogger"
 import { currentTenant, assertSalesArea } from '@/lib/tenancy'
 import { sendSerenamenteTemplate, SERENAMENTE_TEMPLATE_NR, SERENAMENTE_TEMPLATE_AUTOCONFERMA } from "@/lib/serenamenteMessaging"
 import { sendAgendaViaBot, type AgendaEsito } from "@/lib/agendaBot"
+import { MESSAGGIO_NUMERO_SENZA_WHATSAPP, type AgendaMotivo } from "@/lib/agendaMotivo"
 import { accountDiProva } from "@/lib/prova/sql"
 import { erroreMondoDiverso, stessoMondo } from "@/lib/prova/regole"
 
@@ -127,6 +128,8 @@ export type SendAgendaResult = {
     varianteAggiornata?: boolean
     /** Il video sbagliato è GIÀ partito: solo il GDO può rimediare, parlandone col lead. */
     videoGiaInviato?: boolean
+    /** Perché è fallito, quando si sa: il modale apre il campo "altro numero". */
+    motivo?: AgendaMotivo
 }
 
 // Per decisione del PO l'interfaccia del GDO non deve mai lasciar intuire che
@@ -235,7 +238,12 @@ async function sendAgendaViaBotChannel(
         await db.update(leads)
             .set({ agendaStatus: 'fallito' })
             .where(and(eq(leads.id, lead.id), eq(leads.companyId, companyId)))
-        console.error(`[agenda] esito fallito per lead ${lead.id}: ${r.message ?? '—'}`)
+        console.error(`[agenda] esito fallito per lead ${lead.id}: ${r.motivo ?? r.message ?? '—'}`)
+        // Numero senza WhatsApp: ritentare sullo stesso numero è inutile, il GDO
+        // deve chiedere al lead un altro numero (caso 31/10, due invii a vuoto).
+        if (r.motivo === 'numero_senza_whatsapp') {
+            return { success: false, error: MESSAGGIO_NUMERO_SENZA_WHATSAPP, esito: 'fallito', motivo: r.motivo }
+        }
         return { success: false, error: GENERIC_SEND_ERROR, esito: 'fallito' }
     }
 

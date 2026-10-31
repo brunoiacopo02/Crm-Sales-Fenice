@@ -1,7 +1,12 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.11 — 2026-10-29. Cosa cambia rispetto alla 1.10: campo `letto` su
+> **Versione:** 1.12 — 2026-10-31. Cosa cambia rispetto alla 1.11: campo `motivo` nella
+> risposta di `/api/send-agenda` (Direzione 3), solo su `fallito`. Oggi un valore,
+> `"numero_senza_whatsapp"` (Twilio 63024): il CRM dice al GDO di chiedere al lead un numero
+> su cui ha WhatsApp invece di farlo ritentare a vuoto. Solo aggiunta, assente = come prima.
+>
+> **Versione precedente:** 1.11 — 2026-10-29. Cosa cambiava rispetto alla 1.10: campo `letto` su
 > `NON_RISPOSTO` (chi ha letto va ai GDO, non al parcheggio) e la nota "IL BOT HA RIPRESO LA
 > CHAT" su un lead parcheggiato lo manda a un GDO. Vedi la sezione dedicata sotto Direzione 2.
 >
@@ -726,6 +731,14 @@ non nello stato HTTP. Codici diversi da 200 solo per errori di protocollo
 | `consegnato` | Twilio conferma delivered/read | — |
 | `inviato` | accettato da Twilio, nessuna conferma entro ~8s (telefono spento/offline) | **NO** — arriverebbe doppio al ritorno online |
 | `fallito` | numero non su WhatsApp, template bloccato, Twilio giù | sì |
+
+> **Campo `motivo` (v1.12).** Solo su `fallito` e solo quando la causa è certa. Oggi un
+> valore: `"numero_senza_whatsapp"` (Twilio 63024 sul messaggio dell'agenda; il bot decide
+> sul codice d'errore, non sullo stato, perché un `sent` tardivo può sovrascrivere un
+> `undelivered`). Il CRM mostra al GDO «Questo numero non ha WhatsApp. Chiedi al lead un
+> numero su cui ha WhatsApp, scrivilo nel campo "WhatsApp su un altro numero?" e invia di
+> nuovo.», evidenzia quel campo e ci mette il cursore. Assente o sconosciuto = messaggio
+> generico di sempre.
 
 La risposta arriva entro ~8s; il CRM attende fino a 12s prima di considerarlo un
 errore di rete.
