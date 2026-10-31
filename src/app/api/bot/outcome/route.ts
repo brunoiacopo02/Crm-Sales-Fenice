@@ -22,7 +22,7 @@ import { DISDETTA_VERIFICATA_REASON, buildDisdettaVerificataNote, valutaScartoDi
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 import { ignoraEsitoSuScartato } from '@/lib/bot-fissatore/esitoSuScartato';
 import { lettoDalCorpo } from '@/lib/bot-fissatore/maiConsegnato';
-import { isNotaBotRipreso, ripresaVaAlGdo } from '@/lib/bot-fissatore/ripresaChat';
+import { isNotaBotRipreso, ripresaSuLeadDiUnaPersona, ripresaVaAlGdo } from '@/lib/bot-fissatore/ripresaChat';
 
 // INTERROTTO: chat avviata ma interrotta senza obiezione ferrea → ritorno al pool umano.
 // NON_RISPOSTO: mai risposto → ritorno al pool umano. DA_SCARTARE: solo obiezione ferrea → scarto.
@@ -266,6 +266,16 @@ export async function POST(req: NextRequest) {
         if (typedOutcome === 'APPUNTAMENTO' && !leadWasWorkedByBot) {
             return NextResponse.json({ error: 'forbidden', detail: 'agenda recapitata dal bot ma lead mai lavorato da lui (nessun BOT_PUSHED): appuntamento non accettato' }, { status: 403 });
         }
+    }
+
+    // Nota "IL BOT HA RIPRESO LA CHAT" su un lead che ha già una persona come assegnatario
+    // (PO 31/10/2026: «il bot non deve lasciare note ai GDO, devono chiamarli e basta»).
+    // Il lead è del GDO: 200 così il bot non ritenta, e nessuna scrittura — né BOT_NOTE,
+    // né notifica, né il report qui sotto. Senza assegnatario (salvataggio ai ridati con
+    // stella) o sull'account bot resta tutto come prima, più giù nel ramo NOTA.
+    if (typedOutcome === 'NOTA' && ripresaSuLeadDiUnaPersona(note, lead.assignedToId, assigneeIsBot)) {
+        console.warn(`[bot-fissatore] nota "ripreso" ignorata su lead ${leadId}: è di un GDO`);
+        return NextResponse.json({ ok: true, noted: false, skipped: 'lead_di_un_gdo' });
     }
 
     // Autore degli eventi. Sui lead umani l'assegnatario è una persona: attribuirgli

@@ -434,8 +434,14 @@ type BotOutcome = 'APPUNTAMENTO' | 'DA_SCARTARE' | 'RICHIAMO' | 'NON_RISPOSTO' |
   riscrive): se il lead nel CRM è aperto (`NEW`/`IN_PROGRESS`) e **non è di nessuno**
   (parcheggiato), il CRM lo dà subito al giro dei ridati come chat interrotta (stella
   "Chiama per primo", metadata `haRiscritto: true`). Risposta `{ ok: true, noted: true,
-  reassigned: <id GDO | null> }`. Sui lead di un GDO, fissati, scartati o del lancio resta
-  solo una nota, come prima. Il riconoscimento è sul prefisso del testo: non cambiarlo.
+  reassigned: <id GDO | null> }`. Su lead senza assegnatario ma fissati, scartati o del
+  lancio resta solo una nota, come prima. Il riconoscimento è sul prefisso del testo: non
+  cambiarlo.
+- **Dal 31/10/2026 (PO: «il bot non deve lasciare note ai GDO, devono chiamarli e basta»):**
+  se il lead è assegnato a una persona (GDO o altro account non bot), il CRM **non scrive
+  niente** — nessuna nota in timeline, nessuna notifica, nessun report salvato — e risponde
+  `200 { ok: true, noted: false, skipped: 'lead_di_un_gdo' }`. È un successo: non ritentare.
+  Le altre NOTE sui lead dei GDO (spostamento, disdetta, ecc.) restano come sono.
 
 ### `CONTATTO_UMANO`: motivo e contesto (nuovo in v1.5)
 

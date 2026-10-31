@@ -10,7 +10,9 @@
 //
 // Correzione: quella nota, su un lead aperto che non è di nessuno, lo manda subito al
 // giro dei ridati come chat interrotta (stella "Chiama per primo"). Sui lead che hanno
-// già un GDO, un appuntamento, uno scarto, o sono del lancio, la nota resta solo una nota.
+// un appuntamento, uno scarto, o sono del lancio, la nota resta solo una nota.
+// Dal 31/10 sui lead che hanno già una persona come assegnatario la nota non si scrive
+// proprio (vedi `ripresaSuLeadDiUnaPersona`).
 
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch'
 import { LANCIO_BUCKET, LANCIO_FUNNEL } from '@/lib/lancio/intake'
@@ -33,6 +35,20 @@ export interface LeadPerRipresa {
     humanTestCohort: string | null
     isTest: boolean
     intakeBatch: string | null
+}
+
+/**
+ * La nota "ripreso" su un lead che è già di una persona (PO 31/10/2026: «il bot non deve
+ * lasciare note ai GDO, devono chiamarli e basta»). Il lead è del GDO: il CRM risponde ok
+ * al bot e non scrive niente — né evento, né nota, né notifica, né il report.
+ * Senza assegnatario o sull'account bot si va avanti come prima.
+ */
+export function ripresaSuLeadDiUnaPersona(
+    nota: string | null | undefined,
+    assignedToId: string | null,
+    assigneeIsBot: boolean,
+): boolean {
+    return isNotaBotRipreso(nota) && !!assignedToId && !assigneeIsBot
 }
 
 /** Il lead che ha riscritto va dato a un GDO? Solo se è aperto e non è di nessuno. */
