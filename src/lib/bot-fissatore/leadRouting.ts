@@ -89,7 +89,13 @@ export type RoutingWindow =
      * quando i numeri non sono tutti HIGH, vedi qualitaNumeri.ts): tutti i lead
      * ai GDO a giro pareggiato, il bot solo come rete finale.
      */
-    | 'solo_gdo';
+    | 'solo_gdo'
+    /**
+     * Tetto vero del bot (PO 02/11/2026, blocco Meta dello 0047): il bot ha la
+     * precedenza a qualunque ora finché oggi ha meno di `BOT_TETTO_GIORNALIERO`
+     * lead freschi; poi tutti ai GDO. Vince su ogni altra fascia, domenica compresa.
+     */
+    | 'bot_tetto';
 
 /** 'legacy' = interruttore spento, vale il round-robin storico a pool unico. */
 export type LeadRouting = RoutingWindow | 'legacy';
@@ -230,6 +236,31 @@ export function regolaSoloGdo(now: Date, attiva: boolean): 'solo_gdo' | 'bot_onl
 }
 
 /**
+ * Tetto VERO dei lead freschi al bot (PO 02/11/2026, dopo il blocco Meta dello
+ * 0047): il bot apre a freddo da un solo numero HIGH, e il bot da solo non sa
+ * fermarsi (sopra il tetto del numero fa "trabocco" sullo stesso numero). Quindi
+ * il limite lo mette il CRM: il bot ha la precedenza a qualunque ora, domenica
+ * compresa, finché oggi ha meno di N lead; dal lead N+1 vanno tutti ai GDO.
+ *
+ * Diverso da `BOT_DAILY_LEADS`, che è una soglia di PRECEDENZA solo nelle fasce
+ * miste e non ferma il bot nelle sue finestre.
+ *
+ * Env `BOT_TETTO_GIORNALIERO`: assente/vuota = regola spenta (vale il resto del
+ * routing). Un valore illeggibile vale 0, il più prudente per i numeri: nessun
+ * lead al bot finché qualcuno non lo corregge.
+ */
+export function tettoBotGiornaliero(): number | null {
+    const raw = process.env.BOT_TETTO_GIORNALIERO?.trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 1000) {
+        console.error(`[routing] BOT_TETTO_GIORNALIERO="${raw}" non e' un intero fra 0 e 1000: vale 0`);
+        return 0;
+    }
+    return n;
+}
+
+/**
  * La regola in vigore adesso.
  *
  * Rollback senza deploy con l'env BOT_ROUTING:
@@ -244,6 +275,8 @@ export function regolaSoloGdo(now: Date, attiva: boolean): 'solo_gdo' | 'bot_onl
  * perché per i giorni che copre deve vincere sulle fasce orarie.
  */
 export function getLeadRouting(now: Date, soloGdoAttiva = false): LeadRouting {
+    // Tetto vero del bot (PO 02/11/2026): se impostato vince su tutto.
+    if (tettoBotGiornaliero() !== null) return 'bot_tetto';
     // Domenica: tutto al bot, prima di qualunque interruttore (PO 25/10/2026).
     if (freschiSoloAlBot(now)) return 'bot_only';
     // Regola temporanea del 29/10/2026: se accesa vince su tutto il resto.

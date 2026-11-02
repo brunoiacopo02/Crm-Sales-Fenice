@@ -52,6 +52,11 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
         spiega: "lun–ven 13:30–19:00 e sabato 10:00–14:30: tutti i lead ai GDO a giro pareggiato, ognuno fino a 30 (Lavinia fino a 10), poi tutti senza tetto; il bot solo se non c'è nessuno. Si accende da sola quando un numero del giro non è HIGH; FASCIA_SOLO_GDO=on/off la forza.",
         tono: 'border-emerald-200 bg-emerald-50 text-emerald-900',
     },
+    bot_tetto: {
+        titolo: 'Tetto giornaliero del bot',
+        spiega: "a qualunque ora, domenica compresa: il bot prende i lead freschi finché oggi non arriva al tetto (env BOT_TETTO_GIORNALIERO), poi tutti ai GDO a giro pareggiato. Oltre il tetto il bot non ne riceve mai, nemmeno come ripiego.",
+        tono: 'border-amber-200 bg-amber-50 text-amber-900',
+    },
     legacy: {
         titolo: 'Regola oraria spenta',
         spiega: "l'env BOT_ROUTING è su off: vale il round-robin storico, bot e GDO nello stesso giro.",

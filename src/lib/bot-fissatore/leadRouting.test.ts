@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRoutingWindow, getLeadRouting, freschiSoloAlBot, BOT_DAILY_MIN } from './leadRouting';
+import { resolveRoutingWindow, getLeadRouting, freschiSoloAlBot, tettoBotGiornaliero, BOT_DAILY_MIN } from './leadRouting';
 
 /** Istante UTC → Date. Il server Vercel gira in UTC, la regola è su Europe/Rome. */
 const utc = (iso: string) => new Date(iso);
@@ -406,4 +406,30 @@ test('stato numeri: lo stato vero del 29/10 sera (0047 in pausa e LOW) accende l
         primario: null,
     };
     assert.equal(numeriTuttiHigh(stato, '2026-10-29'), false);
+});
+
+function withTetto(value: string | undefined, fn: () => void) {
+    const prev = process.env.BOT_TETTO_GIORNALIERO;
+    if (value === undefined) delete process.env.BOT_TETTO_GIORNALIERO;
+    else process.env.BOT_TETTO_GIORNALIERO = value;
+    try { fn(); } finally {
+        if (prev === undefined) delete process.env.BOT_TETTO_GIORNALIERO;
+        else process.env.BOT_TETTO_GIORNALIERO = prev;
+    }
+}
+
+test('tetto vero del bot (PO 02/11/2026): spento se assente, vince su tutto se impostato', () => {
+    withTetto(undefined, () => {
+        assert.equal(tettoBotGiornaliero(), null);
+        assert.notEqual(getLeadRouting(utc('2026-11-03T14:00:00Z'), true), 'bot_tetto');
+    });
+    withTetto('50', () => {
+        assert.equal(tettoBotGiornaliero(), 50);
+        assert.equal(getLeadRouting(utc('2026-11-03T14:00:00Z'), true), 'bot_tetto');  // martedì in fascia solo GDO
+        assert.equal(getLeadRouting(utc('2026-11-03T02:00:00Z'), false), 'bot_tetto'); // notte
+        assert.equal(getLeadRouting(utc('2026-11-08T10:00:00Z'), false), 'bot_tetto'); // domenica
+        withEnv('off', () => assert.equal(getLeadRouting(utc('2026-11-03T14:00:00Z')), 'bot_tetto'));
+    });
+    withTetto('cinquanta', () => assert.equal(tettoBotGiornaliero(), 0)); // illeggibile = 0, il prudente
+    withTetto('  ', () => assert.equal(tettoBotGiornaliero(), null));
 });

@@ -16,7 +16,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, tettoBotGiornaliero, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
 import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_TETTO_PROPRIO, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
 import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
@@ -1269,7 +1269,10 @@ export async function POST(req: NextRequest) {
             const holidayWindow = !rientro && !soloGdo && isBotHolidayWindow(now);
             // Domenica (PO 25/10/2026): i freschi solo al bot, mai ai GDO, qualunque flag.
             const domenicaSoloBot = freschiSoloAlBot(now);
-            const routing: LeadRouting = domenicaSoloBot ? 'bot_only' : (soloGdo ?? (holidayWindow ? 'bot_only' : getLeadRouting(now)));
+            // Tetto vero del bot (PO 02/11/2026): se impostato vince su tutto, domenica compresa.
+            const tettoBot = tettoBotGiornaliero();
+            const routing: LeadRouting = tettoBot !== null ? 'bot_tetto'
+                : domenicaSoloBot ? 'bot_only' : (soloGdo ?? (holidayWindow ? 'bot_only' : getLeadRouting(now)));
 
             // Pipeline autonoma venditore: i primi N lead freschi vanno a lui, poi
             // tutto torna esattamente come prima.
@@ -1396,7 +1399,21 @@ export async function POST(req: NextRequest) {
             let eligible: { id: string; isBot: boolean }[] = [];
             let fallbackUsed = false;
             if (!divertedTo) {
-                if (routing === 'solo_gdo') {
+                if (routing === 'bot_tetto') {
+                    // Bot finché è sotto il tetto di oggi, poi i GDO col giro
+                    // pareggiato della regola "solo GDO". Nessun ripiego sul bot
+                    // oltre il tetto: senza GDO il lead va nei fallimenti
+                    // recuperabili (no_gdo), il numero WhatsApp non si tocca.
+                    const sottoTetto = sql`(
+                        SELECT count(*) FROM leads l
+                        WHERE l."assignedToId" = ${users.id}
+                          AND l."companyId" = ${FENICE_COMPANY}
+                          AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
+                    ) < ${tettoBot ?? 0}`;
+                    eligible = await selectPool(and(gdoBase, eq(users.isBot, true), sottoTetto));
+                    if (eligible.length === 0) eligible = await selectSoloGdoSottoTetto();
+                    if (eligible.length === 0) eligible = await selectSoloGdoTutti();
+                } else if (routing === 'solo_gdo') {
                     const livelliSoloGdo: Record<LivelloSoloGdo, () => Promise<{ id: string; isBot: boolean }[]>> = {
                         sotto_tetto: selectSoloGdoSottoTetto,
                         tutti_senza_tetto: selectSoloGdoTutti,

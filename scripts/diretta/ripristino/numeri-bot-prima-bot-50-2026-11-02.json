@@ -1,0 +1,6 @@
+{
+  "nota": "Valori di app_settings (DB bot) prima del bot leggero a 50/giorno sull'8061, 02/11/2026 sera",
+  "tetti_numeri": {"whatsapp:+393520158061":0,"whatsapp:+393522018718":30,"whatsapp:+393522070047":0},
+  "qualita_numeri_stato.pause": {"+393520158061":{"dal":"2026-11-01","fino":"2026-11-06","tettoPrima":100000},"+393522070047":{"dal":"2026-11-02","fino":"2026-12-03","motivo":"blocco Meta spam 02/11-02/12","tettoPrima":0}},
+  "crm": "users bot 201 isActive=false; env BOT_TETTO_GIORNALIERO assente"
+}
