@@ -115,10 +115,30 @@ export function PipelineBoard({
 
     const currentList = getCurrentList()
 
+    // Lead "aperto" della Diretta, uno per coda. Si fissa sul primo della coda
+    // e non cambia finché il GDO non lo esita (esce dalla coda): un lead nuovo
+    // che arriva in cima non gli ruba il posto. Prima (incidente 02/11/2026,
+    // GDO 109) l'aperto era "l'indice 0": il lead appena arrivato diventava la
+    // card coi bottoni grandi mentre il GDO stava esitando quello di prima, e lo
+    // scarto finiva sul lead sbagliato.
+    const [apertoPerCoda, setApertoPerCoda] = useState<Partial<Record<PipelineTab, string>>>({})
+    const apertoFissato = apertoPerCoda[activeTab]
+    const apertoId = apertoFissato && currentList.some(l => l.id === apertoFissato)
+        ? apertoFissato
+        : (currentList[0]?.id as string | undefined)
+    // Aggiornato durante il render (non in un effect): così già nel render in
+    // cui arriva il lead nuovo l'aperto resta quello di prima.
+    if (variant === 'diretta' && apertoId !== apertoFissato) {
+        setApertoPerCoda(prev => ({ ...prev, [activeTab]: apertoId }))
+    }
+
     // ── Veste Diretta: stesse code e stesso ordine (arrivano già ordinate dal
-    // server), stesse card e stessi esiti. Il primo lead della coda è "aperto":
-    // card più grande e bottoni esito grandi, da chiamare adesso.
+    // server), stesse card e stessi esiti. Il lead "aperto" (vedi sopra) sta in
+    // cima, card più grande e bottoni esito grandi; gli altri seguono nell'ordine
+    // del server, quindi un arrivo nuovo entra subito sotto l'aperto.
     if (variant === 'diretta') {
+        const aperto = apertoId ? currentList.find(l => l.id === apertoId) : undefined
+        const codaDiretta = aperto ? [aperto, ...currentList.filter(l => l.id !== apertoId)] : currentList
         const tabs: { key: PipelineTab; label: string; count: number }[] = [
             { key: 'first', label: 'Prima chiamata', count: firstCall.length },
             { key: 'second', label: 'Seconda', count: secondCall.length },
@@ -147,9 +167,9 @@ export function PipelineBoard({
 
                 <div className={`d-coda min-h-0 flex-1 overflow-y-auto pb-48 transition-opacity duration-150 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
                     <div className="flex flex-col gap-2.5">
-                        {currentList.map((lead, index) => (
-                            <DirettaUiProvider key={lead.id} aperto={index === 0}>
-                                <div className={index === 0 ? 'd-aperto' : undefined}>
+                        {codaDiretta.map(lead => (
+                            <DirettaUiProvider key={lead.id} aperto={lead.id === apertoId}>
+                                <div className={lead.id === apertoId ? 'd-aperto' : undefined}>
                                     <LeadCard
                                         lead={lead}
                                         onOutcomeClick={setSelectedLeadId}
