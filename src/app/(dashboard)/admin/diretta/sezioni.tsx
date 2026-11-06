@@ -5,7 +5,7 @@
 
 import Link from "next/link"
 import { ChevronRight } from "lucide-react"
-import type { CentroDiretta, ConfermatoCentro, MovimentoCentro, RegistroCentro } from "@/app/actions/centroDirettaActions"
+import type { AppuntamentoCentro, CentroDiretta, MovimentoCentro, RegistroCentro } from "@/app/actions/centroDirettaActions"
 import type { ConfermeBonusSettings } from "@/app/actions/confermeDirettaActions"
 import type { GamificationTargets, Fascia } from "@/lib/diretta/config"
 import type { AdminCalendarDay } from "@/lib/quotes/adminTypes"
@@ -16,7 +16,7 @@ import {
     causaleTesto, euroTesto, giorniTesto, importoConSegno, maiuscola, riepilogoCalendario,
     statoVoce, statoVoceTesto, type StatoVoce, type Valuta,
 } from "@/lib/diretta/centro"
-import { ConfermatiOggi } from "./ConfermatiOggi"
+import { AppuntamentiOggi } from "./AppuntamentiOggi"
 import { BarraScalini, NonDisponibile, Riga, Sezione, Vuoto, oraDi, quando } from "@/components/diretta/admin/ui"
 import { numeroIt } from "@/lib/diretta/formato"
 
@@ -136,18 +136,25 @@ export function SezioneOggi({ centro }: { centro: CentroDiretta }) {
     )
 }
 
-// ── Confermati di oggi (al posto dei controlli anti-imbroglio, PO 27/10/2026) ──
-// Stessa lista di Monitor Vendite, con in più l'ora della conferma e chi l'ha
-// fatta. La lista è un componente client: il nome apre la scheda del lead.
+// ── Appuntamenti di oggi (al posto dei controlli anti-imbroglio, PO 27/10/2026) ──
+// Dal 06/11/2026 tutti gli appuntamenti del giorno, come in Monitor Vendite,
+// con in più l'ora della conferma e chi l'ha fatta. Il conto dei confermati di
+// oggi resta a parte nel titolo: conta le conferme fatte oggi, anche per
+// appuntamenti di altri giorni. La lista è un componente client: il nome apre
+// la scheda del lead.
 
-export function SezioneConfermati({ confermati }: { confermati: ConfermatoCentro[] | null }) {
+export function SezioneAppuntamenti({ appuntamenti, confermatiOggi }: { appuntamenti: AppuntamentoCentro[] | null; confermatiOggi: number | null }) {
+    const conti = [
+        appuntamenti ? `${appuntamenti.length}` : null,
+        confermatiOggi !== null ? `${confermatiOggi} confermati oggi` : null,
+    ].filter(Boolean).join(' · ')
     return (
         <Sezione
-            titolo={`Confermati di oggi${confermati ? ` (${confermati.length})` : ''}`}
+            titolo={`Appuntamenti di oggi${conti ? ` (${conti})` : ''}`}
             href="/monitor-vendite"
             linkTesto="Monitor Vendite"
         >
-            {!confermati ? <NonDisponibile /> : <ConfermatiOggi righe={confermati} />}
+            {!appuntamenti ? <NonDisponibile /> : <AppuntamentiOggi righe={appuntamenti} />}
         </Sezione>
     )
 }

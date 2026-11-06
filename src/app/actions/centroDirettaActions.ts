@@ -7,7 +7,7 @@
 //
 // Solo ADMIN, letto dalla tabella users. Carico sul DB:
 // - squadra di oggi: la stessa cache di 15 secondi della home GDO;
-// - registro e confermati di oggi: unstable_cache di 30 secondi, con giorno e settimana
+// - registro, appuntamenti e confermati di oggi: unstable_cache di 30 secondi, con giorno e settimana
 //   di Roma nella chiave (a mezzanotte e il lunedì ripartono da soli);
 // - forzieri e richieste del negozio: tabelle piccole, lette fresche, così
 //   dopo una consegna in /admin/premi il conto torna giusto subito.
@@ -30,6 +30,7 @@ import { personName } from "@/lib/diretta/config"
 import { leggiSquadra, type DirettaSquadra } from "@/lib/diretta/live"
 import { leggiInizioAccount } from "@/lib/diretta/vistaDa"
 import { leadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount"
+import { appuntamentiVenditori, chiaviPenalizzate, venditoriAttivi } from "@/lib/venditore/appuntamentiVenditori"
 import {
     totaliRegistro, type TotaliValuta, type Valuta,
 } from "@/lib/diretta/centro"
@@ -95,14 +96,19 @@ export interface RegistroCentro {
     topPiume: SaldoCentro[]
 }
 
-export interface ConfermatoCentro {
+export interface AppuntamentoCentro {
     leadId: string
     lead: string
     telefono: string | null
     funnel: string | null
     nota: string | null
-    confermatoAlle: string
-    appuntamento: string | null
+    /** Esito delle Conferme (confermato, scartato, autofissato, null = in attesa). */
+    esitoConferme: string | null
+    /** Quando le Conferme l'hanno esitato, se l'hanno esitato. */
+    confermatoAlle: string | null
+    /** Confermato in un giorno di Roma diverso da quello mostrato. */
+    confermatoAltroGiorno: boolean
+    appuntamento: string
     /** Il GDO che ha il lead (chi ha fissato l'appuntamento), col codice. */
     gdo: string
     /** Chi delle Conferme l'ha confermato. */
@@ -119,7 +125,10 @@ export interface CentroDiretta {
     forzieri: ForziereOggi[] | null
     negozio: { daGestire: number; prime: RichiestaCentro[] } | null
     registro: RegistroCentro | null
-    confermati: ConfermatoCentro[] | null
+    /** Tutti gli appuntamenti di oggi coi venditori, come in Monitor Vendite. */
+    appuntamenti: AppuntamentoCentro[] | null
+    /** Lead esitati "confermato" oggi dalle Conferme, qualunque sia il giorno dell'appuntamento. */
+    confermatiOggi: number | null
 }
 
 const asValuta = (c: string): 'S' | 'P' => (c === 'P' ? 'P' : 'S')
@@ -204,38 +213,41 @@ const registroInCache = unstable_cache(async (inizioSettimana: string): Promise<
 }, ['diretta-centro-registro-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
 
 /**
- * Monitor degli appuntamenti confermati oggi (PO 27/10/2026, al posto dei
- * controlli anti-imbroglio): ogni lead che le Conferme hanno esitato
- * "confermato" oggi, dal più recente, con il GDO che l'ha fissato, chi l'ha
- * confermato, quando e il giorno e l'ora dell'appuntamento. Fuori i lead di prova.
+ * Appuntamenti di oggi coi venditori (PO 06/11/2026, prima erano solo i
+ * confermati di oggi): la stessa lettura di "Appuntamenti venditori" in Monitor
+ * Vendite (lib/venditore/appuntamentiVenditori), ristretta al giorno di Roma,
+ * qualunque esito Conferme. Chi è stato confermato in un altro giorno porta
+ * un segno in lista. Fuori i lead di prova, come nel resto del centro.
  */
-const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno: string): Promise<ConfermatoCentro[]> => {
-    const righe = await db.select({
-        leadId: leads.id,
-        lead: leads.name,
-        telefono: leads.phone,
-        funnel: leads.funnel,
-        nota: leads.appointmentNote,
-        confermatoAlle: leads.confirmationsTimestamp,
-        appuntamento: leads.appointmentDate,
-        gdoId: leads.assignedToId,
-        assignedAt: leads.assignedAt,
-        appointmentCreatedAt: leads.appointmentCreatedAt,
-        confermeId: leads.confirmationsUserId,
-        venditoreId: leads.salespersonUserId,
-        esitoVenditore: leads.salespersonOutcome,
+const appuntamentiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno: string): Promise<AppuntamentoCentro[]> => {
+    const venditori = await venditoriAttivi(FENICE)
+    const salesIds = venditori.map(v => v.id)
+    const penalisedKeys = await chiaviPenalizzate(FENICE, salesIds)
+    const lette = await appuntamentiVenditori({
+        companyId: FENICE,
+        salesIds,
+        startDate: new Date(inizioGiorno),
+        // dayBoundsRome dà la fine esclusiva, il monitor la vuole inclusa.
+        endDate: new Date(new Date(fineGiorno).getTime() - 1),
+        penalisedKeys,
     })
-        .from(leads)
-        .where(and(
-            eq(leads.companyId, FENICE),
-            eq(leads.confirmationsOutcome, 'confermato'),
-            eq(leads.isTest, false),
-            gte(leads.confirmationsTimestamp, new Date(inizioGiorno)),
-            lt(leads.confirmationsTimestamp, new Date(fineGiorno)),
-        ))
-        // In ordine di appuntamento, come la lista di Monitor Vendite.
-        .orderBy(asc(leads.appointmentDate), desc(leads.confirmationsTimestamp))
-        .limit(200)
+    const righe = lette.filter(r => !r.isTest).map(r => ({
+        leadId: r.id,
+        lead: r.name,
+        telefono: r.phone,
+        funnel: r.funnel,
+        nota: r.appointmentNote,
+        esitoConferme: r.confirmationsOutcome,
+        confermatoAlle: r.confirmationsTimestamp,
+        appuntamento: r.appointmentDate as Date,
+        gdoId: r.assignedToId,
+        assignedAt: r.assignedAt,
+        appointmentCreatedAt: r.appointmentCreatedAt,
+        confermeId: r.confirmationsUserId,
+        venditoreId: r.salespersonUserId,
+        esitoVenditore: r.salespersonOutcome,
+    }))
+    const giorno = toRomeDateStr(new Date(inizioGiorno))
 
     const inizio = await leggiInizioAccount()
     const ids = [...new Set(righe.flatMap(r => [r.gdoId, r.confermeId, r.venditoreId]).filter((x): x is string => !!x))]
@@ -258,8 +270,10 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
         telefono: r.telefono ?? null,
         funnel: r.funnel ?? null,
         nota: r.nota ?? null,
-        confermatoAlle: (r.confermatoAlle as Date).toISOString(),
-        appuntamento: r.appuntamento?.toISOString() ?? null,
+        esitoConferme: r.esitoConferme ?? null,
+        confermatoAlle: r.confermatoAlle?.toISOString() ?? null,
+        confermatoAltroGiorno: r.esitoConferme === 'confermato' && !!r.confermatoAlle && toRomeDateStr(r.confermatoAlle) !== giorno,
+        appuntamento: r.appuntamento.toISOString(),
         // Account ripartito (118, PO 29/10/2026): un lead fissato da chi c'era
         // prima non porta il nome di chi usa l'account adesso.
         gdo: leadConta(inizio, { assignedToId: r.gdoId, assignedAt: r.assignedAt, appointmentCreatedAt: r.appointmentCreatedAt })
@@ -269,7 +283,24 @@ const confermatiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno
         venditore: di(r.venditoreId),
         esitoVenditore: r.esitoVenditore ?? null,
     }))
-}, ['diretta-centro-confermati-v2'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
+}, ['diretta-centro-appuntamenti-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
+
+/**
+ * Quanti lead le Conferme hanno esitato "confermato" oggi (il vecchio conto
+ * della sezione), qualunque sia il giorno dell'appuntamento. Fuori i lead di prova.
+ */
+const confermatiOggiInCache = unstable_cache(async (inizioGiorno: string, fineGiorno: string): Promise<number> => {
+    const [r] = await db.select({ n: sql<number>`count(*)::int` })
+        .from(leads)
+        .where(and(
+            eq(leads.companyId, FENICE),
+            eq(leads.confirmationsOutcome, 'confermato'),
+            eq(leads.isTest, false),
+            gte(leads.confirmationsTimestamp, new Date(inizioGiorno)),
+            lt(leads.confirmationsTimestamp, new Date(fineGiorno)),
+        ))
+    return r?.n ?? 0
+}, ['diretta-centro-confermati-oggi-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CENTRO] })
 
 async function forzieriDiOggi(giorno: string): Promise<ForziereOggi[]> {
     const forzieri = await db.select({
@@ -403,12 +434,13 @@ export async function getCentroDiretta(): Promise<CentroDiretta | null> {
     const oggi = dayBoundsRome(now)
     const settimana = weekBoundsRome(now)
 
-    const [squadra, forzieri, negozio, registro, confermati] = await Promise.all([
+    const [squadra, forzieri, negozio, registro, appuntamenti, confermatiOggi] = await Promise.all([
         sezione('squadra', () => leggiSquadra(FENICE)),
         sezione('forzieri', () => forzieriDiOggi(giorno)),
         sezione('negozio', richiesteNegozio),
         sezione('registro', () => registroInCache(settimana.start.toISOString())),
-        sezione('confermati', () => confermatiInCache(oggi.start.toISOString(), oggi.end.toISOString())),
+        sezione('appuntamenti', () => appuntamentiInCache(oggi.start.toISOString(), oggi.end.toISOString())),
+        sezione('confermati oggi', () => confermatiOggiInCache(oggi.start.toISOString(), oggi.end.toISOString())),
     ])
-    return { calcolatoAlle: now.toISOString(), giorno, squadra, forzieri, negozio, registro, confermati }
+    return { calcolatoAlle: now.toISOString(), giorno, squadra, forzieri, negozio, registro, appuntamenti, confermatiOggi }
 }

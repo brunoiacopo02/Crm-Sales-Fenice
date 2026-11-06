@@ -2,13 +2,14 @@
 
 import { db } from "@/db"
 import { leads, users, salesAttempts, salesLatePenalties } from "@/db/schema"
-import { and, eq, isNotNull, isNull, gte, lte, or, asc, desc, inArray, sql } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, desc, inArray } from "drizzle-orm"
 import { penaltyKey, lateHours, romeMonthKey, penaltyRuleState, type PenaltyKind, type PenaltyRuleState } from "@/lib/venditore/latePenalties"
 import { calendarRuleState, type CalendarPenaltyKind } from "@/lib/venditore/calendarRules"
 import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy"
 import { isConfermeTl } from "@/lib/confermeTl"
 import { revalidatePath } from "next/cache"
+import { appuntamentiVenditori, chiaviPenalizzate, venditoriAttivi } from "@/lib/venditore/appuntamentiVenditori"
 
 async function requireAdminOrManager(): Promise<{ id: string; role: string; ctx: TenantContext }> {
     const supabase = await createClient()
@@ -143,23 +144,8 @@ export interface VenditoriMonitorData {
 
 export async function listVenditori(): Promise<VenditoreLite[]> {
     const { ctx } = await requireAdminOrManager()
-    const rows = await db.select({
-        id: users.id,
-        name: users.name,
-        displayName: users.displayName,
-    }).from(users).where(and(
-        // Staff condiviso: venditori con companyId='fenice' operano anche su
-        // Serenamente via allowedCompanies (fallback legacy su companyId).
-        or(
-            sql`${ctx.companyId} = ANY(${users.allowedCompanies})`,
-            and(sql`${users.allowedCompanies} IS NULL`, eq(users.companyId, ctx.companyId)),
-        ),
-        eq(users.role, 'VENDITORE'),
-        eq(users.isActive, true),
-    ))
-    return rows
-        .map(r => ({ id: r.id, name: r.displayName || r.name || 'Venditore' }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'it'))
+    // Stessa lettura del centro di controllo della Diretta.
+    return venditoriAttivi(ctx.companyId)
 }
 
 /**
@@ -248,52 +234,19 @@ export async function getVenditoriMonitor(filters: {
     // nelle liste operative, è già passata al conteggio dei ritardi. Solo
     // APPOINTMENT/FOLLOWUP hanno un lead e alimentano le liste operative: le
     // multe calendario (senza lead, o con kind diverso) non c'entrano.
-    const penalisedRows = await db.select({
-        leadId: salesLatePenalties.leadId,
-        kind: salesLatePenalties.kind,
-        dueAt: salesLatePenalties.dueAt,
-    }).from(salesLatePenalties).where(and(
-        eq(salesLatePenalties.companyId, ctx.companyId),
-        inArray(salesLatePenalties.salesUserId, targetIds),
-        inArray(salesLatePenalties.kind, ['APPOINTMENT', 'FOLLOWUP']),
-    ))
+    const penalisedKeys = await chiaviPenalizzate(ctx.companyId, targetIds)
 
-    const penalisedKeys = new Set(penalisedRows
-        .filter((r): r is typeof r & { leadId: string; kind: 'APPOINTMENT' | 'FOLLOWUP' } =>
-            !!r.leadId && (r.kind === 'APPOINTMENT' || r.kind === 'FOLLOWUP'))
-        .map(r => penaltyKey({ leadId: r.leadId, kind: r.kind, dueAt: r.dueAt })))
+    // Appuntamenti nel range: stessa lettura del centro di controllo della
+    // Diretta (le scadenze penalizzate sono già fuori).
+    const apptRows = await appuntamentiVenditori({
+        companyId: ctx.companyId,
+        salesIds: targetIds,
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+        penalisedKeys,
+    })
 
-    // Appuntamenti nel range
-    const apptRows = await db.select({
-        id: leads.id,
-        name: leads.name,
-        phone: leads.phone,
-        funnel: leads.funnel,
-        appointmentDate: leads.appointmentDate,
-        salespersonUserId: leads.salespersonUserId,
-        confirmationsOutcome: leads.confirmationsOutcome,
-        salespersonOutcome: leads.salespersonOutcome,
-        appointmentNote: leads.appointmentNote,
-        gdoCode: users.gdoCode,
-        gdoDisplayName: users.displayName,
-        gdoName: users.name,
-        gdoFirstName: users.firstName,
-    }).from(leads)
-      .leftJoin(users, eq(users.id, leads.assignedToId))
-      .where(and(
-        eq(leads.companyId, ctx.companyId),
-        isNotNull(leads.appointmentDate),
-        isNotNull(leads.salespersonUserId),
-        inArray(leads.salespersonUserId, targetIds),
-        gte(leads.appointmentDate, filters.startDate),
-        lte(leads.appointmentDate, filters.endDate),
-    )).orderBy(asc(leads.appointmentDate))
-
-    const appointments: AppointmentRow[] = apptRows.filter(r => !penalisedKeys.has(penaltyKey({
-        leadId: r.id,
-        kind: 'APPOINTMENT',
-        dueAt: r.appointmentDate as Date,
-    }))).map(r => ({
+    const appointments: AppointmentRow[] = apptRows.map(r => ({
         leadId: r.id,
         leadName: r.name || 'Senza nome',
         leadPhone: r.phone ?? null,
