@@ -469,6 +469,13 @@ test('professioni: slug sconosciuto o assente -> null, il lead resta valido', ()
     assert.equal(b.lead.professione, null);
 });
 
+test('black friday: la provenienza del bot diventa il funnel BLACK FRIDAY', () => {
+    const r = normalizzaLeadEntrante({ ...RIGA_PROFESSIONI, provenienza: 'BLACK FRIDAY' });
+    assert.ok(r.ok);
+    assert.equal(r.lead.funnel, 'BLACK FRIDAY');
+    assert.equal(r.lead.professione, null);
+});
+
 test('professioni: la nota sulla timeline', () => {
     const r = normalizzaLeadEntrante({ ...RIGA_PROFESSIONI, professione: 'copywriter' });
     assert.ok(r.ok);

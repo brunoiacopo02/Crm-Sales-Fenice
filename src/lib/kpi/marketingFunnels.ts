@@ -52,6 +52,8 @@ export const PINNED_FUNNELS = [
     'GOOGLE',
     'SOCIAL',
     'PROFESSIONI',
+    // Funnel Black Friday del bot (link wa.me sul 3199, dal 09/11/2026).
+    'BLACK FRIDAY',
 ] as const;
 
 /**
