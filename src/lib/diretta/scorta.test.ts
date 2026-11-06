@@ -1,9 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    GRAZIA_MS, SBLOCCO, VISIBILI_INIZIALI,
-    applicaScritti, classificaArrivi, conStella, daSbloccare, datiDaEventi, eVergine, haDaChiamare, ordinaScorta,
-    primaAssegnazione, prioritaScorta, rangoScorta, sempreVisibile, stimaGiorni, visibileInPrimaChiamata,
+    GRAZIA_MS, PESO_ONDATA, SBLOCCO, SOGLIA_SBLOCCO, VISIBILI_INIZIALI,
+    applicaScritti, classificaArrivi, conStella, daSbloccare, datiDaEventi, deveSbloccare, eVergine, gruppoUscita,
+    haDaChiamare, ordinaScorta, primaAssegnazione, prioritaScorta, quantiDaChiamare, rangoOndata, rangoScorta,
+    sempreVisibile, stimaGiorni, visibileInPrimaChiamata,
     type LeadScorta,
 } from './scorta'
 
@@ -113,49 +114,115 @@ test('scorta: arrivi in cima o in fondo, mai visibili per un attimo (PO 30/10)',
     assert.deepEqual(classificaArrivi([diventaStella], ORA).visibili, [diventaStella.id])
 })
 
-test('scorta: sblocco solo a zero da chiamare, i primi 30 per ingresso poi priorità', () => {
-    const vecchi = Array.from({ length: 25 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(48), arrivedAt: oreFa(i) }))
-    const vecchiLetti = Array.from({ length: 5 }, () => lettoJs({ scortaStato: 'scorta', scortaDal: oreFa(48) }))
-    const nuovi = Array.from({ length: 10 }, () => lettoJs({ scortaStato: 'scorta', scortaDal: oreFa(1) }))
-    const tutti = [...nuovi, ...vecchi, ...vecchiLetti]
-    const ids = daSbloccare(tutti, ORA)
-    assert.equal(ids.length, SBLOCCO)
-    // Prima gli ingressi più vecchi (anche se i nuovi sono letti): i 30 vecchi.
-    assert.deepEqual(new Set(ids), new Set([...vecchi, ...vecchiLetti].map(l => l.id)))
-    assert.deepEqual(ids.slice(0, 5).sort(), vecchiLetti.map(l => l.id).sort(), 'dentro lo stesso ingresso, i letti prima')
+const visibili = (k: number, p: Partial<LeadScorta> = {}) => Array.from({ length: k }, () => lead({ scortaStato: 'visibile', ...p }))
 
-    assert.deepEqual(daSbloccare([...tutti, lead({ scortaStato: 'visibile' })], ORA), [], 'un visibile da chiamare: niente sblocco')
+test('scorta: soglia di sblocco (PO 06/11): 5 o meno da chiamare sblocca, 6 no', () => {
+    assert.equal(SOGLIA_SBLOCCO, 5)
+    const scorta = Array.from({ length: 50 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(48), arrivedAt: oreFa(i) }))
+    assert.equal(daSbloccare([...scorta, ...visibili(6)], ORA).length, 0, '6 visibili da chiamare: niente sblocco')
+    assert.equal(daSbloccare([...scorta, ...visibili(5)], ORA).length, SBLOCCO, '5 visibili: sblocca 30')
+    assert.equal(daSbloccare(scorta, ORA).length, SBLOCCO, '0 visibili: sblocca 30')
+    assert.equal(deveSbloccare([...scorta, ...visibili(5)], ORA), true)
+    assert.equal(deveSbloccare([...scorta, ...visibili(6)], ORA), false)
+    assert.equal(deveSbloccare(visibili(0), ORA), false, 'scorta vuota: niente da fare')
+    // I visibili già chiamati (callCount > 0) non contano.
+    assert.equal(quantiDaChiamare(visibili(6, { callCount: 1 }), ORA), 0)
+    // Vergini e stelle (anche da classificare) contano fra i 5.
+    assert.equal(daSbloccare([...scorta, ...visibili(4), vergine(), stella()], ORA).length, 0, '4 + vergine + stella = 6')
+    assert.equal(daSbloccare([...scorta, ...visibili(3), vergine(), stella()], ORA).length, SBLOCCO, '3 + vergine + stella = 5')
+    // Arrivi non caldi in grazia non si vedono e non contano.
     const inGrazia = lead({ updatedAt: new Date(ORA.getTime() - 5000) })
-    const conArrivo = daSbloccare([...tutti, inGrazia], ORA)
-    assert.equal(conArrivo.length, SBLOCCO, 'un arrivo non caldo in grazia non si vede e non tiene ferma la scorta')
-    assert.ok(!conArrivo.includes(inGrazia.id), "l'arrivo in grazia non esce con lo sblocco: andrà in fondo")
-    assert.deepEqual(daSbloccare([...tutti, vergine()], ORA), [], 'un vergine appena arrivato (null) è da chiamare')
-    assert.deepEqual(daSbloccare([...tutti, stella()], ORA), [], 'una stella appena arrivata (null) è da chiamare')
-    assert.equal(daSbloccare([...tutti, lead({ cercato: true, callCount: 2 })], ORA).length, SBLOCCO,
-        'un "Ti ha cercato" con tentativi alle spalle non tiene ferma la scorta')
-    assert.deepEqual(daSbloccare([...tutti, lead({ cercato: true, scortaStato: 'scorta' })], ORA), [],
-        'un "Ti ha cercato" mai chiamato è da chiamare, anche se era in scorta')
+    const conArrivo = daSbloccare([...scorta, ...visibili(5), inGrazia], ORA)
+    assert.equal(conArrivo.length, SBLOCCO)
+    assert.ok(!conArrivo.includes(inGrazia.id), "l'arrivo in grazia non esce con lo sblocco")
+    assert.equal(daSbloccare([...scorta, ...visibili(5), lead({ cercato: true, callCount: 2 })], ORA).length, SBLOCCO,
+        'un "Ti ha cercato" con tentativi alle spalle non conta')
+    assert.equal(daSbloccare([...scorta, ...visibili(5), lead({ cercato: true, scortaStato: 'scorta' })], ORA).length, 0,
+        'un "Ti ha cercato" mai chiamato conta, anche se era in scorta (5 + 1 = 6)')
     assert.deepEqual(daSbloccare([], ORA), [])
-    assert.equal(daSbloccare(vecchi.slice(0, 7), ORA).length, 7, 'fino a esaurimento')
+    assert.equal(daSbloccare(scorta.slice(0, 7), ORA).length, 7, 'fino a esaurimento')
     assert.deepEqual(daSbloccare([inGrazia], ORA), [], 'solo arrivi in grazia e scorta vuota: niente da sbloccare')
 })
 
-test('scorta: idempotenza logica, dopo lo sblocco un secondo calcolo non sblocca altro', () => {
-    const lista = Array.from({ length: 80 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(10), arrivedAt: oreFa(i) }))
-    const primo = daSbloccare(lista, ORA)
-    assert.equal(primo.length, SBLOCCO)
-    const dopo = applicaScritti(lista, { visibili: primo, scorta: [] })
-    assert.equal(haDaChiamare(dopo, ORA), true)
-    assert.deepEqual(daSbloccare(dopo, ORA), [])
+test('scorta: ordine di uscita (PO 06/11): mai contattati su WhatsApp, poi ridati recenti, poi senza WhatsApp', () => {
+    const ridatoVecchio = lettoC10({ id: 'ridato_vecchio', scortaStato: 'scorta', scortaDal: oreFa(24 * 8), arrivedAt: oreFa(24 * 8) })
+    const ridatoRecente = lettoJs({ id: 'ridato_recente', scortaStato: 'scorta', scortaDal: oreFa(1), arrivedAt: oreFa(1) })
+    const ridatoMedio = lead({ id: 'ridato_medio', ultimoMotivo: 'mai_risposto', ultimoInstradato: 'letto', passatoDalBot: true, scortaStato: 'scorta', scortaDal: oreFa(30), arrivedAt: oreFa(30) })
+    const maiBot = lead({ id: 'mai_bot', scortaStato: 'scorta', scortaDal: oreFa(1), arrivedAt: oreFa(100) })
+    const senzaChat = lead({ id: 'senza_chat', ultimoMotivo: 'ridistribuzione_29_10_senza_chat_bot', passatoDalBot: true, scortaStato: 'scorta', scortaDal: oreFa(2), arrivedAt: oreFa(90) })
+    const senzaWa = lead({ id: 'senza_wa', ultimoMotivo: 'mai_risposto', ultimoInstradato: 'mai_consegnato', passatoDalBot: true, scortaStato: 'scorta', scortaDal: oreFa(200), arrivedAt: oreFa(0.5) })
+    assert.equal(gruppoUscita(maiBot), 2)
+    assert.equal(gruppoUscita(senzaChat), 2)
+    assert.equal(gruppoUscita(ridatoRecente), 1)
+    assert.equal(gruppoUscita(senzaWa), 0)
+    assert.equal(gruppoUscita(stella()), 3)
+    const ordine = ordinaScorta([senzaWa, ridatoVecchio, ridatoMedio, maiBot, ridatoRecente, senzaChat]).map(l => l.id)
+    assert.deepEqual(ordine, ['senza_chat', 'mai_bot', 'ridato_recente', 'ridato_medio', 'ridato_vecchio', 'senza_wa'],
+        'da quanto è in scorta non conta: un ridato vecchio entrato per primo non esce per primo')
+    // Il caso del 06/11 (Alessandro 110): 30 ridati vecchi entrati per primi e 30 ridati recenti entrati dopo.
+    const vecchi = Array.from({ length: 30 }, (_, i) => lettoC10({ scortaStato: 'scorta', scortaDal: oreFa(24 * 8), arrivedAt: oreFa(24 * 8 + i) }))
+    const recenti = Array.from({ length: 30 }, (_, i) => lead({ ultimoMotivo: 'mai_risposto', ultimoInstradato: 'letto', passatoDalBot: true, scortaStato: 'scorta', scortaDal: oreFa(2), arrivedAt: oreFa(2 + i) }))
+    assert.deepEqual(new Set(daSbloccare([...vecchi, ...recenti], ORA)), new Set(recenti.map(l => l.id)))
 })
 
-test('scorta: visibilità e ordine di uscita', () => {
+test('scorta: i rimasti stanno sopra i nuovi sbloccati, vergini/stelle/cercato sopra tutto', () => {
+    const T1 = oreFa(5)
+    const T2 = oreFa(1)
+    const iniziale = lead({ id: 'iniziale', scortaStato: 'visibile', arrivedAt: oreFa(100) })
+    const rimasto = lead({ id: 'rimasto', scortaStato: 'visibile', scortaDal: T1, arrivedAt: oreFa(90) })
+    const nuovo = lettoJs({ id: 'nuovo', scortaStato: 'visibile', scortaDal: T2, arrivedAt: oreFa(1) })
+    const v = vergine({ id: 'vergine', scortaStato: 'visibile' })
+    const s = stella({ id: 'stella', scortaStato: 'visibile', scortaDal: T2 })
+    const c = lead({ id: 'cercato', cercato: true, scortaStato: 'scorta', scortaDal: oreFa(3) })
+    const nascosto = lead({ id: 'nascosto', scortaStato: 'scorta', scortaDal: oreFa(3) })
+    const r = rangoOndata([nuovo, rimasto, iniziale, v, s, c, nascosto], ORA)
+    assert.equal(r.has('nascosto'), false, 'solo i visibili')
+    assert.ok(r.get('vergine')! > r.get('iniziale')! && r.get('stella') === r.get('vergine') && r.get('cercato') === r.get('vergine'))
+    assert.ok(r.get('iniziale')! > r.get('rimasto')!, 'visibili senza sblocco sopra le ondate')
+    assert.ok(r.get('rimasto')! > r.get('nuovo')!, "l'ondata più vecchia sopra la più nuova")
+    // Con il peso dell'ondata nessuna priorità della board (< 256) ribalta l'ordine.
+    assert.ok((r.get('rimasto')! - r.get('nuovo')!) * PESO_ONDATA > 255)
+    assert.ok(prioritaScorta(vergine(), ORA) + 31 * 8 < PESO_ONDATA)
+
+    // Flusso completo: 5 rimasti da chiamare, sblocco, i 5 stanno sopra i 30 nuovi.
+    const rimasti = visibili(5, { scortaDal: T1 })
+    const scorta = Array.from({ length: 40 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(48), arrivedAt: oreFa(i) }))
+    const lista = [...rimasti, ...scorta]
+    const ids = daSbloccare(lista, ORA)
+    const dopo = applicaScritti(lista, { visibili: [], scorta: [], sbloccati: ids }, ORA)
+    const rango = rangoOndata(dopo, ORA)
+    const minRimasti = Math.min(...rimasti.map(l => rango.get(l.id)!))
+    const maxNuovi = Math.max(...ids.map(id => rango.get(id)!))
+    assert.ok(minRimasti > maxNuovi, 'i 5 rimasti sempre in cima ai 30 sbloccati')
+    assert.ok(dopo.filter(l => ids.includes(l.id)).every(l => l.scortaStato === 'visibile' && l.scortaDal?.getTime() === ORA.getTime()))
+})
+
+test('scorta: doppio sblocco (due letture in coda al lock) ne sblocca 30, non 60', () => {
+    const lista = [...visibili(5), ...Array.from({ length: 80 }, (_, i) => lead({ scortaStato: 'scorta', scortaDal: oreFa(10), arrivedAt: oreFa(i) }))]
+    const primo = daSbloccare(lista, ORA)
+    assert.equal(primo.length, SBLOCCO)
+    // La seconda richiesta rilegge sotto lock e trova i 30 già visibili: 35 > 5.
+    const dopo = applicaScritti(lista, { visibili: [], scorta: [], sbloccati: primo }, ORA)
+    assert.equal(quantiDaChiamare(dopo, ORA), 35)
+    assert.deepEqual(daSbloccare(dopo, ORA), [])
+    // Scorta quasi finita: il primo ne sblocca 2 (restano 5 + 2 = 7), il secondo niente.
+    const poca = [...visibili(5), lead({ scortaStato: 'scorta' }), lead({ scortaStato: 'scorta' })]
+    const p1 = daSbloccare(poca, ORA)
+    assert.equal(p1.length, 2)
+    assert.deepEqual(daSbloccare(applicaScritti(poca, { visibili: [], scorta: [], sbloccati: p1 }, ORA), ORA), [])
+    // A zero con 2 in scorta: sblocca 2, poi la scorta è vuota e il secondo non trova niente.
+    const zero = [lead({ scortaStato: 'scorta' }), lead({ scortaStato: 'scorta' })]
+    const z1 = daSbloccare(zero, ORA)
+    assert.equal(z1.length, 2)
+    assert.deepEqual(daSbloccare(applicaScritti(zero, { visibili: [], scorta: [], sbloccati: z1 }, ORA), ORA), [])
+})
+
+test('scorta: visibilità', () => {
     assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'visibile' }), ORA), true)
+    assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'visibile', scortaDal: oreFa(1) }), ORA), true, 'sbloccato: visibile')
     assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'scorta' }), ORA), false)
     assert.equal(visibileInPrimaChiamata(lead({ scortaStato: 'scorta', cercato: true }), ORA), true)
-    const a = lead({ id: 'a', scortaStato: 'scorta', scortaDal: oreFa(2) })
-    const b = lead({ id: 'b', scortaStato: 'scorta', scortaDal: oreFa(3) })
-    assert.deepEqual(ordinaScorta([a, b]).map(l => l.id), ['b', 'a'])
+    assert.equal(haDaChiamare(visibili(1), ORA), true)
 })
 
 test('scorta: priorità in prima chiamata (vergini della settimana, poi rango)', () => {

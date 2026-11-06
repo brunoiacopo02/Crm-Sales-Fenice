@@ -2,10 +2,10 @@
 // Le regole sono in scorta.ts (pure, testate); qui solo il collegamento.
 //
 // Chi lo usa:
-//  - getPipelineLeads (pipelineActions): classifica gli arrivi e, se il GDO non
-//    ha più niente da chiamare in prima chiamata, sblocca;
+//  - getPipelineLeads (pipelineActions): classifica gli arrivi e, se al GDO
+//    restano SOGLIA_SBLOCCO (5) lead o meno da chiamare in prima chiamata, sblocca;
 //  - updateLeadOutcome (pipelineActions): dopo un esito su una prima chiamata
-//    registra il consumo e sblocca se il GDO è rimasto a zero;
+//    registra il consumo e sblocca se il GDO è sceso a 5 o meno;
 //  - il monitor di /import (scortaActions) e lo script di accensione
 //    (scripts/diretta/scorta-prima-assegnazione.ts).
 //
@@ -21,7 +21,7 @@ import { botContactRequests, gdoScortaMovimenti, leadEvents, leads, users } from
 import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import {
     classificaArrivi, daSbloccare, applicaScritti, datiDaEventi, eVergine, primaAssegnazione, primiDellaScorta,
-    SBLOCCO, VISIBILI_INIZIALI, type EventoScorta, type LeadScorta,
+    SBLOCCO, SOGLIA_SBLOCCO, VISIBILI_INIZIALI, type EventoScorta, type LeadScorta,
 } from './scorta'
 
 
@@ -134,6 +134,10 @@ async function registra(ex: Esecutore, companyId: string, userId: string, tipo: 
  * partenza rende la scrittura atomica: due caricamenti che classificano gli
  * stessi arrivi insieme scrivono una volta sola, e il movimento conta solo le
  * righe scritte davvero. Restituisce gli id scritti.
+ *
+ * scortaDal: per 'scorta' quando è entrato; per uno sblocco (da 'scorta' a
+ * 'visibile') l'ora dello sblocco, cioè la sua ondata: i rimasti stanno sopra
+ * i nuovi sbloccati (rangoOndata, PO 06/11/2026); altrimenti null.
  */
 async function scriviStato(ex: Esecutore, userId: string, ids: string[], stato: 'visibile' | 'scorta', da: 'null' | 'scorta' | 'qualunque', quando: Date): Promise<string[]> {
     const scritti: string[] = []
@@ -142,7 +146,7 @@ async function scriviStato(ex: Esecutore, userId: string, ids: string[], stato: 
             : da === 'scorta' ? eq(leads.scortaStato, 'scorta')
                 : undefined
         const res = await ex.update(leads)
-            .set({ scortaStato: stato, scortaDal: stato === 'scorta' ? quando : null })
+            .set({ scortaStato: stato, scortaDal: stato === 'scorta' || da === 'scorta' ? quando : null })
             .where(and(inArray(leads.id, blocco), eq(leads.assignedToId, userId), condStato))
             .returning({ id: leads.id })
         for (const r of res) scritti.push(r.id)
@@ -170,8 +174,9 @@ export async function classificaEScrivi(companyId: string, userId: string, lista
 }
 
 /**
- * Sblocco idempotente: se il GDO non ha più niente da chiamare in prima
- * chiamata, i primi 30 della scorta tornano visibili.
+ * Sblocco idempotente: se al GDO restano SOGLIA_SBLOCCO (5) lead o meno da
+ * chiamare in prima chiamata, i primi 30 della scorta tornano visibili.
+ * Dopo lo sblocco ne ha 30 in più, quindi più di 5: niente secondo sblocco.
  *
  * Due richieste insieme (il caricamento della pipeline e l'esito appena dato,
  * o due schede aperte) non devono sbloccarne 60: tutto avviene in una
@@ -189,7 +194,7 @@ export async function sbloccaSeVuota(companyId: string, userId: string, ora: Dat
         const lista = await leggiPrimeChiamate(companyId, userId, tx)
         const scritti = await classificaEScrivi(companyId, userId, lista, ora, tx)
         const dopo = applicaScritti(lista, scritti)
-        const ids = daSbloccare(dopo, ora, SBLOCCO)
+        const ids = daSbloccare(dopo, ora, SBLOCCO, SOGLIA_SBLOCCO)
         if (ids.length === 0) return []
         const sbloccati = await scriviStato(tx, userId, ids, 'visibile', 'scorta', ora)
         await registra(tx, companyId, userId, 'sblocco', sbloccati, ora)
@@ -227,10 +232,11 @@ export async function dopoEsitoPrimaChiamata(companyId: string, gdoId: string, l
     try {
         if (!(await scortaAccesa(gdoId))) return
         await registra(db, companyId, gdoId, 'consumato', [leadId], ora)
-        // Controllo veloce senza lock: se c'è ancora un lead già visibile e mai
-        // chiamato (o un "Ti ha cercato" mai chiamato), non serve sbloccare. A
-        // zero decide sbloccaSeVuota, che sotto lock classifica anche gli arrivi.
-        if (await contaVisibiliDaChiamare(companyId, gdoId) > 0) return
+        // Controllo veloce senza lock: con più di SOGLIA_SBLOCCO lead già
+        // visibili e mai chiamati (o "Ti ha cercato" mai chiamati) non serve
+        // sbloccare. Sotto soglia decide sbloccaSeVuota, che sotto lock
+        // classifica anche gli arrivi e riconta.
+        if (await contaVisibiliDaChiamare(companyId, gdoId) > SOGLIA_SBLOCCO) return
         await sbloccaSeVuota(companyId, gdoId, ora)
     } catch (e) {
         console.error('[scorta] dopo esito prima chiamata fallito', e)

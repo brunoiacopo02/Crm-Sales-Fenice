@@ -8,12 +8,28 @@
 //    chat riprese dal bot) e i "Ti ha cercato", appena arrivano;
 //  - una parte del resto: 40 alla prima assegnazione, poi 30 a ogni sblocco.
 // Tutti gli altri lead in prima chiamata restano suoi ma nascosti nella scorta.
-// Quando non ha più niente in prima chiamata (vergini compresi) se ne sbloccano
-// altri 30, i migliori. Gli arrivi successivi non caldi vanno in fondo.
+//
+// Sblocco (PO 06/11/2026): quando in prima chiamata gli restano SOGLIA_SBLOCCO
+// (5) lead visibili da chiamare o meno (vergini compresi), se ne sbloccano
+// altri 30. Si innesca alla lettura della pipeline (getPipelineLeads) e dopo
+// un esito su una prima chiamata (dopoEsitoPrimaChiamata), sempre dentro
+// sbloccaSeVuota: lock consultivo per GDO e rilettura sotto lock, quindi due
+// richieste insieme ne sbloccano 30, non 60 (dopo lo sblocco ne ha 35 > 5).
+// I rimasti stanno SEMPRE sopra i nuovi sbloccati: ogni sblocco scrive
+// scortaDal = ora sui lead che fa uscire ("ondata"), e in prima chiamata
+// un'ondata più vecchia sta sopra una più nuova (rangoOndata). Vergini,
+// stelle e "Ti ha cercato" restano comunque in cima a tutte le ondate.
+//
+// Chi esce per primo dalla scorta (PO 06/11/2026, gruppoUscita): stella, poi
+// chi non è mai stato contattato su WhatsApp (mai passato dal bot, o il bot non
+// ci ha mai chattato), poi i ridati dal bot, poi i "WhatsApp mai consegnato"
+// (numero senza WhatsApp); dentro ogni gruppo il più recente prima. Non conta
+// più da quanto è in scorta: il 06/11 l'ordine per ingresso faceva uscire per
+// primi i ridati vecchi.
 //
 // Arrivi (PO 30/10/2026): un lead che arriva al GDO o va IN CIMA (vergine,
-// stella, "Ti ha cercato": visibile subito) o va IN FONDO alla scorta, senza
-// mai comparire per un attimo. Un arrivo non caldo ancora da classificare
+// stella, "Ti ha cercato": visibile subito) o va nella scorta (da cui esce
+// secondo gruppoUscita), senza mai comparire per un attimo. Un arrivo non caldo ancora da classificare
 // (scortaStato null) quindi non si vede, nemmeno durante la grazia.
 //
 // La distribuzione non cambia: un lead nascosto resta assegnato al GDO, con lo
@@ -26,6 +42,8 @@ import { destinatarioAssegnazione } from './arrivo'
 export const VISIBILI_INIZIALI = 40
 /** Quanti lead escono dalla scorta a ogni sblocco. */
 export const SBLOCCO = 30
+/** Si sblocca quando in prima chiamata restano da chiamare questi lead visibili o meno (PO 06/11/2026). */
+export const SOGLIA_SBLOCCO = 5
 /**
  * Un lead arrivato da meno di così non si SCRIVE ancora in scorta: chi lo
  * assegna scrive il lead e poi l'evento che dice se è caldo, e la stella non
@@ -121,14 +139,30 @@ export function confrontaPriorita(
 }
 
 /**
- * Ordine di uscita dalla scorta: chi è entrato prima esce prima (gli arrivi
- * successivi vanno in fondo), dentro lo stesso ingresso la priorità.
+ * Gruppo di uscita dalla scorta (PO 06/11/2026), più alto = esce prima:
+ * 3 stella, 2 mai contattato su WhatsApp (mai passato dal bot, o restituito
+ * senza che il bot ci abbia mai chattato), 1 ridato dal bot, 0 "WhatsApp mai
+ * consegnato" (numero senza WhatsApp).
+ */
+export function gruppoUscita(l: Pick<LeadScorta, 'ultimoMotivo' | 'ultimoInstradato' | 'launchBucket' | 'passatoDalBot'>): number {
+    if (conStella(l)) return 3
+    if (l.ultimoInstradato === 'mai_consegnato') return 0
+    if (!l.passatoDalBot || (l.ultimoMotivo ?? '').includes('senza_chat_bot')) return 2
+    return 1
+}
+
+/**
+ * Ordine di uscita dalla scorta (PO 06/11/2026): i più promettenti prima
+ * (gruppoUscita), dentro il gruppo il più recente (arrivo al GDO, cioè per un
+ * ridato la restituzione), poi il rango di funnel, poi id. Da quanto il lead
+ * è in scorta non conta più.
  */
 export function ordinaScorta<T extends LeadScorta>(lista: readonly T[]): T[] {
     return [...lista].sort((a, b) => {
-        const da = a.scortaDal?.getTime() ?? 0
-        const db = b.scortaDal?.getTime() ?? 0
-        if (da !== db) return da - db
+        const g = gruppoUscita(b) - gruppoUscita(a)
+        if (g !== 0) return g
+        const t = b.arrivedAt.getTime() - a.arrivedAt.getTime()
+        if (t !== 0) return t
         return confrontaPriorita(a, b)
     })
 }
@@ -182,18 +216,61 @@ export function classificaArrivi(lista: readonly LeadScorta[], ora: Date): { vis
  * scorta: non conta.
  */
 export function haDaChiamare(lista: readonly LeadScorta[], ora: Date): boolean {
-    return lista.some(l => l.callCount === 0 && visibileInPrimaChiamata(l, ora))
+    return quantiDaChiamare(lista, ora) > 0
+}
+
+/** Quanti lead visibili e mai chiamati ha davanti (stessa regola di haDaChiamare). */
+export function quantiDaChiamare(lista: readonly LeadScorta[], ora: Date): number {
+    return lista.filter(l => l.callCount === 0 && visibileInPrimaChiamata(l, ora)).length
 }
 
 /**
- * Sblocco: se in prima chiamata non resta niente da chiamare (vergini compresi),
- * i primi `quanti` della scorta tornano visibili. Lista vuota = niente da fare.
+ * Va fatto uno sblocco? Sì se da chiamare restano SOGLIA_SBLOCCO lead visibili
+ * o meno (PO 06/11/2026) e la scorta non è vuota. Dopo uno sblocco di 30 ne
+ * ha più di 5: un secondo calcolo (la richiesta in coda al lock) non sblocca
+ * altro; se la scorta è finita, il secondo non trova niente.
+ */
+export function deveSbloccare(lista: readonly LeadScorta[], ora: Date, soglia = SOGLIA_SBLOCCO): boolean {
+    if (quantiDaChiamare(lista, ora) > soglia) return false
+    return lista.some(l => l.scortaStato === 'scorta' && !l.cercato)
+}
+
+/**
+ * Sblocco: se in prima chiamata restano SOGLIA_SBLOCCO lead da chiamare o meno
+ * (vergini compresi), i primi `quanti` della scorta tornano visibili. Lista
+ * vuota = niente da fare.
  *
  * `lista` sono i lead in prima chiamata DOPO la classificazione degli arrivi.
  */
-export function daSbloccare<T extends LeadScorta>(lista: readonly T[], ora: Date, quanti = SBLOCCO): string[] {
-    if (haDaChiamare(lista, ora)) return []
+export function daSbloccare<T extends LeadScorta>(lista: readonly T[], ora: Date, quanti = SBLOCCO, soglia = SOGLIA_SBLOCCO): string[] {
+    if (!deveSbloccare(lista, ora, soglia)) return []
     return primiDellaScorta(lista, quanti)
+}
+
+/** Peso del rango di ondata sopra la priorità della board (lancioRank × 8 + prioritaScorta < 256). */
+export const PESO_ONDATA = 256
+
+/**
+ * Rango di ondata in prima chiamata (PO 06/11/2026), più alto = più in alto:
+ * i rimasti stanno sempre sopra i nuovi sbloccati. Uno sblocco scrive
+ * scortaDal = ora sui lead che fa uscire; un visibile con scortaDal null non
+ * viene da uno sblocco (prima assegnazione, arrivi caldi). Ordine: vergini,
+ * stelle e "Ti ha cercato" sopra tutto, poi i visibili senza sblocco, poi le
+ * ondate dalla più vecchia alla più nuova. Solo per i lead visibili.
+ */
+export function rangoOndata(lista: readonly LeadScorta[], ora: Date): Map<string, number> {
+    const visibili = lista.filter(l => visibileInPrimaChiamata(l, ora))
+    const daSblocco = (l: LeadScorta) => !sempreVisibile(l, ora) && l.scortaStato === 'visibile' && l.scortaDal !== null
+    const ondate = [...new Set(visibili.filter(daSblocco).map(l => l.scortaDal!.getTime()))].sort((a, b) => a - b)
+    const indice = new Map(ondate.map((t, i) => [t, i]))
+    const n = ondate.length
+    const out = new Map<string, number>()
+    for (const l of visibili) {
+        if (sempreVisibile(l, ora)) out.set(l.id, n + 1)
+        else if (daSblocco(l)) out.set(l.id, n - 1 - indice.get(l.scortaDal!.getTime())!)
+        else out.set(l.id, n)
+    }
+    return out
 }
 
 /**
@@ -282,11 +359,16 @@ export function datiDaEventi(eventi: readonly EventoScorta[], proprietario: stri
     }
 }
 
-/** La lista con gli stati appena scritti. */
-export function applicaScritti<T extends LeadScorta>(lista: readonly T[], scritti: { visibili: string[]; scorta: string[] }, quando: Date = new Date()): T[] {
+/**
+ * La lista con gli stati appena scritti. `sbloccati`: visibili usciti da uno
+ * sblocco, con scortaDal = quando (la loro ondata, vedi rangoOndata).
+ */
+export function applicaScritti<T extends LeadScorta>(lista: readonly T[], scritti: { visibili: string[]; scorta: string[]; sbloccati?: string[] }, quando: Date = new Date()): T[] {
     const v = new Set(scritti.visibili)
     const s = new Set(scritti.scorta)
-    return lista.map(l => v.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: null }
+    const sb = new Set(scritti.sbloccati ?? [])
+    return lista.map(l => sb.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: quando }
+        : v.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: null }
         : s.has(l.id) ? { ...l, scortaStato: 'scorta', scortaDal: quando }
             : l)
 }

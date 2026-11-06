@@ -25,7 +25,7 @@ import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 import { daRifissareDalleConferme } from "@/lib/diretta/daRifissare"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
-import { applicaScritti, haDaChiamare, prioritaScorta, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
+import { applicaScritti, deveSbloccare, PESO_ONDATA, prioritaScorta, rangoOndata, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
 import { classificaEScrivi, dopoEsitoPrimaChiamata, sbloccaSeVuota, scortaAccesa } from "@/lib/diretta/scortaDb"
 
 /**
@@ -476,8 +476,10 @@ export async function getPipelineLeads() {
      * stelle e "Ti ha cercato" si vedono sempre, del resto una parte; gli altri
      * restano suoi ma nascosti (la ricerca e la ContactDrawer li trovano, i
      * conteggi della distribuzione li contano come prima). Gli arrivi si
-     * classificano qui; a zero lead da chiamare se ne sbloccano 30, sotto lock
-     * (sbloccaSeVuota). Con gli stati già decisi costa una lettura in più.
+     * classificano qui; con 5 lead o meno da chiamare (SOGLIA_SBLOCCO, PO
+     * 06/11/2026) se ne sbloccano 30, sotto lock (sbloccaSeVuota). I rimasti
+     * restano sopra i nuovi sbloccati (rangoOndata). Con gli stati già decisi
+     * costa una lettura in più.
      */
     let primaVisibile = firstCall
     let prioritaPrima: (l: PerRank & { id: string }) => number = lancioRank
@@ -501,9 +503,9 @@ export async function getPipelineLeads() {
                 }))
                 if (cercatiLetti && eventiLetti) {
                     lista = applicaScritti(lista, await classificaEScrivi(ctx.companyId, userId, lista, now), now)
-                    if (!haDaChiamare(lista, now) && lista.some(l => l.scortaStato === 'scorta')) {
-                        const sbloccati = new Set(await sbloccaSeVuota(ctx.companyId, userId, now))
-                        if (sbloccati.size) lista = lista.map(l => sbloccati.has(l.id) ? { ...l, scortaStato: 'visibile', scortaDal: null } : l)
+                    if (deveSbloccare(lista, now)) {
+                        const sbloccati = await sbloccaSeVuota(ctx.companyId, userId, now)
+                        if (sbloccati.length) lista = applicaScritti(lista, { visibili: [], scorta: [], sbloccati }, now)
                     }
                 }
                 // Arrivi non caldi da classificare (null): mai visibili, nemmeno
@@ -514,12 +516,15 @@ export async function getPipelineLeads() {
                     .filter(l => classificabile ? visibileInPrimaChiamata(l, now) : (l.cercato || l.scortaStato === 'visibile'))
                     .map(l => l.id))
                 const perId = new Map(lista.map(l => [l.id, l]))
+                const ondata = rangoOndata(lista, now)
                 primaVisibile = firstCall.filter(l => visibili.has(l.id))
-                // Sotto la priorità della board, i vergini della settimana e poi
+                // Sopra tutto l'ondata (PO 06/11/2026): vergini, stelle e "Ti ha
+                // cercato" in cima, poi i rimasti, poi i nuovi sbloccati. Dentro
+                // l'ondata la priorità della board, i vergini della settimana e
                 // l'ordine della scorta (letti JOB SIMULATOR/TELEGRAM, CORSO 10 ORE).
                 prioritaPrima = (l) => {
                     const s = perId.get(l.id)
-                    return lancioRank(l) * 8 + (s ? prioritaScorta(s, now) : 0)
+                    return (ondata.get(l.id) ?? 0) * PESO_ONDATA + lancioRank(l) * 8 + (s ? prioritaScorta(s, now) : 0)
                 }
             }
         } catch (e) {
@@ -936,8 +941,8 @@ export async function updateLeadOutcome(
     }
 
     // Scorta (PO 29/10/2026): un esito su una prima chiamata consuma un lead del
-    // GDO che lo ha in mano; se è rimasto senza niente da chiamare se ne
-    // sbloccano 30. Solo con la scorta accesa per quel GDO (lo controlla
+    // GDO che lo ha in mano; se gli restano 5 lead o meno da chiamare
+    // (SOGLIA_SBLOCCO) se ne sbloccano 30. Solo con la scorta accesa per quel GDO (lo controlla
     // dopoEsitoPrimaChiamata), mai per gli esiti del bot; non lancia mai.
     if (!serviceCtx && lead.callCount === 0 && lead.assignedToId) {
         await dopoEsitoPrimaChiamata(ctx.companyId, lead.assignedToId, leadId, now)

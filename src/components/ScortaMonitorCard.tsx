@@ -95,7 +95,7 @@ export function ScortaMonitorCard() {
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <p className="max-w-[40rem] text-[14px] text-[#BFBFBF]">
                     In prima chiamata ogni GDO vede i nuovi, i caldi e una parte del resto; gli altri lead restano suoi
-                    nella scorta e si sbloccano 30 alla volta quando ha finito. Letto alle {oraDi(stato.lettoAlle)}.
+                    nella scorta e se ne sbloccano 30 quando gliene restano 5 da chiamare. Letto alle {oraDi(stato.lettoAlle)}.
                 </p>
                 <button type="button" disabled={lavoro} onClick={() => { setEsito(null); setConferma(null); setStato(undefined); leggi() }} className={bottone('linea', 'piccola')}>
                     Aggiorna
