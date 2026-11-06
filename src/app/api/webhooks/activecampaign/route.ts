@@ -16,7 +16,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, tettoBotGiornaliero, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, tettoBotGiornaliero, tettoBotAdesso, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
 import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_TETTO_PROPRIO, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
 import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
@@ -1404,12 +1404,15 @@ export async function POST(req: NextRequest) {
                     // pareggiato della regola "solo GDO". Nessun ripiego sul bot
                     // oltre il tetto: senza GDO il lead va nei fallimenti
                     // recuperabili (no_gdo), il numero WhatsApp non si tocca.
+                    // Riserva serale (PO 06/11/2026): in orario GDO il tetto
+                    // scende di BOT_RISERVA_FUORI_ORARIO, fuori orario è pieno.
+                    const tettoOra = tettoBot === null ? 0 : tettoBotAdesso(now, tettoBot);
                     const sottoTetto = sql`(
                         SELECT count(*) FROM leads l
                         WHERE l."assignedToId" = ${users.id}
                           AND l."companyId" = ${FENICE_COMPANY}
                           AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
-                    ) < ${tettoBot ?? 0}`;
+                    ) < ${tettoOra}`;
                     eligible = await selectPool(and(gdoBase, eq(users.isBot, true), sottoTetto));
                     if (eligible.length === 0) eligible = await selectSoloGdoSottoTetto();
                     if (eligible.length === 0) eligible = await selectSoloGdoTutti();

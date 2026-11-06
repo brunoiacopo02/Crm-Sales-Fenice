@@ -261,6 +261,53 @@ export function tettoBotGiornaliero(): number | null {
 }
 
 /**
+ * Orario GDO per la "riserva serale" del tetto bot (PO 06/11/2026), ora di Roma:
+ *   lun–ven 13:30 → 20:00   'feriale'
+ *   sabato  10:00 → 14:30   'sabato'
+ *   domenica e tutto il resto  null (fuori orario)
+ * Inizio incluso, fine esclusa. Il fuso lo risolve Intl (cambio ora compreso).
+ */
+const ORARIO_GDO_FERIALE = { inizio: 13 * 60 + 30, fine: 20 * 60 } as const;
+const ORARIO_GDO_SABATO = { inizio: 10 * 60, fine: 14 * 60 + 30 } as const;
+export function orarioGdo(now: Date): 'feriale' | 'sabato' | null {
+    const { weekday, minutes } = romeClock(now);
+    if (weekday === 0) return null;
+    const tipo = weekday === 6 ? 'sabato' : 'feriale';
+    const f = tipo === 'sabato' ? ORARIO_GDO_SABATO : ORARIO_GDO_FERIALE;
+    return minutes >= f.inizio && minutes < f.fine ? tipo : null;
+}
+
+/**
+ * Riserva fuori orario (env `BOT_RISERVA_FUORI_ORARIO`, formato "feriale,sabato",
+ * es. "30,60"): quanti lead del tetto bot restano da parte per quando i GDO non
+ * ci sono. Assente, vuota o malformata = nessuna riserva (comportamento di prima).
+ */
+export function riservaFuoriOrario(): { feriale: number; sabato: number } | null {
+    const raw = process.env.BOT_RISERVA_FUORI_ORARIO?.trim();
+    if (!raw) return null;
+    const m = /^(\d{1,4})\s*,\s*(\d{1,4})$/.exec(raw);
+    if (!m) {
+        console.error(`[routing] BOT_RISERVA_FUORI_ORARIO="${raw}" non e' "feriale,sabato": nessuna riserva`);
+        return null;
+    }
+    return { feriale: Number(m[1]), sabato: Number(m[2]) };
+}
+
+/**
+ * Tetto del bot che vale ADESSO (PO 06/11/2026, "riserva serale"): in orario GDO
+ * il bot prende il lead solo se oggi ne ha meno di (tetto − riserva), così una
+ * parte del tetto resta per la sera e la notte; fuori orario vale il tetto pieno.
+ * Mai sotto 0.
+ */
+export function tettoBotAdesso(now: Date, tetto: number): number {
+    const orario = orarioGdo(now);
+    if (!orario) return tetto;
+    const riserva = riservaFuoriOrario();
+    if (!riserva) return tetto;
+    return Math.max(0, tetto - riserva[orario]);
+}
+
+/**
  * La regola in vigore adesso.
  *
  * Rollback senza deploy con l'env BOT_ROUTING:

@@ -54,7 +54,7 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
     },
     bot_tetto: {
         titolo: 'Tetto giornaliero del bot',
-        spiega: "a qualunque ora, domenica compresa: il bot prende i lead freschi finché oggi non arriva al tetto (env BOT_TETTO_GIORNALIERO), poi tutti ai GDO a giro pareggiato. Oltre il tetto il bot non ne riceve mai, nemmeno come ripiego.",
+        spiega: "a qualunque ora, domenica compresa: il bot prende i lead freschi finché oggi non arriva al tetto (env BOT_TETTO_GIORNALIERO), poi tutti ai GDO a giro pareggiato. In orario GDO (lun-ven 13:30-20, sabato 10-14:30) il tetto scende della riserva serale (env BOT_RISERVA_FUORI_ORARIO, \"feriale,sabato\"), così una parte resta per la sera e la notte. Oltre il tetto il bot non ne riceve mai, nemmeno come ripiego.",
         tono: 'border-amber-200 bg-amber-50 text-amber-900',
     },
     legacy: {

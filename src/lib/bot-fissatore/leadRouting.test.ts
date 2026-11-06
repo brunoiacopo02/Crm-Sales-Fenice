@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRoutingWindow, getLeadRouting, freschiSoloAlBot, tettoBotGiornaliero, BOT_DAILY_MIN } from './leadRouting';
+import { resolveRoutingWindow, getLeadRouting, freschiSoloAlBot, tettoBotGiornaliero, orarioGdo, riservaFuoriOrario, tettoBotAdesso, BOT_DAILY_MIN } from './leadRouting';
 
 /** Istante UTC → Date. Il server Vercel gira in UTC, la regola è su Europe/Rome. */
 const utc = (iso: string) => new Date(iso);
@@ -432,4 +432,65 @@ test('tetto vero del bot (PO 02/11/2026): spento se assente, vince su tutto se i
     });
     withTetto('cinquanta', () => assert.equal(tettoBotGiornaliero(), 0)); // illeggibile = 0, il prudente
     withTetto('  ', () => assert.equal(tettoBotGiornaliero(), null));
+});
+
+function withRiserva(value: string | undefined, fn: () => void) {
+    const prev = process.env.BOT_RISERVA_FUORI_ORARIO;
+    if (value === undefined) delete process.env.BOT_RISERVA_FUORI_ORARIO;
+    else process.env.BOT_RISERVA_FUORI_ORARIO = value;
+    try { fn(); } finally {
+        if (prev === undefined) delete process.env.BOT_RISERVA_FUORI_ORARIO;
+        else process.env.BOT_RISERVA_FUORI_ORARIO = prev;
+    }
+}
+
+test('orario GDO (riserva serale PO 06/11/2026): feriale 13:30-20:00, sabato 10:00-14:30, domenica mai', () => {
+    // Novembre = CET (+01:00). Venerdì 06/11/2026.
+    assert.equal(orarioGdo(utc('2026-11-06T12:29:00Z')), null);       // 13:29
+    assert.equal(orarioGdo(utc('2026-11-06T12:30:00Z')), 'feriale');  // 13:30 incluso
+    assert.equal(orarioGdo(utc('2026-11-06T18:59:00Z')), 'feriale');  // 19:59
+    assert.equal(orarioGdo(utc('2026-11-06T19:00:00Z')), null);       // 20:00 escluso
+    assert.equal(orarioGdo(utc('2026-11-06T08:00:00Z')), null);       // mattina
+    // Sabato 07/11/2026.
+    assert.equal(orarioGdo(utc('2026-11-07T08:59:00Z')), null);       // 09:59
+    assert.equal(orarioGdo(utc('2026-11-07T09:00:00Z')), 'sabato');   // 10:00
+    assert.equal(orarioGdo(utc('2026-11-07T13:29:00Z')), 'sabato');   // 14:29
+    assert.equal(orarioGdo(utc('2026-11-07T13:30:00Z')), null);       // 14:30 escluso
+    assert.equal(orarioGdo(utc('2026-11-07T15:00:00Z')), null);       // sabato 16:00: fuori
+    // Domenica 08/11/2026, anche alle 15.
+    assert.equal(orarioGdo(utc('2026-11-08T14:00:00Z')), null);
+    // Ora legale (CEST +02:00): giovedì 22/10/2026 13:30 = 11:30Z.
+    assert.equal(orarioGdo(utc('2026-10-22T11:29:00Z')), null);
+    assert.equal(orarioGdo(utc('2026-10-22T11:30:00Z')), 'feriale');
+    assert.equal(orarioGdo(utc('2026-10-22T18:00:00Z')), null);       // 20:00 CEST
+    // Lunedì dopo il cambio ora (26/10/2026, CET): 13:30 = 12:30Z.
+    assert.equal(orarioGdo(utc('2026-10-26T11:30:00Z')), null);       // 12:30
+    assert.equal(orarioGdo(utc('2026-10-26T12:30:00Z')), 'feriale');
+});
+
+test('riserva fuori orario: env "feriale,sabato"; assente o malformata = nessuna riserva', () => {
+    withRiserva(undefined, () => {
+        assert.equal(riservaFuoriOrario(), null);
+        assert.equal(tettoBotAdesso(utc('2026-11-06T14:00:00Z'), 100), 100); // in orario, tetto pieno
+    });
+    for (const v of ['', '  ', '30', '30;60', 'trenta,sessanta', '-5,10', '30,60,90']) {
+        withRiserva(v, () => {
+            assert.equal(riservaFuoriOrario(), null, `valore "${v}"`);
+            assert.equal(tettoBotAdesso(utc('2026-11-06T14:00:00Z'), 100), 100, `valore "${v}"`);
+        });
+    }
+    withRiserva(' 30 , 60 ', () => assert.deepEqual(riservaFuoriOrario(), { feriale: 30, sabato: 60 }));
+});
+
+test('tetto bot adesso: in orario GDO tetto meno riserva, fuori orario tetto pieno', () => {
+    withRiserva('30,60', () => {
+        assert.equal(tettoBotAdesso(utc('2026-11-06T12:30:00Z'), 100), 70);  // ven 13:30
+        assert.equal(tettoBotAdesso(utc('2026-11-06T18:59:00Z'), 100), 70);  // ven 19:59
+        assert.equal(tettoBotAdesso(utc('2026-11-06T19:00:00Z'), 100), 100); // ven 20:00
+        assert.equal(tettoBotAdesso(utc('2026-11-06T08:00:00Z'), 100), 100); // ven 09:00
+        assert.equal(tettoBotAdesso(utc('2026-11-07T09:00:00Z'), 100), 40);  // sab 10:00
+        assert.equal(tettoBotAdesso(utc('2026-11-07T13:30:00Z'), 100), 100); // sab 14:30
+        assert.equal(tettoBotAdesso(utc('2026-11-08T14:00:00Z'), 100), 100); // domenica
+        assert.equal(tettoBotAdesso(utc('2026-11-07T10:00:00Z'), 40), 0);    // mai sotto 0
+    });
 });
