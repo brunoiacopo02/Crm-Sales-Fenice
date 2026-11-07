@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appointmentMoveStamp, confermeBoardColumn, nextWorkDayRome, OGGI_ORE, DOMANI_ORE, type BoardLeadInput } from './boardWindow';
+import { appointmentMoveStamp, confermeBoardColumn, nextWorkDayRome, previousWorkDayRome, primaChiamataIlGiornoPrima, OGGI_ORE, DOMANI_ORE, type BoardLeadInput } from './boardWindow';
 
 // Lunedì 26/10/2026 alle 11:00 di Roma (ora solare, +01:00).
 const LUN_11 = new Date('2026-10-26T10:00:00Z');
@@ -22,7 +22,7 @@ function lead(over: Partial<BoardLeadInput>): BoardLeadInput {
 
 test('le ore delle due colonne', () => {
     assert.deepEqual([...OGGI_ORE], [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
-    assert.deepEqual([...DOMANI_ORE], [9, 10, 11, 12, 13, 14]);
+    assert.deepEqual([...DOMANI_ORE], [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
 });
 
 test('mattina di domani fissata con anticipo: si chiama oggi', () => {
@@ -71,8 +71,92 @@ test('lead vecchio senza date di fissaggio: si tratta come fissato con anticipo'
     }), LUN_11), 'domani');
 });
 
-test('il pomeriggio di domani non si chiama il giorno prima', () => {
-    assert.equal(confermeBoardColumn(lead({ appointmentDate: roma('2026-10-27T15:00:00+01:00') }), LUN_11), null);
+// PO 07/11/2026: il pomeriggio come la mattina.
+test('pomeriggio di domani fissato con anticipo: 1ª chiamata oggi', () => {
+    assert.equal(confermeBoardColumn(lead({ appointmentDate: roma('2026-10-27T15:00:00+01:00') }), LUN_11), 'domani');
+    assert.equal(confermeBoardColumn(lead({ appointmentDate: roma('2026-10-27T21:00:00+01:00') }), LUN_11), 'domani');
+});
+
+test('pomeriggio di domani fissato oggi: tutte e 3 domani', () => {
+    assert.equal(confermeBoardColumn(lead({
+        appointmentDate: roma('2026-10-27T16:00:00+01:00'),
+        appointmentCreatedAt: roma('2026-10-26T10:30:00+01:00'),
+    }), LUN_11), null);
+});
+
+test('domani alle 22 non sta in nessuna colonna', () => {
+    assert.equal(confermeBoardColumn(lead({ appointmentDate: roma('2026-10-27T22:00:00+01:00') }), LUN_11), null);
+});
+
+test('esempio PO: preso lunedì per mercoledì 16, martedì 1ª chiamata, mercoledì le altre', () => {
+    const MAR_15 = new Date('2026-11-10T14:00:00Z'); // martedì 10/11 15:00 Roma
+    const MER_14 = new Date('2026-11-11T13:00:00Z'); // mercoledì 11/11 14:00 Roma
+    const l = lead({
+        appointmentDate: roma('2026-11-11T16:00:00+01:00'),
+        appointmentCreatedAt: roma('2026-11-09T18:00:00+01:00'), // lunedì
+    });
+    assert.equal(confermeBoardColumn(l, MAR_15), 'domani');
+    // 1ª chiamata fatta martedì: sparisce da Domani...
+    const dopoCall1 = { ...l, confCall1At: roma('2026-11-10T15:10:00+01:00') };
+    assert.equal(confermeBoardColumn(dopoCall1, MAR_15), null);
+    // ...e torna mercoledì in Oggi per la 2ª e la 3ª.
+    assert.equal(confermeBoardColumn(dopoCall1, MER_14), 'oggi');
+});
+
+test('esempio PO: preso martedì per mercoledì 16, tutte e 3 mercoledì', () => {
+    const MAR_15 = new Date('2026-11-10T14:00:00Z');
+    const l = lead({
+        appointmentDate: roma('2026-11-11T16:00:00+01:00'),
+        appointmentCreatedAt: roma('2026-11-10T11:00:00+01:00'), // martedì = giorno prima
+    });
+    assert.equal(confermeBoardColumn(l, MAR_15), null);
+    assert.equal(primaChiamataIlGiornoPrima(l.appointmentDate!, [l.appointmentCreatedAt]), false);
+});
+
+test('preso lo stesso giorno della call: niente giorno prima', () => {
+    assert.equal(primaChiamataIlGiornoPrima(roma('2026-11-11T17:00:00+01:00'), [roma('2026-11-11T09:30:00+01:00')]), false);
+});
+
+test('sabato 07/11: lunedì pomeriggio preso entro venerdì si chiama oggi, preso sabato no', () => {
+    const SAB_07 = new Date('2026-11-07T13:00:00Z'); // sabato 14:00 Roma
+    assert.equal(confermeBoardColumn(lead({
+        appointmentDate: roma('2026-11-09T16:00:00+01:00'),
+        appointmentCreatedAt: roma('2026-11-06T19:00:00+01:00'), // venerdì sera
+    }), SAB_07), 'domani');
+    assert.equal(confermeBoardColumn(lead({
+        appointmentDate: roma('2026-11-09T16:00:00+01:00'),
+        appointmentCreatedAt: roma('2026-11-07T10:00:00+01:00'), // sabato
+    }), SAB_07), null);
+});
+
+test('domenica: il giorno prima del lunedì è il sabato, presa di domenica = giorno prima', () => {
+    assert.equal(previousWorkDayRome('2026-11-09'), '2026-11-07'); // lunedì → sabato
+    assert.equal(previousWorkDayRome('2026-11-10'), '2026-11-09'); // martedì → lunedì
+    // Preso domenica per lunedì: il sabato era già passato, tutte e 3 lunedì.
+    assert.equal(primaChiamataIlGiornoPrima(roma('2026-11-09T16:00:00+01:00'), [roma('2026-11-08T12:00:00+01:00')]), false);
+    // Preso domenica per martedì: 1ª chiamata lunedì.
+    assert.equal(primaChiamataIlGiornoPrima(roma('2026-11-10T16:00:00+01:00'), [roma('2026-11-08T12:00:00+01:00')]), true);
+    // Preso sabato per lunedì: il sabato è il giorno prima, tutte e 3 lunedì.
+    assert.equal(primaChiamataIlGiornoPrima(roma('2026-11-09T16:00:00+01:00'), [roma('2026-11-07T12:00:00+01:00')]), false);
+    // Se la board si apre di domenica, "domani" è lunedì e il sabato conta come giorno prima.
+    const DOM_08 = new Date('2026-11-08T11:00:00Z');
+    assert.equal(confermeBoardColumn(lead({
+        appointmentDate: roma('2026-11-09T16:00:00+01:00'),
+        appointmentCreatedAt: roma('2026-11-07T12:00:00+01:00'),
+    }), DOM_08), null);
+});
+
+test('spostamento: conta la più recente fra presa e spostamento', () => {
+    const app = roma('2026-11-11T16:00:00+01:00');
+    // Preso il 02/11, spostato martedì 10 a mercoledì: misura dallo spostamento.
+    assert.equal(primaChiamataIlGiornoPrima(app, [roma('2026-11-02T12:00:00+01:00'), roma('2026-11-10T12:00:00+01:00')]), false);
+    // Spostato lunedì 09: anticipo pieno.
+    assert.equal(primaChiamataIlGiornoPrima(app, [roma('2026-11-02T12:00:00+01:00'), roma('2026-11-09T12:00:00+01:00')]), true);
+});
+
+test('a mezzanotte di Roma la presa conta nel giorno di Roma, non UTC', () => {
+    // 23:30 UTC di lunedì 09 = 00:30 di martedì 10 a Roma: è il giorno prima della call di mercoledì.
+    assert.equal(primaChiamataIlGiornoPrima(roma('2026-11-11T16:00:00+01:00'), [new Date('2026-11-09T23:30:00Z')]), false);
 });
 
 test('oggi dalle 9 alle 21', () => {

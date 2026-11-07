@@ -166,8 +166,9 @@ export async function getConfermeAppointments(filters: {
     }
 
     if (filters.fetchMode === 'strict_kanban') {
-        // Regola della board (PO 24/10/2026): oggi dalle 9 alle 21, domani
-        // mattina solo per le call fissate prima di oggi. Vive in
+        // Regola della board (PO 24/10/2026, pomeriggio dal 07/11): oggi dalle
+        // 9 alle 21, domani (9-21) solo per la 1ª chiamata delle call fissate
+        // prima del giorno lavorativo che le precede. Vive in
         // src/lib/conferme/boardWindow.ts, dove è testata. Le vecchie regole per
         // giorno della settimana e gli override festivi datati sono spariti: alla
         // vigilia di una chiusura si torna a fare un override a mano.

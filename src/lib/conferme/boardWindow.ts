@@ -1,10 +1,12 @@
 /**
- * In quale colonna della board Conferme sta un appuntamento (PO 24/10/2026).
+ * In quale colonna della board Conferme sta un appuntamento (PO 24/10/2026,
+ * esteso al pomeriggio il 07/11/2026).
  *
  * Dal 27/10 le Conferme attaccano alle 9 e le call del mattino si chiamano la
  * mattina stessa. Quindi:
  * - "Oggi": tutti gli appuntamenti di oggi dalle 9 alle 21;
- * - "Domani mattina": gli appuntamenti 9-14 del prossimo giorno lavorativo, ma
+ * - "Domani" (era "Domani mattina", 9-14; dal 07/11 9-21, vedi sotto): gli
+ *   appuntamenti del prossimo giorno lavorativo, ma
  *   solo quelli fissati (o spostati) PRIMA di oggi. Ricevono una prima chiamata
  *   il giorno prima: se il lead conferma è finita, se è NR sparisce da oggi e la
  *   seconda chiamata la fa la mattina stessa. Chi è stato fissato oggi per
@@ -12,6 +14,15 @@
  *
  * Eccezione: le 9 di domani si chiamano sempre oggi, perché alle 9 le Conferme
  * attaccano e non farebbero in tempo a chiamare prima della call.
+ *
+ * Dal 07/11/2026 (PO) vale lo stesso per il pomeriggio (dalle 15): una call
+ * fissata almeno due giorni prima riceve la 1ª chiamata il giorno lavorativo
+ * precedente e le altre due il giorno stesso; una call fissata il giorno prima
+ * (o il giorno stesso) prende tutte e tre le chiamate il giorno stesso. La
+ * colonna "Domani" copre quindi tutto il giorno dopo, 9-21, con un'unica regola.
+ * La data di presa è la più recente fra creazione e spostamento: dopo uno
+ * spostamento la data che il lead ha in testa è quella nuova, ed è dal giorno
+ * dello spostamento che si misura l'anticipo.
  *
  * Pura: niente DB, `now` arriva da fuori. Tutto in ora di Roma.
  */
@@ -31,7 +42,7 @@ export type BoardColumn = 'oggi' | 'domani' | null;
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 export const OGGI_ORE: readonly number[] = range(9, 21);
-export const DOMANI_ORE: readonly number[] = range(9, 14);
+export const DOMANI_ORE: readonly number[] = range(9, 21);
 
 /** L'ora che legge un italiano (0-23). */
 function romeHour(at: Date): number {
@@ -47,6 +58,34 @@ export function nextWorkDayRome(now: Date): string {
     return next.toISOString().slice(0, 10);
 }
 
+/** Giorno lavorativo prima di `day` ('YYYY-MM-DD' di Roma): prima del lunedì c'è il sabato. */
+export function previousWorkDayRome(day: string): string {
+    const [y, m, d] = day.split('-').map(Number);
+    const prev = new Date(Date.UTC(y, m - 1, d - 1, 12));
+    if (prev.getUTCDay() === 0) prev.setUTCDate(prev.getUTCDate() - 1);
+    return prev.toISOString().slice(0, 10);
+}
+
+/**
+ * La 1ª chiamata delle Conferme si fa il giorno lavorativo prima della call?
+ * Sì se la call è stata presa (o spostata, conta la più recente) prima di quel
+ * giorno. Le 9 sempre: la mattina stessa non si fa in tempo. Senza date di
+ * fissaggio (righe vecchie) sì: meglio una chiamata in più che una in meno.
+ */
+export function primaChiamataIlGiornoPrima(
+    appointmentDate: Date,
+    fissaggi: (Date | null | undefined)[],
+): boolean {
+    const appt = new Date(appointmentDate);
+    const ora = romeHour(appt);
+    if (!DOMANI_ORE.includes(ora)) return false;
+    if (ora === 9) return true;
+    const presi = fissaggi.filter((d): d is Date => !!d).map(d => new Date(d).getTime());
+    if (presi.length === 0) return true;
+    const giornoPrima = previousWorkDayRome(toRomeDateStr(appt));
+    return toRomeDateStr(new Date(Math.max(...presi))) < giornoPrima;
+}
+
 export function confermeBoardColumn(lead: BoardLeadInput, now: Date): BoardColumn {
     if (!lead.appointmentDate) return null;
     const appt = new Date(lead.appointmentDate);
@@ -59,20 +98,14 @@ export function confermeBoardColumn(lead: BoardLeadInput, now: Date): BoardColum
 
     if (giorno !== nextWorkDayRome(now) || !DOMANI_ORE.includes(ora)) return null;
 
+    // Fatta la 1ª chiamata oggi (risposto o NR), sparisce da "Domani": le altre
+    // due si fanno il giorno della call, nella colonna "Oggi".
     const { start: inizioOggi } = dayBoundsRome(now);
-    const nrOggi = [lead.confCall1At, lead.confCall2At, lead.confCall3At]
+    const chiamatoOggi = [lead.confCall1At, lead.confCall2At, lead.confCall3At]
         .some(d => d && new Date(d).getTime() >= inizioOggi.getTime());
-    if (nrOggi) return null;
+    if (chiamatoOggi) return null;
 
-    if (ora === 9) return 'domani';
-
-    // Un lead senza date di fissaggio (righe vecchie) passa: meglio una chiamata
-    // in più che una call del mattino che nessuno sente il giorno prima.
-    const fissaggi = [lead.appointmentCreatedAt, lead.appointmentMovedAt]
-        .filter((d): d is Date => !!d)
-        .map(d => new Date(d).getTime());
-    if (fissaggi.length === 0) return 'domani';
-    return Math.max(...fissaggi) < inizioOggi.getTime() ? 'domani' : null;
+    return primaChiamataIlGiornoPrima(appt, [lead.appointmentCreatedAt, lead.appointmentMovedAt]) ? 'domani' : null;
 }
 
 /**

@@ -101,7 +101,7 @@ test('vergini del giorno: solo i 3 nati oggi, come li vede la board del GDO', ()
     }
 })
 
-test('appuntamenti: fissati ieri, da confermare, visibili oggi sulla board delle Conferme', () => {
+test('appuntamenti: fissati prima di oggi, da confermare, visibili oggi sulla board delle Conferme', () => {
     for (const now of [LUNEDI, DOMENICA_SERA, SABATO_MATTINA]) {
         const inizio = dayBoundsRome(now).start
         const app = pianoLeadDiProva(now).filter(l => l.tipo === 'appuntamento')

@@ -107,7 +107,9 @@ function alle(giorno: string, hhmm: string): Date {
  * (src/lib/conferme/boardWindow.ts): il primo oggi fra un paio d'ore se
  * resta dentro le 9-21, altrimenti la mattina del prossimo giorno
  * lavorativo; il secondo sempre la mattina del prossimo giorno lavorativo.
- * Entrambi fissati ieri sera, così la colonna "Domani mattina" li accetta.
+ * Entrambi fissati l'altro ieri sera, così la colonna "Domani" li accetta
+ * anche aprendo la board di domenica (il giorno prima del lunedì è il sabato:
+ * fissati sabato, per la regola del 07/11 prenderebbero le 3 chiamate lunedì).
  */
 export function orariAppuntamenti(now: Date): { primo: Date; secondo: Date; fissatiIl: Date } {
     const domani = nextWorkDayRome(now)
@@ -118,7 +120,7 @@ export function orariAppuntamenti(now: Date): { primo: Date; secondo: Date; fiss
     return {
         primo,
         secondo: alle(domani, '11:00'),
-        fissatiIl: romeTimeOnDay(new Date(now.getTime() - GIORNO), '18:30'),
+        fissatiIl: romeTimeOnDay(new Date(now.getTime() - 2 * GIORNO), '18:30'),
     }
 }
 
@@ -194,7 +196,7 @@ export function pianoLeadDiProva(now: Date): LeadProva[] {
                 const fissato = new Date(app.fissatiIl.getTime() + (i - 23) * 15 * 60_000)
                 const nota = 'Interessato, appuntamento da confermare (prova)'
                 return {
-                    ...base, ...vuoto, status: 'APPOINTMENT', callCount: 1, createdAt: fa(2 * GIORNO),
+                    ...base, ...vuoto, status: 'APPOINTMENT', callCount: 1, createdAt: fa(3 * GIORNO),
                     lastCallDate: fissato, lastCallNote: nota,
                     appointmentDate: quando, appointmentNote: nota, appointmentCreatedAt: fissato,
                     chiamate: [{ outcome: 'APPUNTAMENTO', at: fissato, note: nota }],

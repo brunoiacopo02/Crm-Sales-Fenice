@@ -181,8 +181,8 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                 })
                 setKanbanData({ flatList: data.flatList, daDefinire: data.daDefinire })
 
-                // Oggi / Domani mattina: la regola sta in src/lib/conferme/boardWindow.ts
-                // (PO 24/10/2026), la stessa che il server ha già applicato. Qui
+                // Oggi / Domani: la regola sta in src/lib/conferme/boardWindow.ts
+                // (PO 24/10/2026, pomeriggio dal 07/11), la stessa che il server ha già applicato. Qui
                 // smista solo nelle due colonne; le ore sono uguali tutti i giorni.
                 const now = new Date();
                 setOggiLeads(data.flatList.filter(l => confermeBoardColumn(l.lead, now) === 'oggi'));
@@ -812,8 +812,8 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                     <button role="tab" aria-selected={viewMode === 'oggi'} onClick={() => setViewMode('oggi')} className={dTab(viewMode === 'oggi')}>
                         Oggi <span className={viewMode === 'oggi' ? '' : 'text-[var(--d-faint)]'}>{oggiLeads.length}</span>
                     </button>
-                    <button role="tab" aria-selected={viewMode === 'domani'} onClick={() => setViewMode('domani')} className={dTab(viewMode === 'domani')}>
-                        Domani mattina <span className={viewMode === 'domani' ? '' : 'text-[var(--d-faint)]'}>{domaniLeads.length}</span>
+                    <button role="tab" aria-selected={viewMode === 'domani'} onClick={() => setViewMode('domani')} className={dTab(viewMode === 'domani')} title="Call di domani fissate prima di oggi: qui si fa la 1ª chiamata, le altre due domani in Oggi">
+                        Domani · 1ª chiamata <span className={viewMode === 'domani' ? '' : 'text-[var(--d-faint)]'}>{domaniLeads.length}</span>
                     </button>
                     <button role="tab" aria-selected={viewMode === 'da_definire'} onClick={() => setViewMode('da_definire')} className={dTab(viewMode === 'da_definire')}>
                         Richiami <span className={viewMode === 'da_definire' ? '' : 'text-[var(--d-faint)]'}>{kanbanData.daDefinire.length}</span>
@@ -886,9 +886,10 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                     </button>
                     <button
                         onClick={() => setViewMode('domani')}
-                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[200px] ${viewMode === 'domani' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
+                        title="Call di domani fissate prima di oggi: qui si fa la 1ª chiamata, le altre due domani in Oggi"
+                        className={`py-2.5 px-5 rounded-lg font-bold text-[13px] uppercase tracking-wide transition-all duration-200 flex items-center justify-center gap-2 max-w-[260px] ${viewMode === 'domani' ? 'bg-white text-ash-800 shadow-card border border-ash-200/60' : 'text-ash-500 hover:text-ash-700 hover:bg-white/50'}`}
                     >
-                        <Sunrise className="w-4 h-4" /> Domani mattina <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'domani' ? 'bg-gold-400 text-white' : 'bg-ash-300/60 text-ash-600'}`}>{domaniLeads.length}</span>
+                        <Sunrise className="w-4 h-4" /> Domani · 1ª chiamata <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold ${viewMode === 'domani' ? 'bg-gold-400 text-white' : 'bg-ash-300/60 text-ash-600'}`}>{domaniLeads.length}</span>
                     </button>
                     <button
                         onClick={() => setViewMode('da_definire')}
