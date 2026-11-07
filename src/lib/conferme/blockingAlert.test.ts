@@ -132,6 +132,20 @@ test('un avviso già visibile non ha bisogno di sveglie future', () => {
     assert.equal(res.nextWakeAt, null);
 });
 
+test('verifica presenza: passa davanti a un richiamo scaduto prima', () => {
+    const res = select([
+        candidate({ id: 'r', dueAt: minutiFa(60) }),
+        candidate({ id: 'v', kind: 'verifica', dueAt: minutiFa(1) }),
+    ]);
+    assert.equal(res.alert?.id, 'v');
+    assert.equal(res.queueTotal, 2);
+});
+
+test('verifica presenza: snooze e claim valgono come per i richiami', () => {
+    assert.equal(select([candidate({ id: 'v', kind: 'verifica', alertSnoozedUntil: minutiTra(1) })]).alert, null);
+    assert.equal(select([candidate({ id: 'v', kind: 'verifica', claimedById: ALTRA, claimedAt: minutiFa(1) })]).alert, null);
+});
+
 test('lo snooze dura due minuti', () => {
     assert.equal(SNOOZE_MS, 2 * 60_000);
 });

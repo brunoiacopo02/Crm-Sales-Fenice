@@ -28,6 +28,8 @@ import {
     type AlertCandidate,
     type AlertKind,
 } from "@/lib/conferme/blockingAlert"
+import { caricaCoorteVerifica } from "@/lib/conferme/verificaBotDb"
+import { verificaBlocca, motivoDaChiamare, statoVerifica } from "@/lib/conferme/verificaBot"
 
 export type BlockingAlertPayload = {
     alert: {
@@ -39,6 +41,8 @@ export type BlockingAlertPayload = {
         dueAt: string
         notes: string | null
         claimedByMe: boolean
+        /** Solo kind 'verifica': l'ora della call. */
+        apptAt: string | null
     } | null
     queueTotal: number
     /** ISO dell'istante in cui il client deve ricontrollare da solo. */
@@ -137,6 +141,37 @@ export async function getConfermeBlockingAlert(): Promise<BlockingAlertPayload> 
         }
     })
 
+    // "App da verificare" (PO 07/11/2026): confermati il giorno prima che non hanno
+    // confermato col bot un'ora prima della call. Lo stato "gestita" sta su una colonna
+    // sua; snooze e claim riusano le confAlert*, libere su un lead confermato.
+    const verifiche = await caricaCoorteVerifica(ctx.allowedCompanies, ctx.userId, now)
+    const wakeVerifiche: number[] = []
+    for (const v of verifiche) {
+        const dueAt = verificaBlocca(v, now)
+        if (!dueAt) {
+            // Ancora nei 30 minuti: sveglia al secondo in cui scadono.
+            const s = statoVerifica(v, now)
+            if (s.stato === 'in_attesa' && s.dueAt) wakeVerifiche.push(s.dueAt.getTime())
+            continue
+        }
+        candidates.push({
+            id: v.id,
+            name: v.name,
+            phone: v.phone,
+            companyId: v.companyId,
+            kind: 'verifica',
+            dueAt,
+            notes: [motivoDaChiamare(v.botVerificaEsito), v.botVerificaRisposta ? `"${v.botVerificaRisposta}"` : null]
+                .filter(Boolean).join(': '),
+            alertSnoozedUntil: v.alertSnoozedUntil,
+            claimedById: v.claimedById,
+            claimedAt: v.claimedAt,
+            // "Gestita" è già dentro verificaBlocca.
+            handledAt: null,
+            apptAt: v.appointmentDate,
+        })
+    }
+
     const res = selectBlockingAlert(candidates, { now, userId: ctx.userId })
 
     return {
@@ -149,9 +184,14 @@ export async function getConfermeBlockingAlert(): Promise<BlockingAlertPayload> 
             dueAt: res.alert.dueAt.toISOString(),
             notes: res.alert.notes,
             claimedByMe: res.alert.claimedById === ctx.userId,
+            apptAt: res.alert.apptAt ? res.alert.apptAt.toISOString() : null,
         } : null,
         queueTotal: res.queueTotal,
-        nextWakeAt: res.nextWakeAt ? res.nextWakeAt.toISOString() : null,
+        nextWakeAt: (() => {
+            if (res.alert) return null
+            const t = [...(res.nextWakeAt ? [res.nextWakeAt.getTime()] : []), ...wakeVerifiche]
+            return t.length ? new Date(Math.min(...t)).toISOString() : null
+        })(),
     }
 }
 

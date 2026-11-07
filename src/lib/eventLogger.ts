@@ -29,6 +29,8 @@ type LogEventParams = {
         | 'LANCIO_INTAKE' | 'LANCIO_CALL_NOW_ASSIGNED' | 'LANCIO_BOOKED' | 'LANCIO_RETURNED_TO_POOL' | 'LANCIO_SHIFT_CHANGED'
         // Mario vocale di Federico (webhook agenda, 06/10/2026).
         | 'MARIO_VOCALE_APPUNTAMENTO' | 'MARIO_VOCALE_IGNORATO'
+        // App da verificare (PO 07/11/2026): verifica presenza del bot un'ora prima.
+        | 'BOT_VERIFICA_INVIATA' | 'BOT_VERIFICA_RISPOSTA' | 'VERIFICA_GESTITA' | 'VERIFICA_SPARITO'
     userId?: string | null
     fromSection?: SectionName | null
     toSection?: SectionName | null

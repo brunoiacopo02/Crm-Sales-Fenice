@@ -5,6 +5,7 @@ import { StreakCounter } from "@/components/StreakCounter"
 import { SafeWrapper } from "@/components/SafeWrapper"
 import { VenditoriAgendaButton } from "@/components/VenditoriAgendaButton"
 import { ConfermeDirettaColumn } from "@/components/conferme/diretta/ConfermeDirettaColumn"
+import { AppDaVerificarePanel } from "@/components/conferme/AppDaVerificarePanel"
 import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 import { isDirettaOn } from "@/lib/diretta/settings"
@@ -49,6 +50,8 @@ export default async function ConfermePage() {
                     <div className="min-w-0 flex-[999_1_560px] px-4 pt-2 sm:px-8">
                         {/* Citazione del giorno e consiglio di vendita, in cima alla board */}
                         <SafeWrapper><DailyQuoteSlotServer role="CONFERME" className="mb-2 mt-4" /></SafeWrapper>
+                        {/* App da verificare (PO 07/11/2026): sparisce quando non c'è nessuno */}
+                        <SafeWrapper><AppDaVerificarePanel variant="diretta" /></SafeWrapper>
                         <SafeWrapper><ConfermeBoardDiretta currentUser={session.user} variant="diretta" /></SafeWrapper>
                     </div>
                 </div>
@@ -88,6 +91,9 @@ export default async function ConfermePage() {
                     <SafeWrapper><StreakAnxietyBanner userId={session.user.id} /></SafeWrapper>
                 </>
             )}
+
+            {/* App da verificare (PO 07/11/2026): sparisce quando non c'è nessuno */}
+            <SafeWrapper><AppDaVerificarePanel /></SafeWrapper>
 
             <SafeWrapper>
                 <HotStreak>

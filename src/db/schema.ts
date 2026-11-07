@@ -275,6 +275,19 @@ export const leads = pgTable('leads', {
     confAlertClaimedAt: timestamp('confAlertClaimedAt', { withTimezone: true, mode: 'date' }),
     confAlertHandledAt: timestamp('confAlertHandledAt', { withTimezone: true, mode: 'date' }),
 
+    // "App da verificare" (migr. 0060, PO 07/11/2026): un'ora prima della call il bot
+    // chiede la conferma della presenza ai lead confermati dalle Conferme il giorno
+    // prima (POST /api/bot/verifica-presenza). Regole in src/lib/conferme/verificaBot.ts.
+    // Come le confAlert*: nessuna scrittura tocca `version` o `updatedAt`.
+    botVerificaApptAt: timestamp('botVerificaApptAt', { withTimezone: true, mode: 'date' }),
+    botVerificaSentAt: timestamp('botVerificaSentAt', { withTimezone: true, mode: 'date' }),
+    botVerificaEsito: text('botVerificaEsito'), // 'in_attesa' | 'confermato' | 'non_conferma' | 'risposta'
+    botVerificaEsitoAt: timestamp('botVerificaEsitoAt', { withTimezone: true, mode: 'date' }),
+    botVerificaRisposta: text('botVerificaRisposta'),
+    botVerificaGestitaAt: timestamp('botVerificaGestitaAt', { withTimezone: true, mode: 'date' }),
+    botVerificaSparitoAt: timestamp('botVerificaSparitoAt', { withTimezone: true, mode: 'date' }),
+    botVerificaSparitoById: text('botVerificaSparitoById'),
+
     // Report strutturato scritto dal bot fissatore al momento dell'esito.
     // Forma attesa: { summary, painPoints[], budgetSignal, urgency, objections[], levaConsigliata }.
     // Renderizzato come card "🤖 Report Bot" nel ConfermeDrawer. Nullable: solo i lead bot lo hanno.

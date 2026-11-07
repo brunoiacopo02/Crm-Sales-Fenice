@@ -1,7 +1,14 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.12 — 2026-10-31. Cosa cambia rispetto alla 1.11: campo `motivo` nella
+> **Versione:** 1.13 — 2026-11-07. Cosa cambia rispetto alla 1.12: **nuova Direzione 7**,
+> `POST /api/bot/verifica-presenza` (Bot → CRM). Un'ora prima della call il bot chiede la
+> conferma della presenza ai lead confermati dalle Conferme il giorno prima e avvisa il
+> CRM dell'invio e della risposta; il CRM li mostra nella sezione "App da verificare" e
+> blocca lo schermo delle Conferme sui lead da chiamare. Solo aggiunta: nessun payload
+> esistente cambia. Vedi [Direzione 7](#direzione-7--bot--crm-verifica-presenza-unora-prima--nuovo-in-v113).
+>
+> **Versione precedente:** 1.12 — 2026-10-31. Cosa cambiava rispetto alla 1.11: campo `motivo` nella
 > risposta di `/api/send-agenda` (Direzione 3), solo su `fallito`. Oggi un valore,
 > `"numero_senza_whatsapp"` (Twilio 63024): il CRM dice al GDO di chiedere al lead un numero
 > su cui ha WhatsApp invece di farlo ritentare a vuoto. Solo aggiunta, assente = come prima.
@@ -89,8 +96,9 @@
 7. [Direzione 4 — CRM → Bot (data dell'appuntamento)](#direzione-4--crm--bot-data-dellappuntamento)
 8. [Direzione 5 — Bot → CRM (cosa succede dopo l'appuntamento)](#direzione-5--bot--crm-cosa-succede-dopo-lappuntamento--nuovo-in-v15)
 9. [Direzione 6 — Bot → CRM (prenotazione lancio: slot, prenotazione, chiamata subito)](#direzione-6--bot--crm-prenotazione-lancio-slot-prenotazione-chiamata-subito--nuovo-in-v17)
-10. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
-11. [Limitazioni note](#limitazioni-note)
+10. [Direzione 7 — Bot → CRM (verifica presenza un'ora prima)](#direzione-7--bot--crm-verifica-presenza-unora-prima--nuovo-in-v113)
+11. [Codici di risposta `/api/bot/outcome`](#codici-di-risposta-apibotoutcome)
+12. [Limitazioni note](#limitazioni-note)
 
 ---
 
@@ -1071,6 +1079,60 @@ arrotondato al minuto. Stessa validazione di `info`/`note` di `/book`.
   `deal.assigned`). **Nessun evento Google Calendar** (è adesso, non domani).
   Risposta `{ ok:true, venditore:{id,nome} }`.
 - Scrittura concorrente → `409 { ok:false, motivo:'conflitto' }`.
+
+---
+
+## Direzione 7 — Bot → CRM (verifica presenza un'ora prima) — nuovo in v1.13
+
+Decisione PO del 07/11/2026. Dal 07/11 le Conferme fanno la 1ª chiamata il giorno
+lavorativo prima della call: chi conferma il giorno prima rischia di sparire più di chi
+conferma la mattina stessa. Un'ora prima della call il bot gli scrive e chiede di
+confermare la presenza.
+
+**Coorte** (stessa regola sui due lati: bot `lib/verifica-presenza.ts`, CRM
+`src/lib/conferme/verificaBot.ts`): nel feed della Direzione 5 `confermeOutcome =
+"confermato"` e `confermeOutcomeAt` cade in un giorno di Roma **precedente** al giorno di
+`appointmentDate`. La data della call è quella del CRM.
+
+**Quando e da dove**: da `max(T−60 min, 08:30 di Roma)` a `T−45 min` (cron ogni 5 minuti,
+mai fuori fascia 08:30-20:30). Una call alle 9:00 non riceve la verifica. Sempre dal numero
+della chat (`conversations.wa_number`: quello da cui è partita l'agenda o a cui il lead ha
+scritto). Finestra 24h aperta su quel numero → testo libero, altrimenti template UTILITY
+`fenice_verifica_presenza_v1` (bottone "Sì, ci sarò"). Una sola verifica per chat e data
+della call (tabella `verifiche_presenza`, vincolo UNIQUE preso prima dell'invio). Sui lead
+che la ricevono il T−3h del bot tace. Interruttore lato bot `VERIFICA_1H_ENABLED=1`, SID in
+`VERIFICA_1H_TEMPLATE_SID`.
+
+```
+POST https://crm-sales-fenice.vercel.app/api/bot/verifica-presenza
+x-bot-signature: sha256=<hex(HMAC-SHA256(rawBody, BOT_WEBHOOK_SECRET))>
+
+{ "evento": "inviata", "leadId": "...", "appuntamentoAt": "2026-11-09T15:00:00.000Z",
+  "at": "2026-11-09T14:00:12.000Z", "canale": "template" }
+
+{ "evento": "risposta", "leadId": "...", "appuntamentoAt": "2026-11-09T15:00:00.000Z",
+  "at": "2026-11-09T14:07:40.000Z", "esito": "confermato", "testo": "Sì, ci sarò" }
+```
+
+`esito` della risposta: `confermato` (sì / ci sarò / ok), `non_conferma` (non può,
+vuole spostare o annullare: la chat la gestiscono i flussi di sempre — nota DISDETTA,
+`DISDETTA_VERIFICATA`, `SPOSTAMENTO`), `risposta` (altro, da leggere). Un sì successivo a
+una `risposta` o a una `non_conferma` riporta a `confermato`; una `non_conferma` dopo un sì
+la riapre. **"Nessuna risposta" non si manda**: il CRM la calcola da `at` dell'invio
+(+30 minuti).
+
+Lato CRM: colonne `leads.botVerifica*` (migr. 0060), sezione "App da verificare" nella
+board Conferme, avviso bloccante (kind `verifica`) sui lead da chiamare, pulsante
+"Sparito" che avvisa il venditore assegnato (avviso a schermo + campanella).
+
+| HTTP | Significato |
+|---|---|
+| `200 { ok: true, updated: true }` | stato scritto |
+| `200 { ok: true, ignored: true, motivo }` | `appuntamento_cambiato`, `fuori_coorte`, `gia_inviata`, `verifica_non_inviata`, `stesso_esito`: nessuna azione, un retry non è mai un problema |
+| `400` | `leadId`, `evento` o `appuntamentoAt` mancanti/non validi; `esito` mancante su `risposta` |
+| `401` | firma non valida |
+| `403` | lead non Fenice |
+| `404` | lead inesistente |
 
 ---
 

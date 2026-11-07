@@ -13,9 +13,13 @@
  *  - `snooze`       → "risentire dopo" in giornata, su `leads.confSnoozeAt`;
  *  - `parcheggiato` → il badge blu, su `leads.recallDate` + `confNeedsReschedule`,
  *                     con l'appuntamento tolto in attesa di essere rifissato.
+ *  - `verifica`     → "App da verificare" (PO 07/11/2026): confermato il giorno prima,
+ *                     non ha confermato col bot un'ora prima della call
+ *                     (src/lib/conferme/verificaBot.ts). Passa davanti ai richiami: la
+ *                     call è fra meno di un'ora.
  */
 
-export type AlertKind = 'snooze' | 'parcheggiato'
+export type AlertKind = 'snooze' | 'parcheggiato' | 'verifica'
 
 export type AlertCandidate = {
     id: string
@@ -34,6 +38,8 @@ export type AlertCandidate = {
     claimedAt: Date | null
     /** Qualcuno ha aperto la scheda: spento per tutti. */
     handledAt: Date | null
+    /** Solo `verifica`: l'ora della call. */
+    apptAt?: Date | null
 }
 
 /** Un claim non gestito decade dopo 10 minuti e il richiamo torna a tutti. */
@@ -71,7 +77,9 @@ export function selectBlockingAlert(
     const visible: AlertCandidate[] = []
     const wakeUps: number[] = []
 
-    const ordered = [...rows].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())
+    // Le verifiche prima di tutto (la call è vicina), poi per scadenza.
+    const prima = (r: AlertCandidate) => (r.kind === 'verifica' ? 0 : 1)
+    const ordered = [...rows].sort((a, b) => prima(a) - prima(b) || a.dueAt.getTime() - b.dueAt.getTime())
 
     for (const row of ordered) {
         const dueMs = row.dueAt.getTime()

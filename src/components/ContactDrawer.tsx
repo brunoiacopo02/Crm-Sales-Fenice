@@ -292,6 +292,11 @@ export function ContactDrawer({
             case 'SALES_SELF_BOOKED': return '🎯 Appuntamento fissato dal venditore'
             case 'SALES_PIPELINE_ASSIGNED': return '➡️ Passato alla pipeline del venditore'
             case 'MARKETING_QUEUE': return '📈 Nella coda del giorno del marketing'
+            // App da verificare (PO 07/11/2026).
+            case 'BOT_VERIFICA_INVIATA': return '🤖 Il bot ha chiesto di confermare la presenza'
+            case 'BOT_VERIFICA_RISPOSTA': return '💬 Risposta alla verifica presenza'
+            case 'VERIFICA_GESTITA': return 'Verifica presenza presa in carico dalle Conferme'
+            case 'VERIFICA_SPARITO': return '👻 Segnato sparito dalle Conferme'
             default: return 'Evento Sconosciuto'
         }
     }

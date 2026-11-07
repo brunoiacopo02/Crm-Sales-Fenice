@@ -21,7 +21,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlarmClock, Phone, Hand, Timer } from "lucide-react"
+import { AlarmClock, Phone, Hand, Timer, UserX } from "lucide-react"
+import { segnaVerificaGestita, segnaVerificaSparito } from "@/app/actions/verificaBotActions"
 import {
     getConfermeBlockingAlert,
     snoozeConfermeAlert,
@@ -57,6 +58,11 @@ function quando(dueAt: string): string {
         weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
         timeZone: 'Europe/Rome',
     }).format(new Date(dueAt))
+}
+
+/** "16:00": ora della call, per l'avviso della verifica presenza. */
+function oraCall(iso: string): string {
+    return new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(new Date(iso))
 }
 
 /** Nome dell'azienda per la grafica Diretta, senza maiuscolo spaziato. */
@@ -134,8 +140,19 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
         }
     }
 
+    const verifica = alert.kind === 'verifica'
+    const etichetta = verifica
+        ? `Non ha confermato col bot${alert.apptAt ? `, call alle ${oraCall(alert.apptAt)}` : ''}`
+        : alert.kind === 'parcheggiato' ? 'Richiamo programmato' : 'Richiamo da fare'
+
+    const sparito = () => act(async () => {
+        const r = await segnaVerificaSparito(alert.id)
+        if (!r.ok) window.alert(r.error || "Non sono riuscito a segnarlo come sparito. Riprova.")
+    })
+
     const apriLead = () => act(async () => {
-        await markConfermeAlertHandled(alert.id)
+        if (verifica) await segnaVerificaGestita(alert.id)
+        else await markConfermeAlertHandled(alert.id)
         if (isOtherCompany) {
             await fetch('/api/company/select', {
                 method: 'POST',
@@ -161,7 +178,7 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
                     <AlarmClock className="mx-auto h-12 w-12 text-[var(--d-orange)]" strokeWidth={1.5} />
 
                     <div className="mt-5 text-sm font-medium text-[var(--d-orange)]">
-                        {alert.kind === 'parcheggiato' ? 'Richiamo programmato' : 'Richiamo da fare'}, {ritardo(alert.dueAt)}
+                        {etichetta}, {verifica ? `da chiamare ${ritardo(alert.dueAt)}` : ritardo(alert.dueAt)}
                     </div>
                     {data && data.queueTotal > 1 && (
                         <div className="mt-1 text-sm text-[var(--d-muted)]">1 di {data.queueTotal} in coda</div>
@@ -233,6 +250,18 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
                                 Snooze 2 min
                             </button>
                         </div>
+
+                        {verifica && (
+                            <button
+                                type="button"
+                                disabled={busy}
+                                onClick={sparito}
+                                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border-2 border-[var(--d-line)] px-4 text-sm font-medium text-[var(--d-text)] transition-colors hover:bg-[var(--d-surface-2)] disabled:opacity-60"
+                            >
+                                <UserX className="h-4 w-4" strokeWidth={1.75} />
+                                Sparito: avvisa il venditore
+                            </button>
+                        )}
                     </div>
 
                     <p className="mt-5 text-xs text-[var(--d-faint)]">
@@ -260,7 +289,7 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
                         {chip.label}
                     </span>
                     <span className="text-xs font-bold uppercase tracking-widest text-red-300">
-                        {alert.kind === 'parcheggiato' ? 'Richiamo programmato' : 'Richiamo da fare'} · {ritardo(alert.dueAt)}
+                        {etichetta} · {verifica ? `da chiamare ${ritardo(alert.dueAt)}` : ritardo(alert.dueAt)}
                     </span>
                     {data && data.queueTotal > 1 && (
                         <span className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] font-bold text-white/70">
@@ -335,6 +364,18 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
                             Snooze 2 min
                         </button>
                     </div>
+
+                    {verifica && (
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={sparito}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 transition hover:bg-red-500/20 disabled:opacity-60"
+                        >
+                            <UserX className="h-4 w-4" />
+                            Sparito: avvisa il venditore
+                        </button>
+                    )}
                 </div>
 
                 <p className="mt-5 text-xs text-white/40">
