@@ -61,6 +61,8 @@ import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 // UTM: id dei custom field e lettura, condivisi col sync di recupero del lancio
 // (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
+// Lead delle inserzioni Black Friday (PO 07/11/2026): funnel BLACK FRIDAY e solo al bot.
+import { isLeadBlackFridayAc, BLACK_FRIDAY_FUNNEL, BLACK_FRIDAY_LIST_NAME_NORMALIZED } from "@/lib/acIntake/blackFriday";
 // Pipeline autonoma del venditore: dirotta i primi N lead freschi. Tocca SOLO
 // l'intake normale qui sotto, mai il ramo del lancio (handleLancioIntake).
 import { decideDiversion } from "@/lib/salesPipeline/feeding";
@@ -836,7 +838,15 @@ export async function POST(req: NextRequest) {
 
             // Aggiorno il funnel SOLO se il CRM ha 'SCONOSCIUTO' e ora AC ha un valore reale.
             // Non sovrascrivo un funnel già valido (il manager potrebbe averlo editato).
-            if (provenienza && existing.funnel === DEFAULT_FUNNEL) {
+            // Black Friday (PO 07/11/2026): la campagna vince sulla Provenienza, che
+            // per questi lead AC la scrive sbagliata o non la scrive.
+            const updBlackFriday = existing.funnel === DEFAULT_FUNNEL && isLeadBlackFridayAc({
+                provenienza, utmCampaign, utmContent, utmTerm,
+            });
+            if (updBlackFriday) {
+                updatePayload.funnel = BLACK_FRIDAY_FUNNEL;
+                changes.push(`funnel → ${BLACK_FRIDAY_FUNNEL}`);
+            } else if (provenienza && existing.funnel === DEFAULT_FUNNEL) {
                 updatePayload.funnel = provenienza.toUpperCase();
                 changes.push(`funnel → ${provenienza.toUpperCase()}`);
             }
@@ -911,6 +921,24 @@ export async function POST(req: NextRequest) {
         const utmContent = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent);
         const utmTerm = readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm);
 
+        // Lead Black Friday (PO 07/11/2026): dalle inserzioni Meta della campagna
+        // Black Friday o dalla lista AC "Black Friday 2026". Funnel BLACK FRIDAY
+        // qualunque sia la Provenienza (i primi due sono entrati come TELEGRAM e
+        // SCONOSCIUTO) e SOLO al bot: mai ai GDO, mai alla pipeline del venditore.
+        // La lista si legge dalla cache dei nomi (una chiamata /lists ogni 10 min);
+        // le membership del contatto sono gia' state lette dal filtro delle liste
+        // bloccate qui sopra.
+        let blackFridayListIds: ReadonlySet<string> | null = null;
+        try {
+            blackFridayListIds = (await getListIdsByName()).get(BLACK_FRIDAY_LIST_NAME_NORMALIZED) ?? null;
+        } catch { /* la campagna utm basta da sola */ }
+        const isBlackFriday = isLeadBlackFridayAc({
+            provenienza, utmCampaign, utmContent, utmTerm,
+            blackFridayListIds,
+            triggerListId: triggerListId ? String(triggerListId) : null,
+            activeListIds,
+        });
+
         // Telefono: bloccante SOLO se totalmente assente. Se è troppo corto
         // o formato strano, importo comunque il lead preservando le cifre
         // ricevute e aggiungo un warning nella nota del lead.
@@ -948,7 +976,7 @@ export async function POST(req: NextRequest) {
         }
         const phoneSuspicious = !isPlausiblePhone(phoneStrict);
 
-        const funnel = provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
+        const funnel = isBlackFriday ? BLACK_FRIDAY_FUNNEL : provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
         const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
         const newLeadId = crypto.randomUUID();
         const now = new Date();
@@ -1290,7 +1318,7 @@ export async function POST(req: NextRequest) {
             // l'unica strada per cui un iscritto al webinar del 5/10 potrebbe
             // finire al venditore.
             let divertedTo: string | null = null;
-            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId && funnel !== LANCIO_FUNNEL) {
+            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId && funnel !== LANCIO_FUNNEL && !isBlackFriday) {
                 // Il tetto e' GIORNALIERO (chiarito dal PO 2026-09-21: "5 lead
                 // nuovi oggi... il limite giornaliero e' quello"), non un totale
                 // da sempre — con un tetto totale, dopo i primi N non sarebbe
@@ -1404,7 +1432,17 @@ export async function POST(req: NextRequest) {
             let eligible: { id: string; isBot: boolean }[] = [];
             let fallbackUsed = false;
             if (!divertedTo) {
-                if (routing === 'bot_tetto') {
+                if (isBlackFriday) {
+                    // Black Friday (PO 07/11/2026): solo il bot, a qualunque ora e
+                    // giorno, fuori dal tetto giornaliero e dalla riserva serale dei
+                    // GDO. Il tetto esiste per mandare l'ECCEDENZA ai GDO, e questi
+                    // lead ai GDO non devono andare: applicarlo vorrebbe dire
+                    // consegnarglieli appena il bot e' pieno. Il volume del numero
+                    // WhatsApp lo governano comunque i tetti per numero del bot. Senza
+                    // bot attivo il lead va nei fallimenti recuperabili (no_gdo),
+                    // non a un umano.
+                    eligible = await selectBotPool(false);
+                } else if (routing === 'bot_tetto') {
                     // Bot finché è sotto il tetto di oggi, poi i GDO col giro
                     // pareggiato della regola "solo GDO". Nessun ripiego sul bot
                     // oltre il tetto: senza GDO il lead va nei fallimenti
@@ -1625,7 +1663,7 @@ export async function POST(req: NextRequest) {
                 // Su un lead dirottato la fascia era stata calcolata ma non
                 // seguita (il giro dei pool non si fa nemmeno): scriverla
                 // racconterebbe una regola che non ha deciso niente.
-                routing: txResult.divertedToSales ? 'sales_pipeline' : txResult.routing,
+                routing: txResult.divertedToSales ? 'sales_pipeline' : isBlackFriday ? 'black_friday_bot' : txResult.routing,
                 ...(txResult.fallbackUsed ? { routingFallback: true } : {}),
                 ...(txResult.holidayWindow ? { botHolidayWindow: true } : {}),
                 ...(txResult.routing === 'bot_tetto' && tettoBotInfo ? { tettoBot: tettoBotInfo.valore, tettoBotFonte: tettoBotInfo.fonte } : {}),

@@ -257,3 +257,16 @@ test('scorta: giorni stimati', () => {
     assert.equal(stimaGiorni(100, [{ consumati: 40, arrivi: 10 }, { consumati: 30, arrivi: 20 }]), 5)
     assert.equal(stimaGiorni(100, [{ consumati: 10, arrivi: 30 }]), null, 'arriva più di quanto consuma')
 })
+
+test('Black Friday ridato dal bot: sempre visibile, mai in scorta, sopra vergini e stelle (PO 07/11/2026)', () => {
+    const bf = lead({ funnel: 'BLACK FRIDAY', passatoDalBot: true, ultimoMotivo: 'mai_risposto', scortaStato: 'scorta', scortaDal: oreFa(1) })
+    const v = vergine()
+    const s = stella({ scortaStato: 'visibile' })
+    assert.equal(sempreVisibile(bf, ORA), true)
+    assert.equal(visibileInPrimaChiamata(bf, ORA), true)
+    const r = rangoOndata([bf, v, s], ORA)
+    assert.ok(r.get(bf.id)! > r.get(v.id)!)
+    assert.ok(r.get(v.id)! > r.get(s.id)!)
+    const altro = lead({ scortaStato: 'scorta', scortaDal: oreFa(3) })
+    assert.deepEqual(daSbloccare([bf, altro], ORA, 30, 5), [altro.id])
+})

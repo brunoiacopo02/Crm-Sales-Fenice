@@ -106,9 +106,18 @@ export function eVergine(l: LeadScorta, _ora?: Date): boolean {
         && !l.cercato
 }
 
-/** Vergini, stelle e "Ti ha cercato" si vedono sempre, appena arrivano. */
+/**
+ * Lead del Black Friday (PO 07/11/2026): quando il bot li ridà ai GDO hanno la
+ * priorità su tutto (sopra vergini, stelle e "Ti ha cercato") e non finiscono
+ * mai nascosti in scorta.
+ */
+export function eBlackFriday(l: { funnel?: string | null }): boolean {
+    return (l.funnel ?? '').trim().toUpperCase() === 'BLACK FRIDAY'
+}
+
+/** Black Friday, vergini, stelle e "Ti ha cercato" si vedono sempre, appena arrivano. */
 export function sempreVisibile(l: LeadScorta, ora: Date): boolean {
-    return l.cercato || conStella(l) || eVergine(l, ora)
+    return eBlackFriday(l) || l.cercato || conStella(l) || eVergine(l, ora)
 }
 
 const funnelSu = (f: string | null) => (f ?? '').trim().toUpperCase()
@@ -176,7 +185,8 @@ export function ordinaScorta<T extends LeadScorta>(lista: readonly T[]): T[] {
  * durante la grazia (PO 30/10/2026).
  */
 export function visibileInPrimaChiamata(l: LeadScorta, ora: Date): boolean {
-    if (l.cercato || l.scortaStato === 'visibile') return true
+    // Black Friday: visibile anche se era gia' stato scritto in scorta (PO 07/11/2026).
+    if (eBlackFriday(l) || l.cercato || l.scortaStato === 'visibile') return true
     if (l.scortaStato === 'scorta') return false
     return sempreVisibile(l, ora)
 }
@@ -269,7 +279,9 @@ export function rangoOndata(lista: readonly LeadScorta[], ora: Date): Map<string
     const n = ondate.length
     const out = new Map<string, number>()
     for (const l of visibili) {
-        if (eVergine(l, ora)) out.set(l.id, n + 2)
+        // Black Friday sopra tutto, vergini compresi (PO 07/11/2026).
+        if (eBlackFriday(l)) out.set(l.id, n + 3)
+        else if (eVergine(l, ora)) out.set(l.id, n + 2)
         else if (sempreVisibile(l, ora)) out.set(l.id, n + 1)
         else if (daSblocco(l)) out.set(l.id, n - 1 - indice.get(l.scortaDal!.getTime())!)
         else out.set(l.id, n)
@@ -283,7 +295,7 @@ export function rangoOndata(lista: readonly LeadScorta[], ora: Date): Map<string
  * manuale dell'admin dal monitor di /import.
  */
 export function primiDellaScorta<T extends LeadScorta>(lista: readonly T[], quanti = SBLOCCO): string[] {
-    return ordinaScorta(lista.filter(l => l.scortaStato === 'scorta' && !l.cercato)).slice(0, quanti).map(l => l.id)
+    return ordinaScorta(lista.filter(l => l.scortaStato === 'scorta' && !l.cercato && !eBlackFriday(l))).slice(0, quanti).map(l => l.id)
 }
 
 /**

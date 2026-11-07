@@ -89,11 +89,14 @@ export function eVergineDelGiorno(l: {
  * recente, e `id` come spareggio così l'ordine resta fermo fra un caricamento
  * e l'altro (fix del 14/05, lead "spariti").
  */
-export function ordinaPrimaChiamata<T extends { id: string; arrivedAt: Date; vergine: boolean }>(
+export function ordinaPrimaChiamata<T extends { id: string; arrivedAt: Date; vergine: boolean; funnel?: string | null }>(
     lista: readonly T[],
     priorita: (l: T) => number,
 ): T[] {
+    // Black Friday sopra tutto, vergini compresi (PO 07/11/2026).
+    const bf = (l: T) => (l.funnel ?? '').trim().toUpperCase() === 'BLACK FRIDAY'
     return [...lista].sort((a, b) => {
+        if (bf(a) !== bf(b)) return bf(a) ? -1 : 1
         if (a.vergine !== b.vergine) return a.vergine ? -1 : 1
         const p = priorita(b) - priorita(a)
         if (p !== 0) return p

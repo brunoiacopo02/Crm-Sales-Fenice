@@ -25,7 +25,7 @@ import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 import { daRifissareDalleConferme } from "@/lib/diretta/daRifissare"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
-import { applicaScritti, deveSbloccare, PESO_ONDATA, prioritaScorta, rangoOndata, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
+import { applicaScritti, deveSbloccare, eBlackFriday, PESO_ONDATA, prioritaScorta, rangoOndata, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
 import { classificaEScrivi, dopoEsitoPrimaChiamata, sbloccaSeVuota, scortaAccesa } from "@/lib/diretta/scortaDb"
 import { serveScortaGenerale } from "@/lib/diretta/automatico"
 import { scortaGeneraleAccesa } from "@/lib/diretta/automaticoDb"
@@ -471,6 +471,10 @@ export async function getPipelineLeads() {
         [...arr].sort((a, b) => lancioRank(b) - lancioRank(a))
     const starredFirst = <T extends PerRank>(arr: T[]) =>
         [...arr].sort((a, b) => (Number(b.chiamaPerPrimo) * 4 + urgentRank(b)) - (Number(a.chiamaPerPrimo) * 4 + urgentRank(a)))
+    // Black Friday (PO 07/11/2026): i lead ridati dal bot hanno la priorità su tutto, in
+    // ogni colonna. Sort stabile: dentro i due gruppi resta l'ordine di prima.
+    const bfOnTop = <T extends { funnel?: string | null }>(arr: T[]) =>
+        [...arr].sort((a, b) => Number(eBlackFriday(b)) - Number(eBlackFriday(a)))
 
     /**
      * Scorta delle prime chiamate (PO 29/10/2026, regole in @/lib/diretta/scorta).
@@ -543,11 +547,11 @@ export async function getPipelineLeads() {
         // poi le priorità di prima, poi l'ora di arrivo più recente, `id` come spareggio.
         // Con la scorta accesa solo i lead visibili (PO 29/10/2026).
         firstCall: ordinaPrimaChiamata(withArrivo(withDupFlag(primaVisibile)), prioritaPrima),
-        secondCall: lancioOnTop(withArrivo(withDupFlag(secondCall))),
-        thirdCall: starredFirst(withArrivo(withDupFlag(thirdCall))),
-        fourthCall: fourthCallLeads,
+        secondCall: bfOnTop(lancioOnTop(withArrivo(withDupFlag(secondCall)))),
+        thirdCall: bfOnTop(starredFirst(withArrivo(withDupFlag(thirdCall)))),
+        fourthCall: bfOnTop(fourthCallLeads),
         isFourthCallActive,
-        recalls: recoverableFirst(withDupFlag(recallsLeads)),
+        recalls: bfOnTop(recoverableFirst(withDupFlag(recallsLeads))),
     }
 }
 
