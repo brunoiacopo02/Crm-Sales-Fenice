@@ -236,6 +236,16 @@ async function getLancioListIds(): Promise<ReadonlySet<string> | null> {
     return ids && ids.size > 0 ? ids : null;
 }
 
+/** Gli id della lista AC "Black Friday 2026" (PO 07/11/2026), o null se non c'e'. */
+async function getBlackFridayListIds(): Promise<ReadonlySet<string> | null> {
+    try {
+        const ids = (await getListIdsByName()).get(BLACK_FRIDAY_LIST_NAME_NORMALIZED);
+        return ids && ids.size > 0 ? ids : null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Le liste a cui il contatto e' iscritto con stato attivo (status '1'), via
  * /contacts/{id}/contactLists. Una chiamata sola, riusata dal ramo lancio e
@@ -645,8 +655,33 @@ export async function POST(req: NextRequest) {
         const lancioEnabled = isLancioIntakeEnabled() && lancioEventoAmmesso;
         const lancioListIds = lancioEnabled ? await getLancioListIds() : null;
         let activeListIds: Set<string> | null = null;
+
+        // ===== BLACK FRIDAY (PO 07/11/2026) — PRIMA del lancio e delle liste bloccate =====
+        // Un contatto che entra nella lista AC "Black Friday 2026" e' un lead Black
+        // Friday anche se e' iscritto da mesi a liste vecchie bloccate (133 pre-lancio,
+        // Black Summer) o alla lista del lancio: il 07/11 5 contatti su 7 della lista
+        // sono rimasti fuori cosi' (blocked_list, dedup del bucket del lancio) o con un
+        // update che riempiva solo gli utm del lead vecchio. La lista BF e' una scelta
+        // esplicita del PO e vince sui blocchi delle liste vecchie; l'interruttore di
+        // sovraccarico qui sotto vale comunque. Le membership lette qui si riusano.
+        let bfLista = false;
+        if (lancioEventoAmmesso) {
+            const bfListIds = await getBlackFridayListIds();
+            if (bfListIds) {
+                if (triggerListId && bfListIds.has(String(triggerListId))) {
+                    bfLista = true;
+                } else {
+                    const lettura = await leggiListeContatto(contactId);
+                    if (lettura.ok) {
+                        activeListIds = lettura.ids;
+                        bfLista = [...bfListIds].some((id) => lettura.ids.has(id));
+                    }
+                }
+            }
+        }
+
         let lancioDecision: LancioDecision = decideLancioIntake({
-            enabled: lancioEnabled, lancioListIds, triggerListId, activeListIds: null,
+            enabled: lancioEnabled && !bfLista, lancioListIds, triggerListId, activeListIds: null,
         });
         if (!lancioDecision.lancio && lancioDecision.motivo === 'lista_sconosciuta') {
             // Interruttore acceso ma la lista del lancio non si risolve (errore
@@ -661,7 +696,7 @@ export async function POST(req: NextRequest) {
         }
         if (!lancioDecision.lancio && lancioDecision.motivo === 'non_in_lista') {
             activeListIds = await getContactActiveListIds(contactId);
-            lancioDecision = decideLancioIntake({ enabled: lancioEnabled, lancioListIds, triggerListId, activeListIds });
+            lancioDecision = decideLancioIntake({ enabled: lancioEnabled && !bfLista, lancioListIds, triggerListId, activeListIds });
         }
         if (lancioDecision.lancio) {
             if (eventType === 'update') {
@@ -698,7 +733,8 @@ export async function POST(req: NextRequest) {
         //    includono `list` nel payload webhook — si era visto su 2
         //    lead della lista 'Lead Lancio Video Editor 2026' passati
         //    al CRM il 2026-04-24 nonostante il filtro.
-        const blocked = await getBlockedListIds();
+        // Black Friday: i blocchi delle liste vecchie non valgono (vedi sopra).
+        const blocked = bfLista ? new Set<string>() : await getBlockedListIds();
         if (triggerListId && blocked.has(String(triggerListId))) {
             console.log(`[AC webhook] skip contact ${contactId} — lista bloccata (payload) ${triggerListId}`);
             // Tracciato in acIntakeFailures (reason 'blocked_list:<id>') così l'admin
@@ -818,7 +854,32 @@ export async function POST(req: NextRequest) {
         // Se il contatto esiste già nel CRM (importato precedentemente da AC),
         // lo ritroviamo via acContactId e aggiorniamo funnel/UTM se cambiati.
         // Questo gestisce il caso: Provenienza settata DOPO il subscribe.
-        if (eventType === 'update') {
+        // Black Friday su un contatto gia' noto (PO 07/11/2026): AC manda un `update`
+        // (il contatto esiste da mesi) e qui sotto si sarebbero solo riempiti gli utm del
+        // lead vecchio, magari scartato. Se il contatto e' del Black Friday e non ha
+        // ancora un lead BLACK FRIDAY, l'update vale come ingresso: si prosegue come un
+        // subscribe e nasce un lead NUOVO, come per chiunque ricompaia dopo 24 ore (la
+        // regola dei doppioni qui sotto: oltre la finestra chi rientra e' un lead nuovo).
+        // Il lead vecchio resta com'e', con il suo esito e il suo GDO.
+        let bfRipresa = false;
+        if (eventType === 'update' && (bfLista || isLeadBlackFridayAc({
+            provenienza,
+            utmCampaign: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign),
+            utmContent: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent),
+            utmTerm: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm),
+        }))) {
+            const cifre = rawPhone.replace(/\D/g, '').slice(-10);
+            const [giaBf] = await db.select({ id: leads.id }).from(leads).where(and(
+                eq(leads.companyId, FENICE_COMPANY),
+                eq(leads.funnel, BLACK_FRIDAY_FUNNEL),
+                cifre.length >= 6
+                    ? or(eq(leads.acContactId, contactId), sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10) = ${cifre}`)
+                    : eq(leads.acContactId, contactId),
+            )).limit(1);
+            bfRipresa = !giaBf;
+        }
+
+        if (eventType === 'update' && !bfRipresa) {
             const [existing] = await db.select().from(leads)
                 .where(and(eq(leads.companyId, FENICE_COMPANY), eq(leads.acContactId, contactId)))
                 .limit(1);
@@ -928,11 +989,8 @@ export async function POST(req: NextRequest) {
         // La lista si legge dalla cache dei nomi (una chiamata /lists ogni 10 min);
         // le membership del contatto sono gia' state lette dal filtro delle liste
         // bloccate qui sopra.
-        let blackFridayListIds: ReadonlySet<string> | null = null;
-        try {
-            blackFridayListIds = (await getListIdsByName()).get(BLACK_FRIDAY_LIST_NAME_NORMALIZED) ?? null;
-        } catch { /* la campagna utm basta da sola */ }
-        const isBlackFriday = isLeadBlackFridayAc({
+        const blackFridayListIds = await getBlackFridayListIds();
+        const isBlackFriday = bfLista || isLeadBlackFridayAc({
             provenienza, utmCampaign, utmContent, utmTerm,
             blackFridayListIds,
             triggerListId: triggerListId ? String(triggerListId) : null,
@@ -1649,6 +1707,8 @@ export async function POST(req: NextRequest) {
                 funnelFallback: !provenienza,
                 phoneSuspicious,
                 phoneRaw: phoneSuspicious ? rawPhone : undefined,
+                ...(isBlackFriday ? { blackFriday: true, blackFridayVia: bfLista ? 'lista' : 'utm' } : {}),
+                ...(bfRipresa ? { ripresaDaUpdate: true } : {}),
             },
             companyId: FENICE_COMPANY,
         });
