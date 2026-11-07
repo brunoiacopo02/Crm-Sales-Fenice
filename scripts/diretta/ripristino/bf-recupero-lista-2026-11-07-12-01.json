@@ -1,0 +1,29 @@
+{
+  "nota": "PO 07/11/2026: contatti della lista AC Black Friday 2026 ripresi come lead BLACK FRIDAY (bot). Ripristino: i leadId creati sono in risposta.leadId; i lead vecchi non sono stati toccati.",
+  "esiti": [
+    {
+      "acContactId": "199117",
+      "status": 200,
+      "risposta": {
+        "success": true,
+        "leadId": "efac8bb3-f8d9-42b2-95b5-3b205d69ff73",
+        "funnel": "BLACK FRIDAY",
+        "funnelFallback": false,
+        "phoneSuspicious": false,
+        "assignedTo": "867dd21a-3236-46a8-b719-d0b97ff90538"
+      }
+    },
+    {
+      "acContactId": "203006",
+      "status": 200,
+      "risposta": {
+        "success": true,
+        "leadId": "cf30cc4d-7458-4d00-9a09-2eaae52dc0b8",
+        "funnel": "BLACK FRIDAY",
+        "funnelFallback": false,
+        "phoneSuspicious": false,
+        "assignedTo": "867dd21a-3236-46a8-b719-d0b97ff90538"
+      }
+    }
+  ]
+}
