@@ -966,7 +966,14 @@ export async function POST(req: NextRequest) {
         // provenienza in quarantena (es. 'ORG' durante il lancio
         // VideoEditor). Il manager può caricare manualmente via /import,
         // che non passa per questo webhook.
-        if (provenienza && QUARANTINED_FUNNELS.has(provenienza.toUpperCase())) {
+        // Black Friday (PO 07/11/2026): la quarantena di una Provenienza vecchia (ORG) non
+        // ferma un contatto della lista o della campagna BF.
+        const bfPerQuarantena = bfLista || isLeadBlackFridayAc({
+            utmCampaign: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign),
+            utmContent: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent),
+            utmTerm: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm),
+        });
+        if (provenienza && QUARANTINED_FUNNELS.has(provenienza.toUpperCase()) && !bfPerQuarantena) {
             console.log(`[AC webhook] skip contact ${contactId} — funnel '${provenienza}' in quarantena`);
             return NextResponse.json({
                 skipped: 'quarantined_funnel',

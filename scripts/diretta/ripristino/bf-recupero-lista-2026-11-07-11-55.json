@@ -1,0 +1,59 @@
+{
+  "nota": "PO 07/11/2026: contatti della lista AC Black Friday 2026 ripresi come lead BLACK FRIDAY (bot). Ripristino: i leadId creati sono in risposta.leadId; i lead vecchi non sono stati toccati.",
+  "esiti": [
+    {
+      "acContactId": "116428",
+      "status": 200,
+      "risposta": {
+        "success": true,
+        "leadId": "75850279-9053-424d-bec6-6bbc15a35644",
+        "funnel": "BLACK FRIDAY",
+        "funnelFallback": false,
+        "phoneSuspicious": false,
+        "assignedTo": "867dd21a-3236-46a8-b719-d0b97ff90538"
+      }
+    },
+    {
+      "acContactId": "199117",
+      "status": 200,
+      "risposta": {
+        "skipped": "quarantined_funnel",
+        "funnel": "ORG",
+        "acContactId": "199117"
+      }
+    },
+    {
+      "acContactId": "140856",
+      "status": 200,
+      "risposta": {
+        "success": true,
+        "leadId": "b1cf64c2-780d-4094-91df-1b65a4445b08",
+        "funnel": "BLACK FRIDAY",
+        "funnelFallback": false,
+        "phoneSuspicious": false,
+        "assignedTo": "867dd21a-3236-46a8-b719-d0b97ff90538"
+      }
+    },
+    {
+      "acContactId": "203006",
+      "status": 200,
+      "risposta": {
+        "skipped": "quarantined_funnel",
+        "funnel": "ORG",
+        "acContactId": "203006"
+      }
+    },
+    {
+      "acContactId": "128883",
+      "status": 200,
+      "risposta": {
+        "success": true,
+        "leadId": "32bd9941-c66e-4f8a-9cf9-7c1086535f48",
+        "funnel": "BLACK FRIDAY",
+        "funnelFallback": false,
+        "phoneSuspicious": false,
+        "assignedTo": "867dd21a-3236-46a8-b719-d0b97ff90538"
+      }
+    }
+  ]
+}
