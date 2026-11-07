@@ -54,7 +54,7 @@ const ROUTING_LABEL: Record<BotRoutingStatus['routing'], { titolo: string; spieg
     },
     bot_tetto: {
         titolo: 'Tetto giornaliero del bot',
-        spiega: "a qualunque ora, domenica compresa: il bot prende i lead freschi finché oggi non arriva al tetto (env BOT_TETTO_GIORNALIERO), poi tutti ai GDO a giro pareggiato. In orario GDO (lun-ven 13:30-20, sabato 10-14:30) il tetto scende della riserva serale (env BOT_RISERVA_FUORI_ORARIO, \"feriale,sabato\"), così una parte resta per la sera e la notte. Oltre il tetto il bot non ne riceve mai, nemmeno come ripiego.",
+        spiega: "a qualunque ora, domenica compresa: il bot prende i lead freschi finché oggi non arriva al tetto (la somma dei tetti dei numeri attivi del bot, letta dal bot; se non risponde vale l'env BOT_TETTO_GIORNALIERO), poi tutti ai GDO a giro pareggiato. In orario GDO (lun-ven 13:30-20, sabato 10-14:30) il tetto scende della riserva serale (env BOT_RISERVA_FUORI_ORARIO, \"feriale,sabato\"), così una parte resta per la sera e la notte. Oltre il tetto il bot non ne riceve mai, nemmeno come ripiego.",
         tono: 'border-amber-200 bg-amber-50 text-amber-900',
     },
     legacy: {
@@ -176,6 +176,26 @@ export default function LeadAutomaticiClient({ initialRows, initialWebhooks, ini
                         <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">Fermi da 7+ giorni</div>
                     </div>
                 </div>
+                {routingStatus.tettoBot && (
+                    <div className="mt-3 rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-xs">
+                        <span className="font-bold">
+                            Tetto bot oggi: {routingStatus.tettoBot.valore}
+                            {routingStatus.tettoBot.adesso !== routingStatus.tettoBot.valore && ` (adesso ${routingStatus.tettoBot.adesso}, riserva serale)`}
+                        </span>
+                        {' · '}
+                        {routingStatus.tettoBot.fonte === 'bot'
+                            ? 'letto dal bot (somma dei tetti dei numeri attivi, aggiornata ogni 10 min)'
+                            : routingStatus.tettoBot.fonte === 'env_forzata'
+                                ? `env BOT_TETTO_GIORNALIERO (forzata con BOT_TETTO_DAL_BOT=off; il bot direbbe ${routingStatus.tettoBot.dalBot ?? 'n/d'})`
+                                : 'env BOT_TETTO_GIORNALIERO: il bot non ha risposto, vale il ripiego'}
+                        {routingStatus.tettoBot.perNumero && (
+                            <span className="opacity-70">
+                                {' · '}
+                                {Object.entries(routingStatus.tettoBot.perNumero).map(([n, t]) => `${n.slice(-4)}: ${t}`).join(' · ')}
+                            </span>
+                        )}
+                    </div>
+                )}
             </section>
 
             {holidayWindow && (

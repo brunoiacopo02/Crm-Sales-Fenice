@@ -71,8 +71,15 @@ const TIMEOUT_MS = 1500;
 
 let cache: { attiva: boolean; fino: number; motivo: string } | null = null;
 
-/** Lo stato dei numeri dal bot: true = tutti HIGH; null = non leggibile. */
-async function chiediAlBot(): Promise<boolean | null> {
+/** Risposta di `/api/bot/qualita-numeri`: stato del cron qualita-numeri e `tetti_numeri`. */
+export type StatoNumeriBot = { oggi: string; stato: unknown; tetti: unknown };
+
+/**
+ * Chiede al bot stato e tetti dei numeri (firma HMAC come il push). null = non
+ * leggibile (env mancanti, bot giu', timeout, risposta strana). Mai lancia.
+ * Usato anche dal tetto giornaliero del bot (capacitaBot.ts).
+ */
+export async function statoNumeriDalBot(timeoutMs: number = TIMEOUT_MS): Promise<StatoNumeriBot | null> {
     const intake = process.env.BOT_INTAKE_URL;
     const secret = process.env.BOT_WEBHOOK_SECRET;
     if (!intake || !secret) return null;
@@ -85,15 +92,22 @@ async function chiediAlBot(): Promise<boolean | null> {
             headers: { 'content-type': 'application/json', 'x-bot-signature': signPayload(body, secret) },
             body,
             cache: 'no-store',
-            signal: AbortSignal.timeout(TIMEOUT_MS),
+            signal: AbortSignal.timeout(timeoutMs),
         });
         if (!res.ok) return null;
-        const j = (await res.json()) as { ok?: boolean; oggi?: string; stato?: unknown };
+        const j = (await res.json()) as { ok?: boolean; oggi?: string; stato?: unknown; tetti?: unknown };
         if (!j.ok || typeof j.oggi !== 'string') return null;
-        return numeriTuttiHigh(j.stato, j.oggi);
+        return { oggi: j.oggi, stato: j.stato ?? null, tetti: j.tetti ?? null };
     } catch {
         return null;
     }
+}
+
+/** Lo stato dei numeri dal bot: true = tutti HIGH; null = non leggibile. */
+async function chiediAlBot(): Promise<boolean | null> {
+    const j = await statoNumeriDalBot();
+    if (!j) return null;
+    return numeriTuttiHigh(j.stato, j.oggi);
 }
 
 /**

@@ -16,7 +16,8 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
-import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, tettoBotGiornaliero, tettoBotAdesso, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, tettoBotAdesso, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { tettoBotEffettivo } from "@/lib/bot-fissatore/capacitaBot";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
 import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_TETTO_PROPRIO, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
 import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
@@ -954,6 +955,10 @@ export async function POST(req: NextRequest) {
         // Regola "fasce solo GDO" (PO 29/10/2026): lo stato dei numeri si legge
         // FUORI dalla transazione, da cache (5 min). Nel dubbio vale accesa.
         const soloGdoStato = await fasciaSoloGdoAttiva();
+        // Tetto del bot (PO 07/11/2026): la capacità la dice il bot (somma dei suoi
+        // tetti per numero), letta FUORI dalla transazione, cache 10 min; se il bot
+        // non risponde vale BOT_TETTO_GIORNALIERO. null = regola spenta.
+        const tettoBotInfo = await tettoBotEffettivo();
         // 24 ore e non 10 minuti: le ricomparse entro un giorno sono doppi
         // submit veri (439 misurate sullo storico), non persone che rientrano.
         // Oltre, chi rientra È un lead nuovo e va richiamato — la mediana fra
@@ -1270,7 +1275,7 @@ export async function POST(req: NextRequest) {
             // Domenica (PO 25/10/2026): i freschi solo al bot, mai ai GDO, qualunque flag.
             const domenicaSoloBot = freschiSoloAlBot(now);
             // Tetto vero del bot (PO 02/11/2026): se impostato vince su tutto, domenica compresa.
-            const tettoBot = tettoBotGiornaliero();
+            const tettoBot = tettoBotInfo?.valore ?? null;
             const routing: LeadRouting = tettoBot !== null ? 'bot_tetto'
                 : domenicaSoloBot ? 'bot_only' : (soloGdo ?? (holidayWindow ? 'bot_only' : getLeadRouting(now)));
 
@@ -1623,6 +1628,7 @@ export async function POST(req: NextRequest) {
                 routing: txResult.divertedToSales ? 'sales_pipeline' : txResult.routing,
                 ...(txResult.fallbackUsed ? { routingFallback: true } : {}),
                 ...(txResult.holidayWindow ? { botHolidayWindow: true } : {}),
+                ...(txResult.routing === 'bot_tetto' && tettoBotInfo ? { tettoBot: tettoBotInfo.valore, tettoBotFonte: tettoBotInfo.fonte } : {}),
             },
             companyId: FENICE_COMPANY,
         });

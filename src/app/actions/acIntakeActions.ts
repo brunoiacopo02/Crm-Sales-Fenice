@@ -4,8 +4,9 @@ import { db } from "@/db";
 import { users, acIntakeFailures, leads } from "@/db/schema";
 import { eq, and, desc, isNull, gte, count, notLike, sql } from "drizzle-orm";
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql";
-import { getLeadRouting, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
+import { getLeadRouting, tettoBotAdesso, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
+import { tettoBotEffettivo, type FonteTetto } from "@/lib/bot-fissatore/capacitaBot";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { createClient } from "@/utils/supabase/server";
 import { currentTenant, assertSalesArea, type TenantContext } from "@/lib/tenancy";
@@ -469,6 +470,8 @@ export interface BotRoutingStatus {
     botBacklog: number;
     /** Quanti di quelli aspettano da piu' di 7 giorni. */
     botBacklogOld: number;
+    /** Tetto giornaliero del bot in uso (PO 07/11/2026): letto dal bot o, se non risponde, l'env. null = regola spenta. */
+    tettoBot: { valore: number; adesso: number; fonte: FonteTetto; env: number; dalBot: number | null; perNumero: Record<string, number> | null } | null;
 }
 
 /**
@@ -512,7 +515,11 @@ export async function getBotRoutingStatus(): Promise<BotRoutingStatus> {
         contaNeiKpiSql(),
     ));
 
+    const tetto = await tettoBotEffettivo();
     return {
+        tettoBot: tetto
+            ? { valore: tetto.valore, adesso: tettoBotAdesso(now, tetto.valore), fonte: tetto.fonte, env: tetto.env, dalBot: tetto.dalBot, perNumero: tetto.perNumero }
+            : null,
         routing: getLeadRouting(now, (await fasciaSoloGdoAttiva()).attiva),
         dailyMin: BOT_DAILY_MIN,
         todayBot: today?.bot ?? 0,
