@@ -20,6 +20,7 @@ import { WeeklyFocusBanner } from "@/components/venditore-performance/WeeklyFocu
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { StoricoTrattativeTab } from "@/components/venditore/StoricoTrattativeTab"
 import { MyPenaltiesBanner, type MyPenaltiesData } from "@/components/venditore/MyPenaltiesBanner"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const VenditoreDrawer = dynamic(
   () => import("@/components/VenditoreDrawer").then(mod => mod.VenditoreDrawer),
@@ -472,7 +473,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                                 <div className="font-medium text-ash-800">{app.name}</div>
                                                 {!isGated && (
                                                     <div className="text-ash-400 text-xs mt-1 flex flex-col gap-0.5">
-                                                        <div>{app.phone}</div>
+                                                        <div>{toDialablePhone(app.phone)}</div>
                                                         <div>{app.email}</div>
                                                     </div>
                                                 )}
@@ -737,7 +738,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                                         </div>
                                                     </div>
                                                     <div className="font-bold text-ash-800 mt-1 line-clamp-1">{app.name}</div>
-                                                    <div className="text-sm text-ash-500 line-clamp-1 mt-0.5">{app.phone}</div>
+                                                    <div className="text-sm text-ash-500 line-clamp-1 mt-0.5">{toDialablePhone(app.phone)}</div>
                                                     <div className="mt-auto pt-3 text-xs text-ash-400 flex items-center justify-between border-t border-ash-100/60">
                                                         <div className="mt-2">{app.funnel || 'No funnel'}</div>
                                                         <div className="mt-2">GDO {app.gdoCode || '-'}</div>

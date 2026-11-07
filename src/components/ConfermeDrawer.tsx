@@ -20,6 +20,7 @@ import { isCallNowHandoff, isLeadLancio, lancioBotRisposte, lancioSceltaLabel } 
 import { CONFERMATO_EVENT } from "@/lib/conferme/direttaStats"
 import { collegaName, gdoName } from "@/lib/conferme/boardView"
 import { dUi, dTab } from "@/components/conferme/diretta/ui"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 function ConfermeDrawerSkeleton() {
     return (
@@ -675,7 +676,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                 {nomeTesta && <>{nomeTesta} </>}<span className="text-[var(--d-orange)]">{nomeCoda}</span>
                             </h2>
                             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--d-muted)]">
-                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={1.75} /> {lead.phone}</div>
+                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" strokeWidth={1.75} /> {toDialablePhone(lead.phone)}</div>
                                 {lead.email && <div className="flex min-w-0 items-center gap-1.5"><Mail className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> <span className="truncate">{lead.email}</span></div>}
                                 {statoConferma && (
                                     <div className={`font-medium ${statoConferma === 'Da definire' ? 'text-[var(--d-orange)]' : 'text-[var(--d-text)]'}`}>{statoConferma}</div>
@@ -1218,7 +1219,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                         </div>
                         <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-ash-900 leading-tight">{lead.name}</h2>
                         <div className="flex items-center gap-3 mt-1.5 text-sm text-ash-500 font-medium">
-                            <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-brand-orange" /> {lead.phone}</span>
+                            <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-brand-orange" /> {toDialablePhone(lead.phone)}</span>
                             {lead.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-brand-blue" /> {lead.email}</span>}
                         </div>
                     </div>

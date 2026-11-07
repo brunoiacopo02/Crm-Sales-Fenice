@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Phone, Mail, CalendarCheck, Clock, CheckCircle2, Pencil, RefreshCcw, BellRing } from "lucide-react"
 import dynamic from "next/dynamic"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const EditAppointmentModal = dynamic(
   () => import("./EditAppointmentModal").then(mod => mod.EditAppointmentModal),
@@ -130,7 +131,7 @@ export function AppointmentBoard({
                     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-[14px] text-[var(--d-muted)]">
                         <div className="inline-flex items-center gap-1.5 tabular-nums">
                             <Phone className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                            {lead.phone}
+                            {toDialablePhone(lead.phone)}
                         </div>
                         {lead.email && (
                             <div className="inline-flex min-w-0 max-w-full items-center gap-1.5">
@@ -308,7 +309,7 @@ export function AppointmentBoard({
                 <div className="flex items-center gap-3 text-xs text-ash-500 mt-1">
                     <span className="flex items-center gap-1 hover:text-brand-orange cursor-copy transition-colors">
                         <Phone className="h-3 w-3" />
-                        {lead.phone}
+                        {toDialablePhone(lead.phone)}
                     </span>
                     {lead.email && (
                         <span className="flex items-center gap-1 truncate max-w-[140px]" title={lead.email}>

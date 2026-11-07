@@ -13,6 +13,7 @@ import { ConfermeScriptWidget } from "./ConfermeScriptWidget"
 import { DirettaUiProvider } from "./diretta/DirettaUi"
 import { funnelLeggibile } from "@/lib/diretta/funnel"
 import { dataOraBreveRoma } from "@/lib/diretta/formato"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 /** Stato del lead in parole, per la veste Diretta (niente "APPOINTMENT" grezzo). */
 const STATO_LEAD: Record<string, string> = {
@@ -322,7 +323,7 @@ export function ContactDrawer({
                             <h2 className="truncate text-[20px] font-semibold leading-tight">{lead?.name || 'Caricamento'}</h2>
                             {(funnel || lead?.phone) && (
                                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-[#BFBFBF]">
-                                    {lead?.phone && <div className="whitespace-nowrap">{lead.phone}</div>}
+                                    {lead?.phone && <div className="whitespace-nowrap">{toDialablePhone(lead.phone)}</div>}
                                     {funnel && <div>{funnel}</div>}
                                 </div>
                             )}
@@ -442,7 +443,7 @@ export function ContactDrawer({
                                             <div className="flex items-center gap-3">
                                                 <dt className="sr-only">Telefono</dt>
                                                 <Phone className="h-4 w-4 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
-                                                <dd className="whitespace-nowrap font-medium">{lead.phone}</dd>
+                                                <dd className="whitespace-nowrap font-medium">{toDialablePhone(lead.phone)}</dd>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <dt className="sr-only">Email</dt>
@@ -727,7 +728,7 @@ export function ContactDrawer({
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
                                             <Phone className="h-4 w-4 text-ash-400" />
-                                            <div className="text-ash-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{lead.phone}</div>
+                                            <div className="text-ash-900 font-medium cursor-copy hover:text-brand-orange transition-colors">{toDialablePhone(lead.phone)}</div>
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
                                             <Mail className="h-4 w-4 text-ash-400" />

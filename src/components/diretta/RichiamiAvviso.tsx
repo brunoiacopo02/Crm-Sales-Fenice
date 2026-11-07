@@ -13,6 +13,7 @@ import { getGdoRichiamiDaFare, type RichiamoDaFare } from "@/app/actions/diretta
 import { ContactDrawer } from "@/components/ContactDrawer"
 import { oraBreve } from "@/lib/diretta/home"
 import { useOrologio } from "./useOrologio"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const OGNI_MS = 30_000
 
@@ -71,7 +72,7 @@ export function RichiamiAvviso() {
                                     </div>
                                     <div className="mt-1 truncate text-[15px] font-medium">{r.name}</div>
                                     <div className="text-[13px] tabular-nums text-[#BFBFBF]">
-                                        alle {oraBreve(ora)}{r.phone ? `, ${r.phone}` : ""}
+                                        alle {oraBreve(ora)}{r.phone ? `, ${toDialablePhone(r.phone)}` : ""}
                                     </div>
                                     <button
                                         type="button"

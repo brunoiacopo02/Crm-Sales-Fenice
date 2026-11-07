@@ -6,6 +6,7 @@ import { format } from "date-fns"
 import { it } from "date-fns/locale"
 import { recordLancioCallNowNoAnswer, type LancioCallNowLead } from "@/app/actions/lancioActions"
 import type { CallNowColumn } from "@/lib/lancio/callNow"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const COLONNE: Array<{ key: CallNowColumn; title: string }> = [
     { key: 'da_chiamare', title: 'Da chiamare' },
@@ -74,7 +75,7 @@ export function LancioCallNowTab({ leads, onOpen, onChanged }: {
                                                     <div className="truncate font-bold text-ash-900">{lead.name}</div>
                                                     <div className="flex items-center gap-1 text-sm text-ash-700">
                                                         <Phone className="h-3.5 w-3.5 shrink-0 text-ash-400" />
-                                                        <span className="truncate">{lead.phone}</span>
+                                                        <span className="truncate">{toDialablePhone(lead.phone)}</span>
                                                     </div>
                                                 </div>
                                                 {lead.lancioSceltaAt && (

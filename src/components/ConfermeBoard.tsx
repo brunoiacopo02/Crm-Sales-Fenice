@@ -8,6 +8,7 @@ import { markConfermeAlertHandled } from "@/app/actions/confermeAlertActions"
 import { isCallNowHandoff, isLeadLancio, lancioSceltaLabel } from "@/lib/lancio/conferme"
 
 import dynamic from "next/dynamic"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const ConfermeDrawer = dynamic(
   () => import("@/components/ConfermeDrawer").then(mod => mod.ConfermeDrawer),
@@ -675,7 +676,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                                                 <div className="font-semibold">{item.lead.name}</div>
                                                 {item.lead.funnel && <div className="text-[13px] text-[var(--d-muted)]">{funnelLeggibile(item.lead.funnel)}</div>}
                                             </td>
-                                            <td className={`${td} whitespace-nowrap text-[var(--d-muted)]`}>{item.lead.phone}</td>
+                                            <td className={`${td} whitespace-nowrap text-[var(--d-muted)]`}>{toDialablePhone(item.lead.phone)}</td>
                                             <td className={td}>{gdoName(item.gdo)}</td>
                                             <td className={td}>
                                                 {confermato ? (
@@ -773,7 +774,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                                             </td>
                                             <td className={td}>
                                                 <div className="font-semibold">{item.lead.name}</div>
-                                                <div className="text-[13px] text-[var(--d-muted)]">{item.lead.phone}</div>
+                                                <div className="text-[13px] text-[var(--d-muted)]">{toDialablePhone(item.lead.phone)}</div>
                                             </td>
                                             <td className={td}>
                                                 <div>{gdoName(item.gdo)}</div>
@@ -1054,7 +1055,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                                                             <div className="text-xs text-ash-400 mt-0.5">{item.lead.funnel}</div>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
-                                                            <div className="text-sm text-ash-600 font-medium">{item.lead.phone}</div>
+                                                            <div className="text-sm text-ash-600 font-medium">{toDialablePhone(item.lead.phone)}</div>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-ash-100 text-ash-700 border border-ash-200/60">
@@ -1209,7 +1210,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <div className="font-bold text-ash-800 text-[15px]">{item.lead.name}</div>
-                                                            <div className="text-sm text-ash-500 mt-0.5">{item.lead.phone}</div>
+                                                            <div className="text-sm text-ash-500 mt-0.5">{toDialablePhone(item.lead.phone)}</div>
                                                         </td>
                                                         <td className="p-4 align-top pt-5">
                                                             <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-ash-100 text-ash-700 border border-ash-200/60">

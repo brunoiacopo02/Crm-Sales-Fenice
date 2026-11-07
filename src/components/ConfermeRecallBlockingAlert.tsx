@@ -31,6 +31,7 @@ import {
 } from "@/app/actions/confermeAlertActions"
 import { onBusEvent } from "@/lib/realtimeBus"
 import { useSalesCompany } from "@/components/providers/SalesCompanyProvider"
+import { toDialablePhone, telHref } from "@/lib/phoneDial";
 
 const POLL_MS = 30_000
 
@@ -176,10 +177,10 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
 
                     {alert.phone && (
                         <a
-                            href={`tel:${alert.phone}`}
+                            href={telHref(alert.phone)}
                             className="mt-3 inline-block text-4xl font-semibold text-[var(--d-text)] hover:text-white"
                         >
-                            {alert.phone}
+                            {toDialablePhone(alert.phone)}
                         </a>
                     )}
 
@@ -278,10 +279,10 @@ export function ConfermeRecallBlockingAlert({ variant = 'classic' }: { variant?:
 
                 {alert.phone && (
                     <a
-                        href={`tel:${alert.phone}`}
+                        href={telHref(alert.phone)}
                         className="mt-2 inline-block text-4xl font-black tracking-tight text-emerald-300 hover:text-emerald-200"
                     >
-                        {alert.phone}
+                        {toDialablePhone(alert.phone)}
                     </a>
                 )}
 

@@ -7,6 +7,7 @@ import { it } from "date-fns/locale"
 import { Search, BadgeCheck, ChevronDown, ChevronUp, Phone, FileText, Eye, EyeOff } from "lucide-react"
 import { useHideAmounts, HIDDEN_AMOUNT } from "@/lib/venditore/hideAmounts"
 import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
+import { toDialablePhone, telHref } from "@/lib/phoneDial";
 
 const OUTCOME_FILTERS = ["Tutti", "Chiuso", "Non chiuso", "Sparito"] as const
 type OutcomeFilter = (typeof OUTCOME_FILTERS)[number]
@@ -153,9 +154,9 @@ export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onO
                                         <div className="font-semibold text-ash-800 truncate">{r.name}</div>
                                         {r.phone && (
                                             <div onClick={e => e.stopPropagation()} className="mt-0.5">
-                                                <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-sm text-ash-600 hover:text-brand-orange hover:underline">
+                                                <a href={telHref(r.phone)} className="inline-flex items-center gap-1 text-sm text-ash-600 hover:text-brand-orange hover:underline">
                                                     <Phone className="h-3.5 w-3.5" />
-                                                    {r.phone}
+                                                    {toDialablePhone(r.phone)}
                                                 </a>
                                             </div>
                                         )}

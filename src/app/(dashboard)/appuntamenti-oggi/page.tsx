@@ -8,6 +8,7 @@ import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { leadVero } from "@/lib/prova/sql"
 import { CalendarCheck, Phone, Mail, User as UserIcon, Clock } from "lucide-react"
 import { AdminCancelApptButton } from "@/components/AdminCancelApptButton"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 export const dynamic = 'force-dynamic'
 
@@ -144,7 +145,7 @@ export default async function AppuntamentiOggiPage() {
                                                     <td className="px-4 py-3">
                                                         <div className="flex items-center gap-1.5 text-xs text-ash-600 font-mono">
                                                             <Phone className="h-3 w-3 text-ash-400" />
-                                                            {appt.phone}
+                                                            {toDialablePhone(appt.phone)}
                                                         </div>
                                                         {appt.email && (
                                                             <div className="flex items-center gap-1.5 text-xs text-ash-500 mt-1">

@@ -15,6 +15,7 @@ import {
 } from "@/app/actions/lancioActions"
 import { NOT_CLOSED_REASONS } from "@/lib/surveys/questions"
 import { onBusEvent } from "@/lib/realtimeBus"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 type Vista = "stasera" | "domani"
 
@@ -281,7 +282,7 @@ function SchedaLead({ lead, orario, richiamo, adesso, conNonRisponde, conSparito
             <div className="font-bold text-ash-900">{lead.name}</div>
             <div className="mt-1 flex items-center gap-1.5">
                 <Phone className="h-4 w-4 shrink-0 text-ash-400" />
-                <span className="select-all text-base font-semibold text-ash-900">{lead.phone}</span>
+                <span className="select-all text-base font-semibold text-ash-900">{toDialablePhone(lead.phone)}</span>
                 <button
                     type="button"
                     onClick={copiaNumero}

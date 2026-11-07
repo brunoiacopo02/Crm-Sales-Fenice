@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { moveSalesSelfAppointment, setSalesSelfAppointment } from "@/app/actions/salesPipelineActions"
 import { updateLeadOutcome } from "@/app/actions/pipelineActions"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
+import { toDialablePhone, telHref } from "@/lib/phoneDial";
 
 // Solo i campi che questo componente usa davvero: la riga vera arriva dal
 // server come `leads` completo (select() intero), qui basta la fetta che
@@ -181,7 +182,7 @@ function SelfAppointmentCard({ app, busy, onSposta }: {
     return (
         <div className="rounded-xl border border-ash-200 bg-white p-3">
             <div className="text-sm font-bold text-ash-900">{app.name}</div>
-            <a href={`tel:${app.phone}`} className="text-sm font-bold text-brand-orange">{app.phone}</a>
+            <a href={telHref(app.phone)} className="text-sm font-bold text-brand-orange">{toDialablePhone(app.phone)}</a>
             <div className="mt-1 text-xs font-medium text-emerald-700">
                 {new Date(app.appointmentDate).toLocaleString('it-IT', {
                     dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome',
@@ -239,7 +240,7 @@ function SalesLeadCard({ lead, busy, onFissa, onRichiamo, onNonRisposto, onScart
             {/* Il telefono si vede subito: qui si chiama a freddo. In /venditore
                 e' nascosto fino al check-in di trattativa, ma questa e' un'altra
                 superficie e un altro momento. */}
-            <a href={`tel:${lead.phone}`} className="text-lg font-bold text-brand-orange">{lead.phone}</a>
+            <a href={telHref(lead.phone)} className="text-lg font-bold text-brand-orange">{toDialablePhone(lead.phone)}</a>
             <div className="mt-1 text-xs text-ash-500">
                 {lead.funnel || 'Senza funnel'} · tentativi: {lead.callCount}
                 {lead.email ? ` · ${lead.email}` : ''}

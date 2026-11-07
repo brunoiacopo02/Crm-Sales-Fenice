@@ -14,6 +14,7 @@ import { updateRecallDetails } from "@/app/actions/recallActions"
 import { tempoDaArrivo } from "@/lib/diretta/arrivo"
 import { funnelLeggibile } from "@/lib/diretta/funnel"
 import { dataOraRoma } from "@/lib/diretta/formato"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 type LeadProps = {
     lead: {
@@ -271,7 +272,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 <div className="text-[17px] font-semibold">Script della chiamata</div>
                                 <div className="mt-0.5 flex flex-wrap gap-x-3 text-[13px] text-[#BFBFBF]">
                                     <div className="min-w-0 truncate">{lead.name}</div>
-                                    <div className="whitespace-nowrap">{lead.phone}</div>
+                                    <div className="whitespace-nowrap">{toDialablePhone(lead.phone)}</div>
                                 </div>
                             </div>
                             <button type="button" onClick={() => setShowScript(false)} aria-label="Chiudi lo script" className="rounded-lg p-2 text-[#BFBFBF] transition-colors hover:text-[#F2F2F2]">
@@ -303,7 +304,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                         <div className="sticky top-0 z-10 bg-white border-b border-ash-200 px-5 py-3 flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-ash-800">Script Chiamata</div>
-                                <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
+                                <div className="text-xs text-ash-500">{lead.name} — {toDialablePhone(lead.phone)}</div>
                             </div>
                             <button onClick={() => setShowScript(false)} className="p-2 rounded-lg hover:bg-ash-100 transition-colors">
                                 <X className="w-5 h-5 text-ash-500" />
@@ -383,7 +384,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                 <Users className="h-5 w-5 text-orange-600" />
                                 <div>
                                     <div className="text-sm font-bold text-ash-900">Numero presente su altri lead</div>
-                                    <div className="text-xs text-ash-500">{lead.phone} — verifica prima di richiamare</div>
+                                    <div className="text-xs text-ash-500">{toDialablePhone(lead.phone)} — verifica prima di richiamare</div>
                                 </div>
                             </div>
                             <button onClick={(e) => { e.stopPropagation(); setShowDupModal(false); }} className="p-1.5 rounded-lg hover:bg-orange-200/50 transition-colors">
@@ -435,7 +436,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                                     <div className="text-sm font-bold text-ash-900">
                                         {lead.recallNote ? 'Note Richiamo' : 'Note Chiamata Precedente'}
                                     </div>
-                                    <div className="text-xs text-ash-500">{lead.name} — {lead.phone}</div>
+                                    <div className="text-xs text-ash-500">{lead.name} — {toDialablePhone(lead.phone)}</div>
                                 </div>
                             </div>
                             <button onClick={() => setShowNoteModal(false)} className="p-1.5 rounded-lg hover:bg-amber-200/50 transition-colors">
@@ -538,7 +539,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
 
                         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] tabular-nums">
                             <Phone className="h-3.5 w-3.5 shrink-0 text-[#8C8C8C]" strokeWidth={1.5} aria-hidden="true" />
-                            <div>{lead.phone}</div>
+                            <div>{toDialablePhone(lead.phone)}</div>
                             {lead.phoneSuspicious && (
                                 <AlertTriangle
                                     className="h-3.5 w-3.5 shrink-0 text-[#FF9330]"
@@ -725,7 +726,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                     <div className="flex items-center gap-3 text-xs text-ash-500 mt-1">
                         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap group/phone">
                             <Phone className="h-3 w-3 shrink-0 text-ash-400" />
-                            <div className="font-medium text-ash-600">{lead.phone}</div>
+                            <div className="font-medium text-ash-600">{toDialablePhone(lead.phone)}</div>
                             {lead.phoneSuspicious && (
                                 <AlertTriangle
                                     className="h-3 w-3 text-amber-500 shrink-0"
@@ -906,7 +907,7 @@ export const LeadCard = memo(function LeadCard({ lead, onOutcomeClick, isRowLayo
                     </div>
                     <div className="flex items-center gap-2 text-sm text-ash-500 mt-1 group/phone">
                         <Phone className="h-3 w-3" />
-                        {lead.phone}
+                        {toDialablePhone(lead.phone)}
                         {lead.phoneSuspicious && (
                             <AlertTriangle
                                 className="h-3 w-3 text-amber-500 shrink-0"

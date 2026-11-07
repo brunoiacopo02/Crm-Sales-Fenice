@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback } from "react"
 import { BellRing, X } from "lucide-react"
 import { getConfermeRecallAlerts } from "@/app/actions/confermeActions"
 import { useSalesCompany } from "@/components/providers/SalesCompanyProvider"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 type RecallAlert = {
     id: string
@@ -78,7 +79,7 @@ export function ConfermeRecallBanner({ variant = 'classic' }: { variant?: 'class
                             <div className="min-w-0 flex-1 text-[13px]">
                                 <div className="font-semibold">{isExpired ? 'Richiamo da fare adesso' : 'Richiamo in arrivo'}</div>
                                 <div className="mt-1 font-medium">{a.name}</div>
-                                {a.phone && <div className="text-[var(--d-muted)]">{a.phone}</div>}
+                                {a.phone && <div className="text-[var(--d-muted)]">{toDialablePhone(a.phone)}</div>}
                                 <div className="text-[var(--d-muted)]">
                                     {due.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}
                                 </div>
@@ -129,7 +130,7 @@ export function ConfermeRecallBanner({ variant = 'classic' }: { variant?: 'class
                                 </span>
                             </div>
                             <div className="mt-1 text-ash-700">
-                                <span className="font-semibold">{a.name}</span>{a.phone ? ` · ${a.phone}` : ''}
+                                <span className="font-semibold">{a.name}</span>{a.phone ? ` · ${toDialablePhone(a.phone)}` : ''}
                             </div>
                             <div className="text-ash-500">
                                 {due.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Rome' })}

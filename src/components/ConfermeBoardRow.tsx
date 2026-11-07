@@ -14,6 +14,7 @@ import { collegaName, gdoName } from "@/lib/conferme/boardView"
 import { dUi } from "@/components/conferme/diretta/ui"
 import { dataOraRoma, oraRoma } from "@/lib/diretta/formato"
 import { funnelLeggibile } from "@/lib/diretta/funnel"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 /**
  * Riga della board Conferme. `variant` 'diretta' = restyle scuro (PO 25/10/2026):
@@ -296,7 +297,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                             </div>
                         )}
                         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[var(--d-muted)]">
-                            <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />{lead.phone}
+                            <Phone className="h-3.5 w-3.5" strokeWidth={1.75} />{toDialablePhone(lead.phone)}
                         </div>
                         {layoutMode !== 'snooze' && (
                             <div className="hidden shrink-0 items-center gap-3 sm:flex">
@@ -562,7 +563,7 @@ export function ConfermeBoardRow({ item, currentUser, isLocked, lockedByName, on
                             <Rocket className="w-3 h-3" /> Lancio
                         </div>
                     )}
-                    <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{lead.phone}</div>
+                    <div className={`text-ash-500 font-medium flex items-center gap-1.5 shrink-0 ${layoutMode === 'snooze' ? 'w-full text-xs' : 'whitespace-nowrap'}`}><Phone className="w-3.5 h-3.5 text-ash-400" />{toDialablePhone(lead.phone)}</div>
 
                     {/* GDO name + Funnel (hidden in Snooze mode to save space) */}
                     {layoutMode !== 'snooze' && (

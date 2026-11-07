@@ -10,6 +10,7 @@ import { parseRomeDatetimeLocal, toRomeDatetimeLocal } from "@/lib/dateUtils"
 import { VenditoreSurveyInline, type VenditoreSurveyState } from "./surveys/VenditoreSurveyInline"
 import { EXCLUDED_FUNNEL, NOT_CLOSED_REASONS } from "@/lib/surveys/questions"
 import { MAX_FOLLOW_UPS } from "@/lib/venditorePerformance/guard"
+import { toDialablePhone, telHref } from "@/lib/phoneDial";
 
 interface VenditoreDrawerProps {
     lead: any
@@ -367,7 +368,7 @@ export function VenditoreDrawer({ lead, onClose, onSaved, onStartNegotiation, is
                                     {isStarted ? (
                                         <>
                                             <Phone className="h-4 w-4 text-gray-400" />
-                                            <a href={`tel:${lead?.phone}`} className="hover:text-brand-orange hover:underline">{lead?.phone}</a>
+                                            <a href={telHref(lead?.phone)} className="hover:text-brand-orange hover:underline">{toDialablePhone(lead?.phone)}</a>
                                         </>
                                     ) : (
                                         <>

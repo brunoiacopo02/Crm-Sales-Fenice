@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { LeadCard } from "./LeadCard"
 import dynamic from "next/dynamic"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const OutcomeModal = dynamic(
   () => import("./OutcomeModal").then(mod => mod.OutcomeModal),
@@ -42,7 +43,7 @@ export function RecallBoard({
                     if (lead.recallDate) {
                         const recallTime = new Date(lead.recallDate).getTime();
                         if (recallTime <= nowTime && !updatedSet.has(lead.id)) {
-                            alert(`⏰ SVEGLIA RICHIAMO GDO\n\nÈ arrivato il momento di chiamare:\n👤 ${lead.name}\n📞 ${lead.phone}`);
+                            alert(`⏰ SVEGLIA RICHIAMO GDO\n\nÈ arrivato il momento di chiamare:\n👤 ${lead.name}\n📞 ${toDialablePhone(lead.phone)}`);
                             updatedSet.add(lead.id);
                             newlyAlerted = true;
                         }

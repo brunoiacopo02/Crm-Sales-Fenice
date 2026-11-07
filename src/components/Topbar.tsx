@@ -9,6 +9,7 @@ import { searchLeads, SearchResult } from "@/app/actions/searchActions"
 import { usePathname, useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { SalesCompanySwitcher } from '@/components/sales/SalesCompanySwitcher'
+import { toDialablePhone } from "@/lib/phoneDial";
 
 const ContactDrawer = dynamic(
   () => import("./ContactDrawer").then(mod => mod.ContactDrawer),
@@ -429,7 +430,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="truncate text-[14px] font-medium text-[#F2F2F2]">{lead.name}</div>
-                                                            <div className="mt-0.5 truncate text-[13px] text-[#BFBFBF]">{lead.phone}{lead.email ? `, ${lead.email}` : ''}</div>
+                                                            <div className="mt-0.5 truncate text-[13px] text-[#BFBFBF]">{toDialablePhone(lead.phone)}{lead.email ? `, ${lead.email}` : ''}</div>
                                                         </div>
                                                         <div className="shrink-0 text-[12px] text-[#BFBFBF]">{lead.statusLabel}</div>
                                                     </button>
@@ -668,7 +669,7 @@ export function Topbar({ diretta = false, ruolo, io = null, obiettivi = null }: 
                                                         <div className="flex items-center gap-2 mt-1 text-xs text-ash-500">
                                                             <div className="flex items-center gap-1">
                                                                 <Phone className="h-3 w-3" />
-                                                                {lead.phone}
+                                                                {toDialablePhone(lead.phone)}
                                                             </div>
                                                             {lead.email && <div>• {lead.email}</div>}
                                                         </div>

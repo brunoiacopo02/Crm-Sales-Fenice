@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { BellRing, X } from "lucide-react"
 import { getCrossCompanyRecalls } from "@/app/actions/recallActions"
+import { toDialablePhone } from "@/lib/phoneDial";
 
 type CrossRecall = {
     id: string
@@ -73,7 +74,7 @@ export function CrossCompanyRecallBanner() {
                                 Richiamo {company} {isExpired ? 'SCADUTO' : 'in arrivo'}
                             </div>
                             <div className="mt-0.5 text-ash-700">
-                                <span className="font-semibold">{r.name}</span> · {r.phone}
+                                <span className="font-semibold">{r.name}</span> · {toDialablePhone(r.phone)}
                             </div>
                             <div className="text-ash-500">{when} — cambia azienda dal menu in alto per gestirlo</div>
                         </div>

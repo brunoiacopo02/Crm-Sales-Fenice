@@ -13,6 +13,7 @@ import {
     type ContactRequestsView,
 } from '@/app/actions/contactRequestActions';
 import { contactCategoryLabel } from '@/lib/bot-fissatore/contactRequests';
+import { toDialablePhone, telHref } from "@/lib/phoneDial";
 
 /**
  * Le etichette degli esiti. Le chiavi sono il vocabolario condiviso col
@@ -119,8 +120,8 @@ function RequestCard({ row, gdos, canAssign }: { row: ContactRequestRow; gdos: C
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ash-500">
                         {row.leadPhone && (
-                            <a href={`tel:${row.leadPhone}`} className="inline-flex items-center gap-1 font-medium text-brand-charcoal hover:underline">
-                                <Phone className="h-3.5 w-3.5" />{row.leadPhone}
+                            <a href={telHref(row.leadPhone)} className="inline-flex items-center gap-1 font-medium text-brand-charcoal hover:underline">
+                                <Phone className="h-3.5 w-3.5" />{toDialablePhone(row.leadPhone)}
                             </a>
                         )}
                         <span>{STATUS_LABEL[row.leadStatus] ?? row.leadStatus}</span>
