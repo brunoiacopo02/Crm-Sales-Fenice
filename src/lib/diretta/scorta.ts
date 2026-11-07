@@ -52,8 +52,6 @@ export const SOGLIA_SBLOCCO = 5
  * finita la grazia va in fondo alla scorta.
  */
 export const GRAZIA_MS = 20_000
-/** Un vergine che il GDO trova dopo un giorno di assenza resta un vergine. */
-export const VERGINE_MAX_MS = 7 * 24 * 3600 * 1000
 
 export type StatoScorta = 'visibile' | 'scorta'
 
@@ -92,8 +90,13 @@ export function conStella(l: Pick<LeadScorta, 'ultimoMotivo' | 'launchBucket'>):
  * Vergine: fresco di ActiveCampaign mai toccato da nessuno (né persona né bot).
  * Come eVergineDelGiorno di arrivo.ts ma senza il limite di oggi: un vergine
  * arrivato sabato sera e trovato lunedì resta un vergine.
+ *
+ * Nessun limite d'età (PO 07/11/2026: "i vergini, mai contattati da nessuno,
+ * né GDO né bot, devono apparire sempre in cima"). Fino al 07/11 oltre i 7
+ * giorni smetteva di esserlo e poteva finire nascosto in scorta. `ora` resta
+ * nella firma per non cambiare i chiamanti.
  */
-export function eVergine(l: LeadScorta, ora: Date): boolean {
+export function eVergine(l: LeadScorta, _ora?: Date): boolean {
     return l.status === 'NEW'
         && l.callCount === 0
         && l.source === 'activecampaign'
@@ -101,7 +104,6 @@ export function eVergine(l: LeadScorta, ora: Date): boolean {
         && l.ultimoMotivo === null
         && !l.passatoDalBot
         && !l.cercato
-        && ora.getTime() - l.createdAt.getTime() <= VERGINE_MAX_MS
 }
 
 /** Vergini, stelle e "Ti ha cercato" si vedono sempre, appena arrivano. */
@@ -254,9 +256,10 @@ export const PESO_ONDATA = 256
  * Rango di ondata in prima chiamata (PO 06/11/2026), più alto = più in alto:
  * i rimasti stanno sempre sopra i nuovi sbloccati. Uno sblocco scrive
  * scortaDal = ora sui lead che fa uscire; un visibile con scortaDal null non
- * viene da uno sblocco (prima assegnazione, arrivi caldi). Ordine: vergini,
- * stelle e "Ti ha cercato" sopra tutto, poi i visibili senza sblocco, poi le
- * ondate dalla più vecchia alla più nuova. Solo per i lead visibili.
+ * viene da uno sblocco (prima assegnazione, arrivi caldi). Ordine: i vergini
+ * sopra tutto (PO 07/11/2026: "sempre in cima", anche sopra stelle e "Ti ha
+ * cercato"), poi stelle e "Ti ha cercato", poi i visibili senza sblocco, poi
+ * le ondate dalla più vecchia alla più nuova. Solo per i lead visibili.
  */
 export function rangoOndata(lista: readonly LeadScorta[], ora: Date): Map<string, number> {
     const visibili = lista.filter(l => visibileInPrimaChiamata(l, ora))
@@ -266,7 +269,8 @@ export function rangoOndata(lista: readonly LeadScorta[], ora: Date): Map<string
     const n = ondate.length
     const out = new Map<string, number>()
     for (const l of visibili) {
-        if (sempreVisibile(l, ora)) out.set(l.id, n + 1)
+        if (eVergine(l, ora)) out.set(l.id, n + 2)
+        else if (sempreVisibile(l, ora)) out.set(l.id, n + 1)
         else if (daSblocco(l)) out.set(l.id, n - 1 - indice.get(l.scortaDal!.getTime())!)
         else out.set(l.id, n)
     }

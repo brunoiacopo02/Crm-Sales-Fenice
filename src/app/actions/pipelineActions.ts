@@ -27,6 +27,8 @@ import { daRifissareDalleConferme } from "@/lib/diretta/daRifissare"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
 import { applicaScritti, deveSbloccare, PESO_ONDATA, prioritaScorta, rangoOndata, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
 import { classificaEScrivi, dopoEsitoPrimaChiamata, sbloccaSeVuota, scortaAccesa } from "@/lib/diretta/scortaDb"
+import { serveScortaGenerale } from "@/lib/diretta/automatico"
+import { scortaGeneraleAccesa } from "@/lib/diretta/automaticoDb"
 
 /**
  * La quarta chiamata ("4ª Recupero") si vede solo a chi fissa poco: regola e
@@ -503,7 +505,8 @@ export async function getPipelineLeads() {
                 }))
                 if (cercatiLetti && eventiLetti) {
                     lista = applicaScritti(lista, await classificaEScrivi(ctx.companyId, userId, lista, now), now)
-                    if (deveSbloccare(lista, now)) {
+                    // Anche a scorta finita, se la scorta generale è accesa (PO 07/11/2026).
+                    if (deveSbloccare(lista, now) || (scortaGeneraleAccesa() && serveScortaGenerale(lista, now))) {
                         const sbloccati = await sbloccaSeVuota(ctx.companyId, userId, now)
                         if (sbloccati.length) lista = applicaScritti(lista, { visibili: [], scorta: [], sbloccati }, now)
                     }

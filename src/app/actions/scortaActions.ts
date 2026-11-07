@@ -120,6 +120,8 @@ export async function getScortaMonitor(): Promise<ScortaMonitor | null> {
         else if (m.tipo === 'vergini') { d.vergini += m.quanti; d.arrivi += m.quanti }
         else if (m.tipo === 'caldi' || m.tipo === 'nascosti') d.arrivi += m.quanti
         else if (m.tipo === 'sblocco' || m.tipo === 'sblocco_manuale') d.sblocchi += 1
+        // Scorta generale (PO 07/11/2026): lead nuovi dal serbatoio comune, come uno sblocco che porta arrivi.
+        else if (m.tipo === 'scorta_generale') { d.sblocchi += 1; d.arrivi += m.quanti }
     }
 
     const righe: ScortaGdo[] = squadra.map(u => {

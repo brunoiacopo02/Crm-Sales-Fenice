@@ -23,6 +23,8 @@ import {
     classificaArrivi, daSbloccare, applicaScritti, datiDaEventi, eVergine, primaAssegnazione, primiDellaScorta,
     SBLOCCO, SOGLIA_SBLOCCO, VISIBILI_INIZIALI, type EventoScorta, type LeadScorta,
 } from './scorta'
+import { serveScortaGenerale } from './automatico'
+import { prendiDalSerbatoio } from './automaticoDb'
 
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -31,7 +33,8 @@ type Esecutore = typeof db | Tx
 // 'sblocco_manuale': sblocco chiesto dall'admin dal monitor di /import. La
 // tabella dei movimenti non ha una colonna per le note (e la migrazione 0059 è
 // già in prod): il tipo stesso è la nota. Il monitor lo conta come uno sblocco.
-export type TipoMovimento = 'iniziale' | 'iniziale_scorta' | 'nascosti' | 'sblocco' | 'sblocco_manuale' | 'consumato' | 'vergini' | 'caldi' | 'spenta'
+// 'scorta_generale' (PO 07/11/2026): lead dati dal serbatoio comune a scorta personale finita (automaticoDb.ts).
+export type TipoMovimento = 'iniziale' | 'iniziale_scorta' | 'nascosti' | 'sblocco' | 'sblocco_manuale' | 'consumato' | 'vergini' | 'caldi' | 'spenta' | 'scorta_generale'
 
 const LOTTO = 1000
 function lotti<T>(lista: readonly T[], n = LOTTO): T[][] {
@@ -195,7 +198,13 @@ export async function sbloccaSeVuota(companyId: string, userId: string, ora: Dat
         const scritti = await classificaEScrivi(companyId, userId, lista, ora, tx)
         const dopo = applicaScritti(lista, scritti)
         const ids = daSbloccare(dopo, ora, SBLOCCO, SOGLIA_SBLOCCO)
-        if (ids.length === 0) return []
+        if (ids.length === 0) {
+            // Scorta generale (PO 07/11/2026): scorta personale finita e 5 o
+            // meno da chiamare → 30 dal serbatoio comune, già visibili. Spenta
+            // senza SCORTA_GENERALE_ENABLED (prendiDalSerbatoio non fa niente).
+            if (!serveScortaGenerale(dopo, ora, SOGLIA_SBLOCCO)) return []
+            return prendiDalSerbatoio(tx, companyId, userId, ora, SBLOCCO)
+        }
         const sbloccati = await scriviStato(tx, userId, ids, 'visibile', 'scorta', ora)
         await registra(tx, companyId, userId, 'sblocco', sbloccati, ora)
         return sbloccati

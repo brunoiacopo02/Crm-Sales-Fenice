@@ -15,6 +15,7 @@ const MOTIVI: Record<string, string> = {
     stella_fuori_selezione: 'Chat interrotta, inserzioni meno buone',
     lorenzo_solo_ridati_migliori: 'Tolti a Lorenzo',
     ridati_oltre_8gg_06_11: 'Ridati oltre 8 giorni (06/11)',
+    ridati_oltre_8gg_serale: 'Ridati oltre 8 giorni (giro serale)',
 }
 
 /** Nome in italiano semplice del motivo per cui il lead è stato accantonato. */
