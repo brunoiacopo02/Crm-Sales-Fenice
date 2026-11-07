@@ -1034,6 +1034,29 @@ export async function POST(req: NextRequest) {
         }
         const phoneSuspicious = !isPlausiblePhone(phoneStrict);
 
+        // Black Friday su chi e' gia' CLIENTE (venditore: Chiuso) o ha un appuntamento
+        // futuro attivo (PO 07/11/2026): non si riapre a freddo col bot. Resta in
+        // /lead-automatici come riga da guardare a mano, con il lead che l'ha fermato.
+        if (isBlackFriday) {
+            const cifre = phoneFinal.replace(/\D/g, '').slice(-10);
+            const [fermo] = cifre.length >= 6 ? await db.select({
+                id: leads.id, outcome: leads.salespersonOutcome, appointmentDate: leads.appointmentDate,
+            }).from(leads).where(and(
+                eq(leads.companyId, FENICE_COMPANY),
+                sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10) = ${cifre}`,
+                or(
+                    eq(leads.salespersonOutcome, 'Chiuso'),
+                    and(eq(leads.status, 'APPOINTMENT'), isNull(leads.salespersonOutcome), gte(leads.appointmentDate, new Date())),
+                ),
+            )).limit(1) : [];
+            if (fermo) {
+                const motivo = fermo.outcome === 'Chiuso' ? 'cliente' : 'appuntamento_futuro';
+                console.log(`[AC webhook] Black Friday: contatto ${contactId} non riaperto (${motivo}, lead ${fermo.id})`);
+                await recordDedupedSkip(contactId, `bf_non_riaperto:${motivo}:${fermo.id}`, 'bf_non_riaperto:%', rawPayload);
+                return NextResponse.json({ skipped: 'bf_non_riaperto', motivo, leadId: fermo.id, acContactId: contactId });
+            }
+        }
+
         const funnel = isBlackFriday ? BLACK_FRIDAY_FUNNEL : provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
         const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
         const newLeadId = crypto.randomUUID();
