@@ -19,7 +19,7 @@ import { ConfermeActiveTimerBanner } from "@/components/ConfermeActiveTimerBanne
 import { CloseLeadModal } from "@/components/CloseLeadModal"
 import { format, subDays, addDays } from "date-fns"
 import { it } from "date-fns/locale"
-import { confermeBoardColumn, OGGI_ORE, DOMANI_ORE } from "@/lib/conferme/boardWindow"
+import { confermeBoardColumn, contaPrimeChiamate, OGGI_ORE, DOMANI_ORE, POMERIGGIO_DALLE } from "@/lib/conferme/boardWindow"
 import { connectConfermePresence, subscribeConfermePresence, subscribeConfermeLeadChanges } from "@/lib/confermePresence"
 import {
     leadsInHour, nrCounts, applyNrFilter, snoozedOf, sortRichiami, filterStorico, storicoCounts,
@@ -343,16 +343,24 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
         </div>
     )
 
+    // "Domani · 1ª chiamata" in due gruppi (PO 07/11/2026): prima tutte le
+    // prime del mattino, poi quelle del pomeriggio (dalle 15) se si riesce.
+    // Chi resta senza 1ª chiamata domani è in Oggi con le sue 3 chiamate.
+    const isPomeriggioHour = (hourParam: string) => parseInt(hourParam, 10) >= POMERIGGIO_DALLE
+    const domaniConteggi = contaPrimeChiamate(domaniLeads.filter(l => !l.lead.confNeedsReschedule).map(l => l.lead.appointmentDate))
+    const domaniGruppi = [
+        { key: 'mattina', label: '1ª chiamata · domani mattina', count: domaniConteggi.mattina, hours: domaniHours.filter(h => !isPomeriggioHour(h)) },
+        { key: 'pomeriggio', label: '1ª chiamata · domani pomeriggio', count: domaniConteggi.pomeriggio, hours: domaniHours.filter(isPomeriggioHour) },
+    ]
+    const DOMANI_MESSAGGIO = 'Fai tutte le prime chiamate del mattino e, se riesci, anche quelle del pomeriggio. Se non riesci a farle tutte va bene lo stesso: domani le trovi in Oggi con le loro 3 chiamate.'
+
     const renderActiveTimeline = () => {
         const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
         const activeHours = viewMode === "oggi" ? oggiHours : viewMode === "domani" ? domaniHours : [];
 
         if (activeHours.length === 0) return null;
 
-        return (
-            <div className="w-full border-b border-ash-200/40 sticky top-0 bg-white/90 backdrop-blur-sm z-10 pt-3 pb-3 mb-4 shadow-soft">
-                <div className="flex flex-nowrap items-center gap-2 w-full max-w-[1400px] mx-auto px-3 overflow-x-auto pb-1 scrollbar-thin">
-                    {activeHours.map((hourParam) => {
+        const hourButtons = (hours: readonly string[]) => hours.map((hourParam) => {
                     const leadsForHour = leadsInHour(activeLeads, hourParam);
 
                     const allDone = leadsForHour.length > 0 && leadsForHour.every(l => !!l.lead.confirmationsOutcome);
@@ -368,7 +376,35 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                             <div className={`w-2.5 h-2.5 rounded-full ${trafficColor} border border-white/50`} />
                         </button>
                     )
-                })}
+                });
+
+        if (viewMode === 'domani') {
+            return (
+                <div className="w-full border-b border-ash-200/40 sticky top-0 bg-white/90 backdrop-blur-sm z-10 pt-3 pb-3 mb-4 shadow-soft">
+                    <div className="flex flex-col gap-3 w-full max-w-[1400px] mx-auto px-3">
+                        <div className="text-[13px] font-medium text-ash-600">{DOMANI_MESSAGGIO}</div>
+                        <div className="flex flex-col lg:flex-row gap-3">
+                            {domaniGruppi.map(g => (
+                                <div key={g.key} role="group" aria-label={g.label} className="flex flex-col flex-1 gap-2 min-w-0 p-2 rounded-xl border border-ash-200/60 bg-ash-50/50">
+                                    <div className="flex items-center gap-2 px-1 text-[12px] font-bold uppercase tracking-wide text-ash-700">
+                                        {g.label}
+                                        <span className="px-1.5 py-0.5 rounded-md text-[11px] leading-none font-bold bg-gold-400 text-white">{g.count}</span>
+                                    </div>
+                                    <div className="flex flex-nowrap items-center gap-2 pb-1 overflow-x-auto scrollbar-thin">
+                                        {hourButtons(g.hours)}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )
+        }
+
+        return (
+            <div className="w-full border-b border-ash-200/40 sticky top-0 bg-white/90 backdrop-blur-sm z-10 pt-3 pb-3 mb-4 shadow-soft">
+                <div className="flex flex-nowrap items-center gap-2 w-full max-w-[1400px] mx-auto px-3 overflow-x-auto pb-1 scrollbar-thin">
+                    {hourButtons(activeHours)}
                 </div>
             </div>
         )
@@ -537,9 +573,7 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
         const activeLeads = viewMode === "oggi" ? oggiLeads : viewMode === "domani" ? domaniLeads : [];
         const activeHours = viewMode === "oggi" ? oggiHours : viewMode === "domani" ? domaniHours : [];
         if (activeHours.length === 0) return null;
-        return (
-            <div role="group" aria-label="Fasce orarie" className="mb-4 flex gap-1 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-width:thin]">
-                {activeHours.map((hourParam) => {
+        const hourButtons = (hours: readonly string[]) => hours.map((hourParam) => {
                     const leadsForHour = leadsInHour(activeLeads, hourParam);
                     const allDone = leadsForHour.length > 0 && leadsForHour.every(l => !!l.lead.confirmationsOutcome);
                     const selected = selectedHour === hourParam;
@@ -560,7 +594,32 @@ export function ConfermeBoard({ currentUser, variant = 'classic' }: { currentUse
                             )}
                         </button>
                     )
-                })}
+                });
+
+        if (viewMode === 'domani') {
+            return (
+                <div className="mb-4 flex flex-col gap-3">
+                    <p className="text-[13px] text-[var(--d-muted)]">{DOMANI_MESSAGGIO}</p>
+                    <div className="flex flex-col gap-3 xl:flex-row">
+                        {domaniGruppi.map(g => (
+                            <section key={g.key} aria-label={g.label} className="flex min-w-0 flex-1 flex-col gap-2 rounded-2xl bg-[var(--d-surface)] p-3">
+                                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                                    {g.label}
+                                    <span className="text-[var(--d-orange)]">{g.count}</span>
+                                </h3>
+                                <div role="group" aria-label={`Fasce orarie, ${g.label}`} className="flex gap-1 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-width:thin]">
+                                    {hourButtons(g.hours)}
+                                </div>
+                            </section>
+                        ))}
+                    </div>
+                </div>
+            )
+        }
+
+        return (
+            <div role="group" aria-label="Fasce orarie" className="mb-4 flex gap-1 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-width:thin]">
+                {hourButtons(activeHours)}
             </div>
         )
     }

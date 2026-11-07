@@ -44,6 +44,30 @@ const range = (from: number, to: number) => Array.from({ length: to - from + 1 }
 export const OGGI_ORE: readonly number[] = range(9, 21);
 export const DOMANI_ORE: readonly number[] = range(9, 21);
 
+/** Dalle 15 è pomeriggio (stessa soglia del resto del CRM). */
+export const POMERIGGIO_DALLE = 15;
+
+export type FasciaPrimaChiamata = 'mattina' | 'pomeriggio';
+
+/**
+ * In quale gruppo della colonna "Domani · 1ª chiamata" sta una call (PO 07/11/2026):
+ * le Conferme fanno tutte le prime del mattino e, se riescono, quelle del pomeriggio.
+ */
+export function fasciaPrimaChiamata(appointmentDate: Date): FasciaPrimaChiamata {
+    return romeHour(new Date(appointmentDate)) >= POMERIGGIO_DALLE ? 'pomeriggio' : 'mattina';
+}
+
+/** Ore della colonna "Domani" divise nei due gruppi. */
+export const DOMANI_ORE_MATTINA: readonly number[] = DOMANI_ORE.filter(h => h < POMERIGGIO_DALLE);
+export const DOMANI_ORE_POMERIGGIO: readonly number[] = DOMANI_ORE.filter(h => h >= POMERIGGIO_DALLE);
+
+/** Quanti lead ci sono nei due gruppi della 1ª chiamata. */
+export function contaPrimeChiamate(appointmentDates: (Date | null | undefined)[]): Record<FasciaPrimaChiamata, number> {
+    const out: Record<FasciaPrimaChiamata, number> = { mattina: 0, pomeriggio: 0 };
+    for (const d of appointmentDates) if (d) out[fasciaPrimaChiamata(d)]++;
+    return out;
+}
+
 /** L'ora che legge un italiano (0-23). */
 function romeHour(at: Date): number {
     return parseInt(new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: 'numeric', hour12: false }).format(at), 10) % 24;
