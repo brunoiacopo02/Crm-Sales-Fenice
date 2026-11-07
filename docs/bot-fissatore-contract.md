@@ -1,7 +1,14 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.13 — 2026-11-07. Cosa cambia rispetto alla 1.12: **nuova Direzione 7**,
+> **Versione:** 1.14 — 2026-11-07. Cosa cambia rispetto alla 1.13: **cursore composto** su
+> `POST /api/bot/lead-status` (Direzione 5). Il bot manda `cursor` (ricevuto come
+> `nextCursor`) invece di `since`: ordine totale (updatedAt al microsecondo, leadId), così
+> un update in blocco con più righe della pagina nello stesso istante non ferma più il feed
+> (19/10/2026: 1.068 lead nello stesso istante, feed fermo 5 giorni). `since` resta
+> accettato com'era. Vedi [Cursore](#cursore-composto-v114).
+>
+> **Versione precedente:** 1.13 — 2026-11-07. Cosa cambiava rispetto alla 1.12: **nuova Direzione 7**,
 > `POST /api/bot/verifica-presenza` (Bot → CRM). Un'ora prima della call il bot chiede la
 > conferma della presenza ai lead confermati dalle Conferme il giorno prima e avvisa il
 > CRM dell'invio e della risposta; il CRM li mostra nella sezione "App da verificare" e
@@ -935,6 +942,7 @@ Content-Type: application/json
       "updatedAt": "2026-08-28T18:20:00.000Z"
     }
   ],
+  "nextCursor": "2026-08-28T18:20:00.123456Z|…",   // v1.14: da rimandare come `cursor`
   "nextSince": "2026-08-28T18:20:00.000Z",
   "hasMore": false
 }
@@ -943,12 +951,35 @@ Content-Type: application/json
 ### Come si consuma
 
 1. Si parte da un `since` qualunque (per il primo giro, la data di go-live del bot).
-2. Finché `hasMore` è `true`, si richiama subito con `since = nextSince`.
-3. Quando `hasMore` è `false`, si salva `nextSince` e si ripassa più tardi — un giro
+2. Finché `hasMore` è `true`, si richiama subito con `cursor = nextCursor` (v1.14;
+   prima era `since = nextSince`).
+3. Quando `hasMore` è `false`, si salva `nextCursor` e si ripassa più tardi — un giro
    ogni 15-30 minuti è più che sufficiente.
 
 `nextSince` è l'`updatedAt` dell'ultima riga servita, **non** "adesso": ripartire da
 adesso salterebbe tutto ciò che cambia mentre si scorrono le pagine.
+
+### Cursore composto (v1.14)
+
+Ogni risposta porta anche `nextCursor`: una stringa opaca
+`"<updatedAt ISO UTC al microsecondo>|<leadId>"`, es.
+`"2026-10-19T13:09:33.289260Z|618ad973-…"`. Da rimandare tale e quale:
+
+```
+{ "cursor": "2026-10-19T13:09:33.289260Z|618ad973-…", "limit": 200 }
+```
+
+- Le righe sono ordinate per (`updatedAt`, `leadId`) e la pagina successiva parte
+  **strettamente dopo** la coppia del cursore: nessuna riga persa né ripetuta anche
+  quando migliaia di lead hanno lo stesso `updatedAt`.
+- Il primo giro (o la migrazione dal vecchio cursore) si fa con `since`; da lì in poi
+  si salva e si rimanda solo `cursor`. Se arrivano entrambi vince `cursor`.
+- Pagina vuota: `nextCursor` è il cursore ricevuto (con `since`: `null`, si tiene il
+  proprio `since`).
+- `cursor` malformato → `400 bad_request`.
+- **`since` da solo resta accettato** con la semantica di prima (`updatedAt > since`),
+  ma è quello che si ferma su un blocco con più righe della pagina nello stesso
+  istante: non usarlo per il giro ordinario.
 
 ### Perimetro
 

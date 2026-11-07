@@ -5,6 +5,7 @@ import { botContactRequests, leadEvents, leads, users } from '@/db/schema';
 import { verifySignature } from '@/lib/marketing-webhooks/signing';
 import { serveConfermeOutcome } from '@/lib/bot-fissatore/leadStatusRecall';
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
+import { encodeCursor, parseCursor } from '@/lib/bot-fissatore/leadStatusCursor';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,8 +22,13 @@ export const dynamic = 'force-dynamic';
  * Il bot chiede "cosa è cambiato da questo istante in poi" e riceve le righe in
  * ordine di aggiornamento; quando ha finito rilancia dall'ultimo `nextSince`.
  *
- * Body:  { since: ISO 8601, limit?: number }   Firma: `x-bot-signature` (BOT_WEBHOOK_SECRET)
- * Reply: { leads: LeadStatus[], nextSince: string, hasMore: boolean }
+ * Body:  { cursor?: string, since?: ISO 8601, limit?: number }   Firma: `x-bot-signature` (BOT_WEBHOOK_SECRET)
+ * Reply: { leads: LeadStatus[], nextCursor: string, nextSince: string, hasMore: boolean }
+ *
+ * CURSORE (v1.14): `cursor` = "<updatedAt al microsecondo>|<leadId>", ordine totale
+ * (updatedAt, id). Il solo `since` resta accettato com'era (retrocompatibile), ma si
+ * blocca quando più righe della pagina hanno lo stesso updatedAt: è successo il 19/10
+ * con 1.068 lead aggiornati nello stesso istante. Se arrivano entrambi vince `cursor`.
  *
  * Ogni riga porta anche `contattoUmano`: chi ha preso in carico la richiesta di
  * parlare con una persona, quando, e com'è finita (null se il lead non ne ha
@@ -50,16 +56,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'invalid_signature', reason: check.reason }, { status: 401 });
     }
 
-    let body: { since?: string; limit?: number };
+    let body: { since?: string; cursor?: string; limit?: number };
     try {
         body = rawBody ? JSON.parse(rawBody) : {};
     } catch {
         return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
     }
 
-    const since = body.since ? new Date(body.since) : null;
+    const cursor = body.cursor !== undefined && body.cursor !== null ? parseCursor(body.cursor) : null;
+    if (body.cursor !== undefined && body.cursor !== null && !cursor) {
+        return NextResponse.json({ error: 'bad_request', detail: 'cursor malformato' }, { status: 400 });
+    }
+    const since = cursor ? new Date(cursor.updatedAt) : body.since ? new Date(body.since) : null;
     if (!since || isNaN(since.getTime())) {
-        return NextResponse.json({ error: 'bad_request', detail: 'since richiesto (ISO 8601)' }, { status: 400 });
+        return NextResponse.json({ error: 'bad_request', detail: 'since o cursor richiesto (ISO 8601)' }, { status: 400 });
     }
     const limit = Math.min(Math.max(Math.floor(body.limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
 
@@ -94,14 +104,21 @@ export async function POST(req: NextRequest) {
         discardReason: leads.discardReason,
         agendaStatus: leads.agendaStatus,
         updatedAt: leads.updatedAt,
+        // Al microsecondo: il Date di JS tronca al millisecondo e un cursore troncato
+        // ripescherebbe le stesse righe.
+        updatedAtUs: sql<string>`to_char(${leads.updatedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
     })
         .from(leads)
         .where(and(
             eq(leads.companyId, 'fenice'),
-            gt(leads.updatedAt, since),
+            cursor
+                // Row comparison: usa l'indice (updatedAt, id) e non perde né ripete
+                // righe dentro un blocco con lo stesso istante.
+                ? sql`(${leads.updatedAt}, ${leads.id}) > (${cursor.updatedAt}::timestamptz, ${cursor.id})`
+                : gt(leads.updatedAt, since),
             workedByBot,
         ))
-        .orderBy(asc(leads.updatedAt))
+        .orderBy(asc(leads.updatedAt), asc(leads.id))
         .limit(limit + 1); // una in più: dice se c'è altro senza un secondo count
 
     const hasMore = rows.length > limit;
@@ -187,9 +204,15 @@ export async function POST(req: NextRequest) {
 
     // `nextSince` è l'updatedAt dell'ultima riga servita, non "adesso": ripartire
     // da adesso salterebbe tutto ciò che cambia mentre si scorrono le pagine.
-    const nextSince = page.length > 0
-        ? page[page.length - 1].updatedAt.toISOString()
-        : since.toISOString();
+    const last = page.length > 0 ? page[page.length - 1] : null;
+    const nextSince = last ? last.updatedAt.toISOString() : since.toISOString();
+    // Pagina vuota: si restituisce il cursore ricevuto; col vecchio `since` null (il
+    // chiamante tiene il suo `since`).
+    const nextCursor = last
+        ? encodeCursor({ updatedAt: last.updatedAtUs, id: last.leadId })
+        : cursor
+            ? encodeCursor(cursor)
+            : null;
 
-    return NextResponse.json({ leads: payload, nextSince, hasMore });
+    return NextResponse.json({ leads: payload, nextCursor, nextSince, hasMore });
 }
