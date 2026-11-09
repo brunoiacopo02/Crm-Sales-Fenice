@@ -293,7 +293,7 @@ async function leggiListeContatto(contactId: string): Promise<{ ids: Set<string>
 }
 
 /** La prima lista bloccata fra le membership attive del contatto, o null. */
-function blockedListOf(activeListIds: Set<string>, blocked: Set<string>): string | null {
+function blockedListOf(activeListIds: ReadonlySet<string>, blocked: ReadonlySet<string>): string | null {
     for (const id of activeListIds) if (blocked.has(id)) return id;
     return null;
 }
