@@ -14,7 +14,7 @@ import {
     eseguiMassa, fotografiaAppuntamento, leggiElenco, leggiPanoramica, leggiPersone, leggiStorico, pianificaMassa,
     registraToltoAppuntamento,
     type AnteprimaInterruttori, type AnteprimaSingolo, type ElencoRegia, type EsitoMassa, type OperazioneStorico,
-    type PanoramicaRegia, type PersonaRegia, type PianoMassa, type Posizione, type RichiestaInterruttori, type RichiestaMassa,
+    type PanoramicaRegia, type PianoMassa, type Posizione, type RichiestaInterruttori, type RichiestaMassa,
     type RichiestaSingolo, type TipoMassa, type TipoSingolo, type VocePiano,
 } from "@/lib/diretta/regiaDb"
 
@@ -194,4 +194,3 @@ export async function annullaOperazioneRegia(operazioneId: string): Promise<Esit
     })
 }
 
-export type { PersonaRegia }

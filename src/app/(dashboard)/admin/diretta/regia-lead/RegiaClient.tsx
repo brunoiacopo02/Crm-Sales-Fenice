@@ -74,7 +74,7 @@ function Stato({ r }: { r: RigaPanoramica }) {
         <div className={`rounded-[6px] px-1.5 py-0.5 text-[12px] font-semibold ${on ? "bg-[#16352A] text-[#5CC792]" : "bg-[#2E2E2E] text-[#8C8C8C] line-through"}`}>{testo}</div>
     )
     return (
-        <div className="flex flex-wrap justify-end gap-1">
+        <div className="flex flex-nowrap justify-end gap-1">
             {chip(p.isActive, "attivo")}
             {chip(p.acAutoIntake, "freschi")}
             {chip(p.botReturnIntake, "ridati")}

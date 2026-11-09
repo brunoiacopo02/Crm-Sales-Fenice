@@ -168,6 +168,8 @@ test('regia dei lead: nel menu Rinascita, solo ADMIN dalla tabella users in pagi
     assert.match(leggi('app/(dashboard)/admin/diretta/regia-lead/page.tsx'), /if \(!\(await conRuoloDb\(\["ADMIN"\]\)\)\) redirect\("\/unauthorized"\)/)
     const codice = leggi('app/actions/regiaLeadActions.ts')
     assert.match(codice, /^"use server"/)
+    // un re-export di tipi in un file "use server" rompe il modulo in produzione (ReferenceError, 09/11/2026)
+    assert.doesNotMatch(codice, /^export type \{/m)
     const azioni = [...codice.matchAll(/export async function (\w+)/g)].map(m => ({ nome: m[1], da: m.index! }))
     assert.ok(azioni.length >= 9, `trovate ${azioni.length}`)
     azioni.forEach((a, i) => {
