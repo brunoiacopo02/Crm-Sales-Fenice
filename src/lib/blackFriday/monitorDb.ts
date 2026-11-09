@@ -136,13 +136,15 @@ async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<AltriFunnel
  * Prima conversione a BLACK FRIDAY del lead dal 7/11 (null se mai convertito):
  * BF_CONVERTITO di /api/admin/bf-converti o AC_UPDATED del webhook AC con
  * 'funnel → BLACK FRIDAY' nei changes (vedi eConversioneBf in monitor.ts).
+ * Nomi qualificati a mano: nella lista del SELECT drizzle scrive le colonne
+ * senza tabella e `"leadId" = "id"` finirebbe tutto dentro leadEvents.
  */
 const conversioneBfAt = sql<string | Date | null>`(
-    select min(${leadEvents.timestamp}) from ${leadEvents}
-    where ${leadEvents.leadId} = ${leads.id}
-      and ${leadEvents.timestamp} >= ${INIZIO_BF}
-      and (${leadEvents.eventType} = ${EVENTO_BF_CONVERTITO}
-        or (${leadEvents.eventType} = 'AC_UPDATED' and ${leadEvents.metadata}->'changes' @> ${JSON.stringify([CAMBIO_FUNNEL_BF])}::jsonb))
+    select min(ce."timestamp") from "leadEvents" ce
+    where ce."leadId" = "leads"."id"
+      and ce."timestamp" >= ${INIZIO_BF}
+      and (ce."eventType" = ${EVENTO_BF_CONVERTITO}
+        or (ce."eventType" = 'AC_UPDATED' and ce."metadata"->'changes' @> ${JSON.stringify([CAMBIO_FUNNEL_BF])}::jsonb))
 )`
 
 const comeData = (v: string | Date | null): Date | null => (v === null ? null : v instanceof Date ? v : new Date(v))
