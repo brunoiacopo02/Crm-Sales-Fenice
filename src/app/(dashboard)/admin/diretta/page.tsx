@@ -9,7 +9,7 @@ import { PaginaAdmin, Sezione, TitoloAdmin, oraDi } from "@/components/diretta/a
 import { InterruttoriDiretta } from "./InterruttoriDiretta"
 import { AggiornaCentro } from "./AggiornaCentro"
 import {
-    LinkBlackFriday, LinkPremiSettimana, LinkSalvadanai, SezioneBonusConferme, SezioneCitazioni, SezioneAppuntamenti, SezioneNegozio,
+    LinkBlackFriday, LinkPremiSettimana, LinkRegiaLead, LinkSalvadanai, SezioneBonusConferme, SezioneCitazioni, SezioneAppuntamenti, SezioneNegozio,
     SezioneObiettivi, SezioneOggi, SezioneRegistro,
 } from "./sezioni"
 
@@ -55,6 +55,7 @@ export default async function CentroDirettaPage() {
                 </div>
 
                 <div className="flex min-w-0 flex-col gap-4">
+                    <LinkRegiaLead />
                     <LinkBlackFriday />
                     <Sezione titolo="Interruttori">
                         <InterruttoriDiretta flags={stato.flags} />

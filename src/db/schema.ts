@@ -627,6 +627,28 @@ export const gdoScortaMovimenti = pgTable('gdoScortaMovimenti', {
     perGdo: index('gdo_scorta_mov_idx').on(t.companyId, t.userId, t.createdAt),
 }));
 
+// Regia dei lead (migr. 0062, PO 09/11/2026): una riga per ogni operazione fatta
+// dall'admin in /admin/diretta/regia-lead, con prima e dopo dei campi toccati
+// (lead e GDO) per poterla annullare dallo storico della pagina.
+export const regiaOperazioni = pgTable('regiaOperazioni', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').notNull(),
+    adminId: text('adminId').notNull(),
+    /** sposta | al_bot | accantona | cima | scarta | doppione | togli_appuntamento | interruttori | annulla */
+    tipo: text('tipo').notNull(),
+    descrizione: text('descrizione').notNull(),
+    quanti: integer('quanti').notNull(),
+    /** { lead: [{ id, nome, prima, dopo }], gdo: [{ id, nome, prima, dopo }], extra } */
+    dettaglio: jsonb('dettaglio').notNull(),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+    annullataAt: timestamp('annullataAt', { withTimezone: true, mode: 'date' }),
+    annullataDa: text('annullataDa'),
+    /** { ripristinati, saltati: [{ id, nome, motivo }] } */
+    esitoAnnulla: jsonb('esitoAnnulla'),
+}, (t) => ({
+    perData: index('regia_operazioni_company_created_idx').on(t.companyId, t.createdAt),
+}));
+
 // Heartbeat DB come fonte di verità della presence Conferme (Task P1,
 // 2026-07-05): il Realtime Supabase (channel `conferme_realtime_board`,
 // vedi src/lib/confermePresence.ts) resta il segnale "instant" ma è

@@ -124,7 +124,7 @@ test('centro di controllo: collegato alle pagine di dettaglio', () => {
     const centro = leggi('app/(dashboard)/admin/diretta/page.tsx') + leggi('app/(dashboard)/admin/diretta/sezioni.tsx')
     for (const href of [
         '/admin/diretta/obiettivi', '/admin/citazioni', '/admin/premi', '/admin/diretta/premi-settimana',
-        '/admin/diretta/salvadanai', '/admin/diretta/black-friday', '/admin/diretta/conferme', '/admin/diretta/registro', '/classifica',
+        '/admin/diretta/salvadanai', '/admin/diretta/black-friday', '/admin/diretta/regia-lead', '/admin/diretta/conferme', '/admin/diretta/registro', '/classifica',
     ]) {
         assert.ok(centro.includes(`href="${href}`), href)
     }
@@ -144,6 +144,9 @@ const FILE_UI = [
     'app/(dashboard)/admin/diretta/salvadanai/page.tsx',
     'app/(dashboard)/admin/diretta/black-friday/page.tsx',
     'app/(dashboard)/admin/diretta/black-friday/AggiornaBlackFriday.tsx',
+    'app/(dashboard)/admin/diretta/regia-lead/page.tsx',
+    'app/(dashboard)/admin/diretta/regia-lead/AggiornaRegia.tsx',
+    'app/(dashboard)/admin/diretta/regia-lead/RegiaClient.tsx',
     'components/diretta/SalvadanaioMese.tsx',
     'app/(dashboard)/admin/citazioni/CitazioniAdminClient.tsx',
     'components/diretta/admin/ui.tsx',
@@ -158,4 +161,20 @@ test('pagine admin Diretta: nessun bottone dentro span o p, niente pillole', () 
         assert.doesNotMatch(codice, /\buppercase\b|tracking-wider|tracking-widest/, `${f}: maiuscolo spaziato`)
         assert.doesNotMatch(codice, /shadow-|bg-gradient|font-mono/, `${f}: ombre, gradienti o monospace`)
     }
+})
+
+test('regia dei lead: nel menu Rinascita, solo ADMIN dalla tabella users in pagina e in ogni action', () => {
+    assert.ok(MENU_ADMIN_DIRETTA.some(v => v.href === '/admin/diretta/regia-lead'))
+    assert.match(leggi('app/(dashboard)/admin/diretta/regia-lead/page.tsx'), /if \(!\(await conRuoloDb\(\["ADMIN"\]\)\)\) redirect\("\/unauthorized"\)/)
+    const codice = leggi('app/actions/regiaLeadActions.ts')
+    assert.match(codice, /^"use server"/)
+    const azioni = [...codice.matchAll(/export async function (\w+)/g)].map(m => ({ nome: m[1], da: m.index! }))
+    assert.ok(azioni.length >= 9, `trovate ${azioni.length}`)
+    azioni.forEach((a, i) => {
+        const corpo = codice.slice(a.da, azioni[i + 1]?.da ?? codice.length)
+        assert.match(corpo, /await soloAdmin\(\)/, a.nome)
+    })
+    // niente confirm()/alert() del browser: anteprima e conferma stanno nella pagina
+    const client = leggi('app/(dashboard)/admin/diretta/regia-lead/RegiaClient.tsx')
+    assert.doesNotMatch(client, /(window\.)?(confirm|alert)\(/)
 })

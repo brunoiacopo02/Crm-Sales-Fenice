@@ -494,3 +494,22 @@ export function LinkBlackFriday() {
         </Link>
     )
 }
+
+// ── Regia dei lead (PO 09/11/2026) ──────────────────────────────────────
+
+export function LinkRegiaLead() {
+    return (
+        <Link
+            href="/admin/diretta/regia-lead"
+            className="flex items-center justify-between gap-3 rounded-[16px] bg-[#262626] px-5 py-4 transition-colors hover:bg-[#2E2E2E] sm:px-6"
+        >
+            <div className="min-w-0">
+                <div className="text-[17px] font-semibold">Regia dei lead</div>
+                <div className="mt-1 text-[14px] leading-snug text-[#BFBFBF]">
+                    I lead aperti di ogni GDO e del bot in tempo reale: sposta, dai al bot, accantona, interruttori. Con anteprima e annulla.
+                </div>
+            </div>
+            <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-[#BFBFBF]" strokeWidth={1.5} />
+        </Link>
+    )
+}
