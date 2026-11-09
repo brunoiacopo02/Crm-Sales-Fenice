@@ -8,6 +8,8 @@ import { getAnimationsEnabled } from "@/lib/animationUtils"
 import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 import { appointmentSlotWarning } from "@/lib/conferme/appointmentSlotWarning"
+import { avvisoOraAffollata, type ContaOre } from "@/lib/conferme/oreOccupate"
+import { oreOccupateDelGiorno } from "@/app/actions/oreOccupateActions"
 import { emettiAppuntamentoDiretta } from "@/lib/diretta/eventi"
 import { useDirettaUi } from "./diretta/DirettaUi"
 
@@ -61,6 +63,22 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
 
     const containerRef = useRef<HTMLDivElement>(null)
     const popoverRef = useRef<HTMLDivElement>(null)
+
+    // Ore già piene del giorno scelto (PO 09/11/2026): si rilegge solo quando cambia
+    // il giorno, non l'ora. Un errore lascia l'avviso spento, non blocca niente.
+    const giornoScelto = activePopover === 'appuntamento' && /^\d{4}-\d{2}-\d{2}/.test(dateStr) ? dateStr.slice(0, 10) : null
+    const [oreGiorno, setOreGiorno] = useState<{ giorno: string; conta: ContaOre; soglia: number } | null>(null)
+    useEffect(() => {
+        if (!giornoScelto) return
+        let attivo = true
+        oreOccupateDelGiorno(giornoScelto)
+            .then(r => { if (attivo) setOreGiorno(r ? { giorno: giornoScelto, ...r } : null) })
+            .catch(() => { if (attivo) setOreGiorno(null) })
+        return () => { attivo = false }
+    }, [giornoScelto])
+    const avvisoAffollata = giornoScelto && oreGiorno?.giorno === giornoScelto
+        ? avvisoOraAffollata(dateStr, oreGiorno.conta, oreGiorno.soglia)
+        : null
 
     // Rete di sicurezza: se il popover appena aperto sfora l'area visibile del
     // contenitore scrollabile (drawer) o della pagina, lo porta in vista.
@@ -288,6 +306,9 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                         {avviso && (
                             <div className="mb-3 rounded-lg bg-[#2E2E2E] px-3 py-2 text-[13px] text-[#F2F2F2]">{avviso}</div>
                         )}
+                        {avvisoAffollata && (
+                            <div className="mb-3 rounded-lg bg-[#2E2E2E] px-3 py-2 text-[13px] text-[#F2F2F2]">{avvisoAffollata}</div>
+                        )}
                         <div className="mb-1 text-[13px] text-[#BFBFBF]">Note, facoltative</div>
                         <textarea
                             value={note}
@@ -391,6 +412,12 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                     {activePopover === 'appuntamento' && dateStr && appointmentSlotWarning(dateStr, new Date()) && (
                         <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-700">
                             ⚠️ {appointmentSlotWarning(dateStr, new Date())}
+                        </div>
+                    )}
+
+                    {avvisoAffollata && (
+                        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-700">
+                            ⚠️ {avvisoAffollata}
                         </div>
                     )}
 
