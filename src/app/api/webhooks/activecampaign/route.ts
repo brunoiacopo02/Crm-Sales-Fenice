@@ -210,10 +210,19 @@ async function getListIdsByName(): Promise<Map<string, Set<string>>> {
  * deve poter riaprire una lista bloccata qui.
  */
 const BLOCKED_LIST_IDS = new Set(
-    ['133', '135', ...(process.env.ACTIVECAMPAIGN_BLOCKED_LIST_IDS || '').split(',')]
+    ['133', '135', '137', ...(process.env.ACTIVECAMPAIGN_BLOCKED_LIST_IDS || '').split(',')]
         .map((s) => s.trim())
         .filter(Boolean),
 );
+
+/**
+ * Liste bloccate SENZA ECCEZIONI (PO 09/11/2026: "bloccare categoricamente
+ * tutti i lead che arrivano dalla lista 137"). A differenza di BLOCKED_LIST_IDS
+ * non le scavalcano né la lista Black Friday né il lancio: il controllo è il
+ * primo del webhook. Stanno anche in BLOCKED_LIST_IDS per i percorsi che
+ * leggono solo quelle (retry, pool).
+ */
+const HARD_BLOCKED_LIST_IDS: ReadonlySet<string> = new Set(['137']);
 
 async function getBlockedListIds(): Promise<Set<string>> {
     // Gli id espliciti valgono sempre, anche se /lists è irraggiungibile.
@@ -640,6 +649,29 @@ export async function POST(req: NextRequest) {
 
         const triggerListId = rawPayload['list'] || rawPayload['list[id]'] || null;
 
+        // ===== LISTE BLOCCATE SENZA ECCEZIONI (PO 09/11/2026: lista 137) =====
+        // Vincono su TUTTO, anche su Black Friday e lancio, che invece scavalcano
+        // le liste bloccate normali: si controllano prima di ogni altro ramo, sia
+        // sul payload sia sulle iscrizioni del contatto. Se AC non risponde il
+        // contatto si mette da parte (si chiude, non si apre).
+        if (triggerListId && HARD_BLOCKED_LIST_IDS.has(String(triggerListId))) {
+            console.log(`[AC webhook] skip contact ${contactId} — lista bloccata senza eccezioni (payload) ${triggerListId}`);
+            await recordBlockedListSkip(contactId, String(triggerListId), rawPayload);
+            return NextResponse.json({ skipped: 'blocked_list', listId: String(triggerListId), acContactId: contactId, via: 'payload_hard' });
+        }
+        const letturaHard = await leggiListeContatto(contactId);
+        if (!letturaHard.ok) {
+            console.error(`[AC webhook] liste del contatto ${contactId} non leggibili (controllo liste senza eccezioni): messo da parte`);
+            await recordDedupedSkip(contactId, 'liste_non_leggibili', 'liste_non_leggibili%', rawPayload);
+            return NextResponse.json({ skipped: 'liste_non_leggibili', acContactId: contactId });
+        }
+        const hardBlocked = blockedListOf(letturaHard.ids, HARD_BLOCKED_LIST_IDS);
+        if (hardBlocked) {
+            console.log(`[AC webhook] skip contact ${contactId} — lista bloccata senza eccezioni (iscrizione) ${hardBlocked}`);
+            await recordBlockedListSkip(contactId, hardBlocked, rawPayload);
+            return NextResponse.json({ skipped: 'blocked_list', listId: hardBlocked, acContactId: contactId, via: 'membership_hard' });
+        }
+
         // ===== RAMO LANCIO (spec 2026-09-14 §4.1) — PRIMA delle liste bloccate =====
         // La lista del lancio sta ANCHE nel default di BLOCKED_LIST_NAMES_NORMALIZED:
         // a interruttore spento (LANCIO_WEBDEV_INTAKE != 'on') si cade nel ramo
@@ -654,7 +686,8 @@ export async function POST(req: NextRequest) {
         const lancioEventoAmmesso = eventType === 'subscribe' || eventType === 'update';
         const lancioEnabled = isLancioIntakeEnabled() && lancioEventoAmmesso;
         const lancioListIds = lancioEnabled ? await getLancioListIds() : null;
-        let activeListIds: Set<string> | null = null;
+        // Iscrizioni già lette dal controllo delle liste senza eccezioni: si riusano.
+        let activeListIds: Set<string> | null = letturaHard.ids;
 
         // ===== BLACK FRIDAY (PO 07/11/2026) — PRIMA del lancio e delle liste bloccate =====
         // Un contatto che entra nella lista AC "Black Friday 2026" e' un lead Black
@@ -671,11 +704,7 @@ export async function POST(req: NextRequest) {
                 if (triggerListId && bfListIds.has(String(triggerListId))) {
                     bfLista = true;
                 } else {
-                    const lettura = await leggiListeContatto(contactId);
-                    if (lettura.ok) {
-                        activeListIds = lettura.ids;
-                        bfLista = [...bfListIds].some((id) => lettura.ids.has(id));
-                    }
+                    bfLista = [...bfListIds].some((id) => letturaHard.ids.has(id));
                 }
             }
         }
