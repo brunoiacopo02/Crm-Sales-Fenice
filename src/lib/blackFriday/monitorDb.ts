@@ -1,27 +1,134 @@
 // Letture della pagina /admin/diretta/black-friday (PO 09/11/2026).
 // Non è un file "use server": non controlla il ruolo, lo fa la pagina.
 //
-// Costo: 7 query aggregate o su poche decine di righe (i lead BF, i loro eventi
-// e chiamate), nessun N+1. Il risultato sta in una cache di 45 secondi
-// condivisa fra chi guarda: con la pagina aperta su più schede o persone il
-// database vede al massimo una lettura ogni 45 secondi.
+// Costo: query aggregate o su poche decine/centinaia di righe (i lead BF, i loro
+// eventi e chiamate, gli stadi degli altri funnel dal 7/11), nessun N+1, più una
+// chiamata al bot (`/api/bot/statistiche-bf`, firma HMAC come il push, timeout
+// breve). Il risultato sta in una cache di 45 secondi condivisa fra chi guarda:
+// con la pagina aperta su più schede o persone il database e il bot vedono al
+// massimo una lettura ogni 45 secondi. Se il bot non risponde, `bot` è null e la
+// pagina resta in piedi coi dati del CRM.
 
 import { unstable_cache } from 'next/cache'
-import { and, eq, exists, gte, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, eq, exists, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { callLogs, leadEvents, leads, users } from '@/db/schema'
 import { dayBoundsRome } from '@/lib/dateUtils'
 import { leadVero } from '@/lib/prova/sql'
-import { BF_FUNNEL, calcolaMonitorBf, type MonitorBf } from './monitor'
+import { contaNeiKpiSql } from '@/lib/intakeBatch'
+import { readGamificationTargets } from '@/lib/diretta/settings'
+import { signPayload } from '@/lib/marketing-webhooks/signing'
+import {
+    BF_FUNNEL, calcolaMonitorBf, stadiSm,
+    type AltriFunnelSm, type BotFunnelChat, type BotLeadBf, type DatiBotBf, type MonitorBf,
+} from './monitor'
 
 const FENICE = 'fenice'
 /** Partenza dell'offerta: sabato 7/11/2026 00:00 di Roma. */
 export const INIZIO_BF = new Date('2026-11-06T23:00:00Z')
 export const CACHE_SECONDI = 45
 export const TAG_MONITOR_BF = 'monitor-black-friday'
+/** Il bot deve rispondere in fretta: la pagina non aspetta oltre. */
+export const TIMEOUT_BOT_MS = 6000
 
 function nomeGdo(u: { firstName: string | null; name: string | null; gdoCode: number | null }): string {
     return u.firstName?.trim() || u.name?.trim() || (u.gdoCode ? `GDO ${u.gdoCode}` : 'Senza nome')
+}
+
+type RispostaBot = {
+    ok?: boolean
+    letto_alle?: string
+    leads?: {
+        crm_lead_id: string; conversation_id: number | null; chat_nuova: boolean | null; con_chat: boolean
+        consegnato: boolean; risposto: boolean; wa_number: string | null; mario_braccio: string | null; bot_outcome: string | null
+    }[]
+    riepilogo?: { funnel?: { funnel: string; chat: number; risposto: number; appuntamenti: number; eta_media_ore: number | null }[] }
+}
+
+/**
+ * Stato delle chat dei lead BF e riepilogo per funnel, dal bot. null = non
+ * leggibile (env mancanti, bot giù, timeout, risposta strana). Mai lancia.
+ * Il telefono va al bot solo come ripiego per trovare la chat (il bot lo ha già).
+ */
+export async function leggiDatiBot(
+    lead: { id: string; createdAt: Date; phone: string }[],
+    timeoutMs: number = TIMEOUT_BOT_MS,
+): Promise<DatiBotBf | null> {
+    const intake = process.env.BOT_INTAKE_URL
+    const secret = process.env.BOT_WEBHOOK_SECRET
+    if (!intake || !secret) return null
+    let url: string
+    try { url = new URL('/api/bot/statistiche-bf', intake).toString() } catch { return null }
+    const body = JSON.stringify({
+        ts: new Date().toISOString(),
+        dal: INIZIO_BF.toISOString(),
+        leads: lead.map(l => ({ id: l.id, ingresso: l.createdAt.toISOString(), telefono: l.phone })),
+    })
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bot-signature': signPayload(body, secret) },
+            body,
+            cache: 'no-store',
+            signal: AbortSignal.timeout(timeoutMs),
+        })
+        if (!res.ok) {
+            console.error(`[monitor black friday] bot HTTP ${res.status}`)
+            return null
+        }
+        const j = (await res.json()) as RispostaBot
+        if (!j.ok || !Array.isArray(j.leads) || !Array.isArray(j.riepilogo?.funnel)) return null
+        const leadsBot: BotLeadBf[] = j.leads.map(l => ({
+            leadId: l.crm_lead_id, conversationId: l.conversation_id, chatNuova: l.chat_nuova, conChat: l.con_chat,
+            consegnato: l.consegnato, risposto: l.risposto, waNumber: l.wa_number, braccio: l.mario_braccio, esitoBot: l.bot_outcome,
+        }))
+        const funnel: BotFunnelChat[] = j.riepilogo!.funnel!.map(f => ({
+            funnel: f.funnel, chat: f.chat, risposto: f.risposto, appuntamenti: f.appuntamenti, etaMediaOre: f.eta_media_ore,
+        }))
+        return { lettoAlle: j.letto_alle ?? new Date().toISOString(), leads: leadsBot, funnel }
+    } catch (e) {
+        console.error('[monitor black friday] bot non raggiungibile', e)
+        return null
+    }
+}
+
+/**
+ * Gli altri funnel (non BF) nello stesso periodo, con le regole del Sales
+ * Manager (panoramicaActions): lead = COALESCE(assignedAt, createdAt) nel
+ * periodo, lead dei pool solo se assegnati, contaNeiKpiSql, funnel non TEST né
+ * vuoto (getLeadSplitByFunnel / leadOverviewForCompany); stadi = stageHits sui
+ * lead con almeno una data di stadio nel periodo (getCrmFunnelCounts).
+ */
+async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<AltriFunnelSm> {
+    const nonBf = and(
+        sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
+        sql`UPPER(COALESCE(${leads.funnel}, '')) <> ${BF_FUNNEL}`,
+    )
+    const [conteggio, righe] = await Promise.all([
+        db.select({ c: sql<number>`count(*)::int` }).from(leads).where(and(
+            eq(leads.companyId, FENICE), leadVero(), nonBf,
+            sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) >= ${inizio}`,
+            sql`COALESCE(${leads.assignedAt}, ${leads.createdAt}) < ${adesso}`,
+            or(isNull(leads.launchBucket), isNotNull(leads.assignedToId)),
+            contaNeiKpiSql(),
+        )),
+        db.select({
+            appointmentDate: leads.appointmentDate, appointmentCreatedAt: leads.appointmentCreatedAt,
+            confirmationsOutcome: leads.confirmationsOutcome, confirmationsTimestamp: leads.confirmationsTimestamp,
+            salespersonOutcome: leads.salespersonOutcome, salespersonOutcomeAt: leads.salespersonOutcomeAt,
+            presentedAt: leads.presentedAt, closeAmountEur: leads.closeAmountEur,
+        }).from(leads).where(and(
+            eq(leads.companyId, FENICE), leadVero(), nonBf,
+            or(
+                gte(leads.appointmentCreatedAt, inizio),
+                gte(leads.appointmentDate, inizio),
+                gte(leads.confirmationsTimestamp, inizio),
+                gte(leads.salespersonOutcomeAt, inizio),
+                gte(leads.presentedAt, inizio),
+            ),
+        )),
+    ])
+    return { lead: Number(conteggio[0]?.c ?? 0), stadi: stadiSm(righe, inizio, adesso) }
 }
 
 async function leggi(): Promise<MonitorBf> {
@@ -39,13 +146,15 @@ async function leggi(): Promise<MonitorBf> {
         .where(and(eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isTest, false), isNotNull(users.gdoCode)))
     const idGdo = gdo.map(g => g.id)
 
-    const [righeLead, eventi, chiamate, carichi, attivita, funnelBot] = await Promise.all([
+    const [righeLead, eventi, chiamate, carichi, attivita, funnelBot, turni, altriSm] = await Promise.all([
         db.select({
             id: leads.id, createdAt: leads.createdAt, utmSource: leads.utmSource, status: leads.status,
             assignedToId: leads.assignedToId, appointmentDate: leads.appointmentDate,
             confirmationsOutcome: leads.confirmationsOutcome, confirmationsDiscardReason: leads.confirmationsDiscardReason,
             presentedAt: leads.presentedAt, salespersonOutcome: leads.salespersonOutcome,
             closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct,
+            appointmentCreatedAt: leads.appointmentCreatedAt, confirmationsTimestamp: leads.confirmationsTimestamp,
+            salespersonOutcomeAt: leads.salespersonOutcomeAt, phone: leads.phone,
         }).from(leads).where(leadBf),
 
         db.select({
@@ -81,7 +190,7 @@ async function leggi(): Promise<MonitorBf> {
             .where(and(inArray(callLogs.userId, idGdo), gte(callLogs.createdAt, oggi.start)))
             .groupBy(callLogs.userId),
 
-        // Lead entrati dal 7/11 e passati dal bot, per funnel.
+        // Lead entrati dal 7/11 e passati dal bot, per funnel (ripiego se il bot non risponde).
         db.select({
             funnel: sql<string>`coalesce(${leads.funnel}, 'SENZA FUNNEL')`,
             lead: sql<number>`count(*)::int`,
@@ -94,22 +203,42 @@ async function leggi(): Promise<MonitorBf> {
                 exists(db.select({ x: sql`1` }).from(leadEvents).where(and(eq(leadEvents.leadId, leads.id), eq(leadEvents.eventType, 'BOT_PUSHED')))),
             ))
             .groupBy(sql`coalesce(${leads.funnel}, 'SENZA FUNNEL')`),
+
+        readGamificationTargets(),
+
+        leggiAltriFunnel(INIZIO_BF, adesso).catch(e => {
+            console.error('[monitor black friday] altri funnel', e)
+            return null
+        }),
     ])
+
+    const bot = await leggiDatiBot(righeLead)
 
     return calcolaMonitorBf({
         adesso,
         inizio: INIZIO_BF,
-        leads: righeLead,
+        // Il telefono serve solo al bot per trovare la chat: non entra nei conti né nella cache della pagina.
+        leads: righeLead.map(l => ({
+            id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, status: l.status, assignedToId: l.assignedToId,
+            appointmentDate: l.appointmentDate, confirmationsOutcome: l.confirmationsOutcome,
+            confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
+            salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct,
+            appointmentCreatedAt: l.appointmentCreatedAt, confirmationsTimestamp: l.confirmationsTimestamp,
+            salespersonOutcomeAt: l.salespersonOutcomeAt,
+        })),
         eventi: eventi.map(e => ({ ...e, manuale: Boolean(e.manuale) })),
         chiamate,
         gdo: gdo.map(g => ({ id: g.id, codice: g.gdoCode, nome: nomeGdo(g), attivo: g.isActive, bot: g.isBot })),
         carichi: carichi.flatMap(c => (c.userId ? [{ ...c, userId: c.userId }] : [])),
         attivita: attivita.flatMap(a => (a.userId ? [{ ...a, userId: a.userId }] : [])),
         funnelBot: funnelBot.map(f => ({ ...f, etaMediaOre: Number(f.etaMediaOre) })),
+        bot,
+        turni,
+        altriSm,
     })
 }
 
-const inCache = unstable_cache(leggi, ['monitor-black-friday-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_MONITOR_BF] })
+const inCache = unstable_cache(leggi, ['monitor-black-friday-v2'], { revalidate: CACHE_SECONDI, tags: [TAG_MONITOR_BF] })
 
 /** Numeri del monitor, in cache 45 secondi. null se la lettura non riesce. */
 export async function leggiMonitorBf(): Promise<MonitorBf | null> {

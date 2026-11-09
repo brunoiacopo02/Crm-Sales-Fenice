@@ -5,8 +5,8 @@ import { toRomeDateStr } from "@/lib/dateUtils"
 import { euroIt, numeroIt, numeroItFino } from "@/lib/diretta/formato"
 import { leggiMonitorBf } from "@/lib/blackFriday/monitorDb"
 import {
-    ORE_APPUNTAMENTO_SENZA_ESITO, ORE_FERMO_SUL_BOT, ORE_RIDATO_NON_CHIAMATO,
-    type Imbuto, type MonitorBf, type RigaConfronto,
+    MIN_LEAD_NUMERO, ORE_APPUNTAMENTO_SENZA_ESITO, ORE_FERMO_SUL_BOT, ORE_RIDATO_NON_CHIAMATO, PCT_CONSEGNA_MINIMA, PUNTI_RESA_BASSA,
+    type CascataSm, type Imbuto, type MonitorBf, type RigaConfronto, type RigaGruppo,
 } from "@/lib/blackFriday/monitor"
 import { Indietro, NonDisponibile, PaginaAdmin, Sezione, TitoloAdmin, Vuoto } from "@/components/diretta/admin/ui"
 import { AggiornaBlackFriday } from "./AggiornaBlackFriday"
@@ -19,8 +19,8 @@ export const dynamic = "force-dynamic"
  * bot, tabella dei GDO e "da tenere d'occhio". Solo ADMIN. Dati del CRM in
  * cache 45 secondi (src/lib/blackFriday/monitorDb.ts), pagina riletta ogni
  * minuto a scheda visibile. Chat, risposte, numero WhatsApp e versione di
- * Mario stanno nel database del bot, che il CRM non legge: quelle voci sono
- * segnate come non disponibili.
+ * Mario arrivano dal bot (/api/bot/statistiche-bf, stessa cache): se il bot non
+ * risponde quelle voci sono segnate come non disponibili e il resto resta.
  */
 export default async function BlackFridayPage() {
     if (!(await conRuoloDb(["ADMIN"]))) redirect("/unauthorized")
@@ -128,16 +128,27 @@ function Contenuto({ m }: { m: MonitorBf }) {
 
             <section aria-label="I numeri di adesso" className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                 <Numero valore={n(T.entrati)} etichetta="lead entrati" />
-                <Numero valore="—" etichetta="rispondono: serve il database del bot" />
+                {T.risposto === null
+                    ? <Numero valore="—" etichetta="rispondono: il bot non ha risposto, riprova fra poco" />
+                    : <Numero valore={n(T.risposto)} etichetta={<>rispondono al bot, il {pc(T.pctRisposto)} dei lead</>} />}
                 <Numero forte valore={n(T.appuntamenti)} etichetta={<>appuntamenti, il {pc(T.pctAppuntamenti)} dei lead</>} />
                 <Numero valore={n(T.confermati)} etichetta={<>confermati dalle Conferme, {n(T.inAttesa)} in attesa</>} />
                 <Numero valore={n(T.presenti)} etichetta={<>presenti alla call, {n(T.futuri)} call ancora da fare</>} />
                 <Numero forte valore={euroIt(T.euroChiusi)} etichetta={<>{T.chiusi === 1 ? "1 chiusura" : `${n(T.chiusi)} chiusure`}, {n(T.nonChiusi)} non chiusi</>} />
             </section>
 
+            <PercentualiInCima m={m} />
+
+            {!m.bot && (
+                <div className="mt-4">
+                    <SenzaBot>Il bot non ha risposto in tempo: chat, consegne, risposte, numeri WhatsApp e Mario tornano alla prossima lettura. I numeri del CRM sono aggiornati.</SenzaBot>
+                </div>
+            )}
+
             <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col gap-4">
                     <SezioneImbuto m={m} />
+                    <SezioneSalesManager m={m} />
                     <SezioneGdo m={m} />
                     <SezioneConfronto m={m} />
                 </div>
@@ -145,11 +156,13 @@ function Contenuto({ m }: { m: MonitorBf }) {
                     <SezioneAttenzioni m={m} />
                     <SezioneEsiti m={m} />
                     <SezioneProvenienza m={m} />
+                    <SezioneBot m={m} />
                 </div>
             </div>
 
             <p className="mt-6 max-w-4xl text-[13px] leading-relaxed text-[#BFBFBF]">
-                Fonte: CRM (lead, eventi, chiamate). Lead di prova esclusi. Le percentuali sono arrotondate a un decimale.
+                Fonte: CRM (lead, eventi, chiamate) e database del bot (chat, consegne, risposte, numero, Mario{m.bot ? `, letto alle ${oraConSecondi(m.bot.lettoAlle)}` : ", non disponibile ora"}).
+                Lead di prova esclusi. Le percentuali sono arrotondate a un decimale.
                 Le somme di imbuto, esiti e lead in mano sono ricontrollate a ogni lettura.
             </p>
         </>
@@ -161,8 +174,15 @@ function SezioneImbuto({ m }: { m: MonitorBf }) {
     const oggi = toRomeDateStr(new Date(m.calcolatoAlle))
     const G = m.imbuto.giorni
     const T = m.imbuto.totale
+    const conPct = (v: number | null, p: number | null) => (v === null ? "—" : <>{n(v)}<Piccolo>{pc(p)} dei lead</Piccolo></>)
+    const righeBot: [string, (x: Imbuto) => ReactNode, boolean?][] = m.bot ? [
+        ["Con chat del bot", x => conPct(x.conChat, x.pctConChat)],
+        ["Primo messaggio consegnato", x => conPct(x.consegnato, x.pctConsegnato)],
+        ["Hanno risposto", x => conPct(x.risposto, x.pctRisposto), true],
+    ] : []
     const righe: [string, (x: Imbuto) => ReactNode, boolean?][] = [
         ["Lead entrati", x => n(x.entrati)],
+        ...righeBot,
         ["Appuntamenti fissati", x => <>{n(x.appuntamenti)}<Piccolo>{pc(x.pctAppuntamenti)} dei lead</Piccolo></>, true],
         ["Confermati dalle Conferme", x => n(x.confermati)],
         ["Scartati dalle Conferme", x => n(x.scartati)],
@@ -184,11 +204,14 @@ function SezioneImbuto({ m }: { m: MonitorBf }) {
                     </tr>
                 ))}
             </Tabella>
-            <div className="mt-3">
-                <SenzaBot>Con chat del bot, primo messaggio consegnato e hanno risposto stanno nel database del bot.</SenzaBot>
-            </div>
+            {!m.bot && (
+                <div className="mt-3">
+                    <SenzaBot>Con chat del bot, primo messaggio consegnato e hanno risposto arrivano dal bot, che ora non ha risposto.</SenzaBot>
+                </div>
+            )}
             <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">
-                Giorno di ingresso in ora di Roma. * Oggi è ancora in corso: gli appuntamenti di chi è entrato oggi arrivano nelle prossime ore.
+                Giorno di ingresso in ora di Roma. Con chat: il bot ha scritto al lead da 2 minuti prima dell&apos;ingresso in poi.
+                Consegnato: un messaggio del bot dopo l&apos;ingresso risulta consegnato o letto su WhatsApp. Hanno risposto: almeno un messaggio del lead dopo l&apos;ingresso. * Oggi è ancora in corso: gli appuntamenti di chi è entrato oggi arrivano nelle prossime ore.
                 {motivi.length > 0 && <> Scarti delle Conferme: {motivi.map(([k, v]) => `${v} "${k}"`).join(", ")}.</>}
             </div>
         </Sezione>
@@ -240,53 +263,187 @@ function SezioneGdo({ m }: { m: MonitorBf }) {
     )
 }
 
+function Barre({ titolo, voci }: { titolo: string; voci: { nome: string; v: number | null; bf: boolean }[] }) {
+    const max = Math.max(1, ...voci.map(b => b.v ?? 0))
+    return (
+        <div>
+            <Sottotitolo>{titolo}</Sottotitolo>
+            <div className="space-y-2">
+                {voci.map(b => (
+                    <div key={b.nome} className="grid grid-cols-[112px_minmax(0,1fr)_56px] items-center gap-3 text-[14px]">
+                        <span className="truncate">{b.nome}</span>
+                        <div className="h-3 overflow-hidden rounded-[3px] bg-[#3D3D3D]">
+                            <div className={`h-full ${b.bf ? "bg-[#FF9330]" : "bg-[#8C8C8C]"}`} style={{ width: `${((b.v ?? 0) / max) * 100}%` }} />
+                        </div>
+                        <span className="text-right font-semibold">{pc(b.v)}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 // 2. Confronto con gli altri funnel del bot
 function SezioneConfronto({ m }: { m: MonitorBf }) {
     const C = m.confronto
+    const conBot = C.fonte === "bot"
     const riga = (r: RigaConfronto, forte = false, sotto = false) => (
         <tr key={r.funnel} className={forte ? "bg-[#2E2A24]" : ""}>
             <th scope="row" className={`${TH_RIGA} ${sotto ? "pl-3 text-[#BFBFBF]" : ""} ${forte ? "font-semibold" : ""}`}>{sotto ? `di cui ${nomeFunnel(r.funnel)}` : r.funnel}</th>
             <td className={TD}>{n(r.lead)}</td>
-            <td className={TD}>—</td>
-            <td className={TD}>{n(r.appuntamenti)}<Piccolo>{pc(r.pctAppuntamenti)} dei lead</Piccolo></td>
+            <td className={TD}>{r.risposto === null ? "—" : <>{n(r.risposto)}<Piccolo>{pc(r.pctRisposto)}</Piccolo></>}</td>
+            <td className={TD}>{n(r.appuntamenti)}<Piccolo>{pc(r.pctAppuntamenti)}</Piccolo></td>
             <td className={TD}>{r.etaMediaOre === null ? "—" : `${n(Math.round(r.etaMediaOre))} h`}</td>
         </tr>
     )
-    const barre = C.bf ? [
-        { nome: "Black Friday", v: C.bf.pctAppuntamenti, bf: true },
-        { nome: "Altri funnel", v: C.altri.pctAppuntamenti, bf: false },
-    ] : []
-    const max = Math.max(1, ...barre.map(b => b.v ?? 0))
+    const barre = (chiave: "pctRisposto" | "pctAppuntamenti") => [
+        { nome: "BF tutti i lead", v: C.bfTutti[chiave], bf: true },
+        ...(C.bfChatNuove ? [{ nome: "BF chat nuove", v: C.bfChatNuove[chiave], bf: true }] : []),
+        { nome: "Altri funnel", v: C.altri[chiave], bf: false },
+    ]
     return (
         <Sezione titolo="Rispetto agli altri lead del bot">
-            {barre.length > 0 && (
-                <div className="mb-4">
-                    <Sottotitolo>Fissano un appuntamento</Sottotitolo>
-                    <div className="space-y-2">
-                        {barre.map(b => (
-                            <div key={b.nome} className="grid grid-cols-[96px_minmax(0,1fr)_56px] items-center gap-3 text-[14px]">
-                                <span className="truncate">{b.nome}</span>
-                                <div className="h-3 overflow-hidden rounded-[3px] bg-[#3D3D3D]">
-                                    <div className={`h-full ${b.bf ? "bg-[#FF9330]" : "bg-[#8C8C8C]"}`} style={{ width: `${((b.v ?? 0) / max) * 100}%` }} />
-                                </div>
-                                <span className="text-right font-semibold">{pc(b.v)}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-            <Tabella intestazioni={["Gruppo", "Lead", "Rispondono", "Appuntamenti", "Età media"]} min={560}>
-                {C.bf && riga({ ...C.bf, funnel: "Black Friday" }, true)}
+            <div className="mb-4 grid gap-4 md:grid-cols-2">
+                {conBot && <Barre titolo="Rispondono" voci={barre("pctRisposto")} />}
+                <Barre titolo="Fissano un appuntamento" voci={barre("pctAppuntamenti")} />
+            </div>
+            <Tabella intestazioni={["Gruppo", conBot ? "Lead / chat" : "Lead", "Rispondono", "Appuntamenti", "Età media"]} min={560}>
+                {riga(C.bfTutti, true)}
+                {C.bfChatNuove && riga(C.bfChatNuove, true)}
                 {riga(C.altri)}
                 {C.dettaglio.map(r => riga(r, false, true))}
             </Tabella>
             <div className="mt-3 space-y-3">
                 <div className="text-[13px] leading-snug text-[#BFBFBF]">
-                    Lead entrati dal 7/11 e passati dal bot, per funnel; appuntamenti su tutti i lead del gruppo. L&apos;età media dice quanto tempo hanno avuto:
-                    un gruppo più giovane ha esiti meno maturi.
+                    {conBot ? (
+                        <>
+                            BF tutti i lead: i lead BF entrati dal 7/11, anche quelli già in chat col bot; appuntamenti dal CRM, età dall&apos;ingresso.
+                            BF solo chat nuove e altri funnel: le chat del bot nate dal 7/11, per funnel attuale della chat; appuntamento = esito APPUNTAMENTO del bot,
+                            età dalla nascita della chat. Le % sono sul totale dei lead o delle chat del gruppo.
+                        </>
+                    ) : (
+                        <>Lead entrati dal 7/11 e passati dal bot, per funnel; appuntamenti su tutti i lead del gruppo.</>
+                    )}
+                    {" "}L&apos;età media dice quanto tempo hanno avuto: un gruppo più giovane ha esiti meno maturi.
                 </div>
-                <SenzaBot>Le risposte e il confronto sulle sole chat nuove si leggono dalle conversazioni del bot.</SenzaBot>
+                {!conBot && <SenzaBot>Le risposte e il confronto sulle sole chat nuove arrivano dal bot, che ora non ha risposto.</SenzaBot>}
             </div>
+        </Sezione>
+    )
+}
+
+// Percentuali come nel Sales Manager, in cima
+function PercentualiInCima({ m }: { m: MonitorBf }) {
+    const S = m.salesManager
+    const voci: [string, (c: CascataSm) => number | null, string][] = [
+        ["fissaggio", c => c.pctFissaggio, "appuntamenti sui lead"],
+        ["conferme", c => c.pctConferme, "confermati sugli appuntamenti"],
+        ["presenze", c => c.pctPresenze, "presenti sui confermati"],
+        ["chiusure", c => c.pctChiusure, "chiusi sui presenti"],
+    ]
+    return (
+        <section aria-label="Percentuali come nel Sales Manager" className="mt-3 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {voci.map(([nome, f, sotto]) => (
+                <div key={nome} className="min-w-0 rounded-[16px] bg-[#262626] p-4">
+                    <div className="text-[13px] text-[#BFBFBF]">% {nome} <span className="text-[12px]">· come nel Sales Manager</span></div>
+                    <div className="mt-1 flex flex-wrap items-baseline gap-x-3">
+                        <span className="text-[26px] font-semibold leading-tight text-[#FF9330]">{pc(f(S.bf))}</span>
+                        <span className="text-[14px] text-[#BFBFBF]">altri funnel {S.altri ? pc(f(S.altri)) : "—"}</span>
+                    </div>
+                    <div className="mt-1 text-[12.5px] text-[#BFBFBF]">{sotto}</div>
+                </div>
+            ))}
+        </section>
+    )
+}
+
+// Percentuali come nel Sales Manager, per giorno di ingresso
+function SezioneSalesManager({ m }: { m: MonitorBf }) {
+    const S = m.salesManager
+    const oggi = toRomeDateStr(new Date(m.calcolatoAlle))
+    const colonne: { chiave: string; titolo: string; c: CascataSm | null; altri?: boolean }[] = [
+        ...S.giorni.map(g => ({ chiave: g.giorno, titolo: etichettaGiorno(g.giorno) + (g.giorno === oggi ? " *" : ""), c: g.dati })),
+        { chiave: "tot", titolo: "BF totale", c: S.bf },
+        { chiave: "altri", titolo: "Altri funnel", c: S.altri, altri: true },
+    ]
+    const righe: [string, (c: CascataSm) => ReactNode, boolean?][] = [
+        ["Lead", c => n(c.lead)],
+        ["Appuntamenti fissati", c => n(c.app)],
+        ["% fissaggio", c => pc(c.pctFissaggio), true],
+        ["Confermati", c => n(c.conferme)],
+        ["% conferme", c => pc(c.pctConferme), true],
+        ["Presenti", c => <>{n(c.presenze)}{c.presenze !== c.presenzeConfermate && <Piccolo>{n(c.presenzeConfermate)} dalle Conferme</Piccolo>}</>],
+        ["% presenze", c => pc(c.pctPresenze), true],
+        ["Chiusi", c => <>{n(c.chiusi)}{c.euro > 0 && <Piccolo>{euroIt(c.euro)}</Piccolo>}</>],
+        ["% chiusure", c => pc(c.pctChiusure), true],
+    ]
+    return (
+        <Sezione titolo="Percentuali come nel Sales Manager">
+            <Tabella intestazioni={["Passaggio", ...colonne.map(c => c.titolo)]} min={140 + 90 * colonne.length}>
+                {righe.map(([etichetta, f, forte]) => (
+                    <tr key={etichetta} className={forte ? "bg-[#2E2A24]" : ""}>
+                        <th scope="row" className={`${TH_RIGA} ${forte ? "font-semibold" : ""}`}>{etichetta}</th>
+                        {colonne.map(c => (
+                            <td key={c.chiave} className={`${TD} ${c.chiave === "tot" ? "font-semibold" : ""} ${c.altri ? "text-[#BFBFBF]" : ""}`}>{c.c ? f(c.c) : "—"}</td>
+                        ))}
+                    </tr>
+                ))}
+            </Tabella>
+            <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">
+                Stesse definizioni della tabella Numeri mensili del Sales Manager (Panoramica Generale): % fissaggio = appuntamenti fissati sui lead;
+                % conferme = confermati sugli appuntamenti; % presenze = presenti passati dalle Conferme sui confermati; % chiusure = chiusi su tutti i presenti.
+                Ogni passaggio conta nel periodo in cui è avvenuto (fissaggio, conferma, presenza, firma). BF: lead per giorno di ingresso.
+                Altri funnel: tutti i lead non BF entrati dal 7/11 a ora (data di assegnazione, lead dei pool solo se assegnati, infornate escluse dai KPI fuori)
+                e i loro passaggi nello stesso periodo.
+            </div>
+        </Sezione>
+    )
+}
+
+// Nuovi o già in chat, numero WhatsApp, Mario (dal bot)
+function SezioneBot({ m }: { m: MonitorBf }) {
+    const B = m.bot
+    const tabella = (righe: RigaGruppo[], mario = false) => (
+        <Tabella intestazioni={["Gruppo", "Lead", "Consegnato", "Rispondono", "Appunt.", ...(mario ? ["Appunt. su chi risponde"] : [])]} min={mario ? 560 : 460}>
+            {righe.map(g => (
+                <tr key={g.chiave}>
+                    <th scope="row" className={TH_RIGA}>{g.nome}</th>
+                    <td className={TD}>{n(g.lead)}</td>
+                    <td className={TD}>{n(g.consegnato)}<Piccolo>{pc(g.pctConsegnato)}</Piccolo></td>
+                    <td className={TD}>{n(g.risposto)}<Piccolo>{pc(g.pctRisposto)}</Piccolo></td>
+                    <td className={TD}>{n(g.appuntamenti)}<Piccolo>{pc(g.pctAppuntamenti)}</Piccolo></td>
+                    {mario && <td className={TD}>{pc(g.pctAppuntamentiSuRisposto)}</td>}
+                </tr>
+            ))}
+        </Tabella>
+    )
+    return (
+        <Sezione titolo="Chat del bot sui lead BF">
+            {!B ? (
+                <SenzaBot>Nuovi o già in chat, numero WhatsApp e versione di Mario arrivano dal bot, che ora non ha risposto.</SenzaBot>
+            ) : (
+                <div className="space-y-5">
+                    <div>
+                        <Sottotitolo>Nuovi o già in chat col bot</Sottotitolo>
+                        {tabella(B.nuoviNoti)}
+                    </div>
+                    <div>
+                        <Sottotitolo>Per numero WhatsApp</Sottotitolo>
+                        {tabella(B.numeri)}
+                    </div>
+                    <div>
+                        <Sottotitolo>Mario Sonnet o Opus</Sottotitolo>
+                        {tabella(B.mario, true)}
+                        <div className="mt-2 text-[13px] leading-snug text-[#BFBFBF]">
+                            Unica eccezione alla regola delle % sui lead: la versione di Mario si sceglie alla prima risposta del lead, quindi chi non ha mai risposto non ha
+                            una versione. Per confrontare Sonnet e Opus guarda l&apos;ultima colonna, appuntamenti su chi ha risposto.
+                        </div>
+                    </div>
+                    <div className="text-[13px] leading-snug text-[#BFBFBF]">
+                        Percentuali sui lead del gruppo. Già in chat: la chat del bot esisteva più di 10 minuti prima dell&apos;ingresso BF. Appuntamenti dal CRM.
+                    </div>
+                </div>
+            )}
         </Sezione>
     )
 }
@@ -312,9 +469,11 @@ function SezioneAttenzioni({ m }: { m: MonitorBf }) {
                 </ul>
             )}
             <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">
-                Regole: ridati dal bot non chiamati da più di {ORE_RIDATO_NON_CHIAMATO} ore, lead BF aperti senza assegnatario,
+                Regole: ridati dal bot non chiamati da più di {ORE_RIDATO_NON_CHIAMATO} ore di turno GDO (feriali 13:30-20:00, sabato 10:00-16:30, domenica non conta),
+                lead BF aperti senza assegnatario,
                 lead ancora col bot e senza appuntamento da più di {ORE_FERMO_SUL_BOT} ore, appuntamenti passati da più
-                di {ORE_APPUNTAMENTO_SENZA_ESITO} ore senza presenza né esito. La resa per numero WhatsApp richiede i dati del bot.
+                di {ORE_APPUNTAMENTO_SENZA_ESITO} ore senza presenza né esito, numeri WhatsApp con almeno {MIN_LEAD_NUMERO} lead BF che consegnano l&apos;apertura
+                a meno dell&apos;{PCT_CONSEGNA_MINIMA}% dei lead o che fanno rispondere {PUNTI_RESA_BASSA} punti meno della media BF.
             </div>
         </Sezione>
     )
@@ -342,7 +501,7 @@ function SezioneEsiti({ m }: { m: MonitorBf }) {
             )}
             <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">
                 Su {n(m.esiti.totale)} lead, letto dal CRM: chiamate ed eventi del bot. Il bot ridà il lead ai GDO dopo circa 24 ore di silenzio.
-                Lo stato interno della chat (in corso, in pausa, chiusa su un altro lead) sta nel database del bot.
+                Le risposte, per giorno e per gruppo, sono nell&apos;imbuto e nella sezione delle chat del bot.
             </div>
         </Sezione>
     )
@@ -358,20 +517,14 @@ function SezioneProvenienza({ m }: { m: MonitorBf }) {
                     <tr key={c.chiave}>
                         <th scope="row" className={TH_RIGA}>{c.nome}</th>
                         <td className={TD}>{n(c.lead)}</td>
-                        <td className={TD}>—</td>
+                        <td className={TD}>{c.risposto === null ? "—" : <>{n(c.risposto)}<Piccolo>{pc(c.pctRisposto)}</Piccolo></>}</td>
                         <td className={TD}>{n(c.appuntamenti)}<Piccolo>{pc(c.pctAppuntamenti)}</Piccolo></td>
                         <td className={TD}>{n(c.presenti)}</td>
                         <td className={TD}>{n(c.chiusi)}</td>
                     </tr>
                 ))}
             </Tabella>
-            <div className="mt-4 space-y-3">
-                <Sottotitolo>Nuovi o già in chat col bot · Per numero WhatsApp · Mario Sonnet o Opus</Sottotitolo>
-                <SenzaBot>
-                    Servono le conversazioni del bot (data di nascita della chat, numero, versione di Mario).
-                    Per Sonnet e Opus la percentuale andrebbe su chi ha risposto, perché la versione si sceglie alla prima risposta.
-                </SenzaBot>
-            </div>
+            <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">Percentuali sui lead del canale.</div>
         </Sezione>
     )
 }
