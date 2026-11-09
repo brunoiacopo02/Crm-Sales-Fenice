@@ -20,7 +20,7 @@ import { db } from '@/db'
 import { botContactRequests, gdoScortaMovimenti, leadEvents, leads, users } from '@/db/schema'
 import { leadDelMondoDiAccount } from '@/lib/prova/sql'
 import {
-    classificaArrivi, daSbloccare, applicaScritti, datiDaEventi, eVergine, primaAssegnazione, primiDellaScorta,
+    bfInScorta, classificaArrivi, daSbloccare, applicaScritti, datiDaEventi, eVergine, primaAssegnazione, primiDellaScorta,
     SBLOCCO, SOGLIA_SBLOCCO, VISIBILI_INIZIALI, type EventoScorta, type LeadScorta,
 } from './scorta'
 import { serveScortaGenerale } from './automatico'
@@ -148,9 +148,11 @@ async function scriviStato(ex: Esecutore, userId: string, ids: string[], stato: 
         const condStato = da === 'null' ? isNull(leads.scortaStato)
             : da === 'scorta' ? eq(leads.scortaStato, 'scorta')
                 : undefined
+        // Un lead Black Friday non va mai in scorta (PO 09/11/2026), da nessun percorso.
+        const maiBf = stato === 'scorta' ? sql`upper(trim(coalesce(${leads.funnel}, ''))) <> 'BLACK FRIDAY'` : undefined
         const res = await ex.update(leads)
             .set({ scortaStato: stato, scortaDal: stato === 'scorta' || da === 'scorta' ? quando : null })
-            .where(and(inArray(leads.id, blocco), eq(leads.assignedToId, userId), condStato))
+            .where(and(inArray(leads.id, blocco), eq(leads.assignedToId, userId), condStato, maiBf))
             .returning({ id: leads.id })
         for (const r of res) scritti.push(r.id)
     }
@@ -164,8 +166,11 @@ async function scriviStato(ex: Esecutore, userId: string, ids: string[], stato: 
  */
 export async function classificaEScrivi(companyId: string, userId: string, lista: readonly LeadScorta[], ora: Date, ex: Esecutore = db): Promise<{ visibili: string[]; scorta: string[] }> {
     const { visibili, scorta } = classificaArrivi(lista, ora)
-    if (visibili.length === 0 && scorta.length === 0) return { visibili: [], scorta: [] }
-    const scrittiV = await scriviStato(ex, userId, visibili, 'visibile', 'null', ora)
+    // Black Friday rimasti in scorta (spostati col vecchio stato, o di prima della regola): visibili.
+    const bf = bfInScorta(lista)
+    if (visibili.length === 0 && scorta.length === 0 && bf.length === 0) return { visibili: [], scorta: [] }
+    const scrittiBf = await scriviStato(ex, userId, bf, 'visibile', 'scorta', ora)
+    const scrittiV = [...await scriviStato(ex, userId, visibili, 'visibile', 'null', ora), ...scrittiBf]
     const scrittiS = await scriviStato(ex, userId, scorta, 'scorta', 'null', ora)
     const perId = new Map(lista.map(l => [l.id, l]))
     const vergini = scrittiV.filter(id => { const l = perId.get(id); return !!l && eVergine(l, ora) })
@@ -226,6 +231,8 @@ export async function contaVisibiliDaChiamare(companyId: string, userId: string)
         eq(leads.callCount, 0),
         or(
             eq(leads.scortaStato, 'visibile'),
+            // Black Friday: sempre visibili, qualunque cosa dica la colonna (PO 09/11/2026).
+            sql`upper(trim(coalesce(${leads.funnel}, ''))) = 'BLACK FRIDAY'`,
             sql`exists (select 1 from "botContactRequests" r where r."leadId" = ${leads.id} and r."status" <> 'closed')`,
         ),
     ))

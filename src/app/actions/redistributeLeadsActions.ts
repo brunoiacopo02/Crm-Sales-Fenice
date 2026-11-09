@@ -8,6 +8,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { contaNeiKpiSql } from "@/lib/intakeBatch"
 import { nonToltoAlBotSql } from "@/lib/toltiAlBot"
 import crypto from "crypto"
+import { notificaBfArrivati } from "@/lib/diretta/notificaBfDb"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Riassegnazione lead "in coda" da un GDO sorgente a uno o più GDO destinatari.
@@ -375,6 +376,9 @@ export async function executeLeadRedistribution(input: RedistributionInput): Pro
             console.error('[redistribute] notifiche fallite:', e)
         }
     }
+
+    // Lead Black Friday spostati: notifica dedicata al GDO che li riceve (PO 09/11/2026).
+    await notificaBfArrivati(toMove.map(l => l.id))
 
     return { success: true, moved: toMove.length, perTarget: perTargetCount }
 }

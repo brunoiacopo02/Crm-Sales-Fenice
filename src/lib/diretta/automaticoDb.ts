@@ -36,6 +36,7 @@ import {
 import { EVENTO_RIDATO_PARCHEGGIATO } from '@/lib/bot-fissatore/iaVocale'
 import { LANCIO_FUNNEL } from '@/lib/lancio/intake'
 import { contaNeiKpiSql } from '@/lib/intakeBatch'
+import { notificaBfArrivati } from './notificaBfDb'
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 type Esecutore = typeof db | Tx
@@ -153,6 +154,16 @@ export async function applicaSerale(piano: PianoSerale, lista: readonly LeadGiro
     const tutti = [...piano.accantonati.map(a => a.leadId), ...sposta.map(s => s.leadId)]
     if (tutti.length === 0) return { accantonati: 0, spostati: 0, saltati: 0 }
 
+    const esito = await applicaSeraleTx(piano, lista, ora, perId, sposta, coinvolti, tutti)
+    // Lead Black Friday spostati a un altro GDO: notifica al destinatario (PO 09/11/2026).
+    if (esito.spostati > 0) await notificaBfArrivati(sposta.map(s => s.leadId))
+    return esito
+}
+
+async function applicaSeraleTx(
+    piano: PianoSerale, _lista: readonly LeadGiro[], ora: Date, perId: Map<string, LeadGiro>,
+    sposta: PianoSerale['riequilibrio']['spostamenti'], coinvolti: string[], tutti: string[],
+): Promise<EsitoSerale> {
     return db.transaction(async (tx) => {
         for (const g of coinvolti) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'scorta:' + g}))`)
         const adesso = new Map<string, { assignedToId: string | null; version: number }>()

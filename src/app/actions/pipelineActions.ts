@@ -29,6 +29,8 @@ import { applicaScritti, deveSbloccare, eBlackFriday, PESO_ONDATA, prioritaScort
 import { classificaEScrivi, dopoEsitoPrimaChiamata, sbloccaSeVuota, scortaAccesa } from "@/lib/diretta/scortaDb"
 import { serveScortaGenerale } from "@/lib/diretta/automatico"
 import { scortaGeneraleAccesa } from "@/lib/diretta/automaticoDb"
+import { daNotificareBf, type ArrivoBf } from "@/lib/diretta/notificaBf"
+import { scriviNotificheBf } from "@/lib/diretta/notificaBfDb"
 
 /**
  * La quarta chiamata ("4ª Recupero") si vede solo a chi fissa poco: regola e
@@ -540,6 +542,20 @@ export async function getPipelineLeads() {
             primaVisibile = firstCall
             prioritaPrima = lancioRank
         }
+    }
+
+    // Notifica "lead Black Friday arrivato" (PO 09/11/2026), rete di sicurezza:
+    // i percorsi che assegnano la scrivono subito; qui si recupera qualunque
+    // arrivo BF rimasto senza (stessa chiave lead+GDO+ora di arrivo, nessun
+    // doppione). Dopo la risposta, mai bloccante.
+    if (isGdo && eventiLetti) {
+        const arriviBf: ArrivoBf[] = pipelineLeads
+            .filter(l => eBlackFriday(l) && l.assignedToId === userId)
+            .map(l => ({
+                leadId: l.id, gdoId: userId, nome: l.name, funnel: l.funnel, status: l.status, companyId: ctx.companyId,
+                arrivo: oraArrivo({ eventi: eventiAssegnazione.get(l.id) ?? [], proprietario: l.assignedToId, assignedAt: l.assignedAt, createdAt: l.createdAt }),
+            }))
+        if (arriviBf.some(a => daNotificareBf(a, now))) after(() => scriviNotificheBf(arriviBf, now))
     }
 
     return {

@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     GRAZIA_MS, PESO_ONDATA, SBLOCCO, SOGLIA_SBLOCCO, VISIBILI_INIZIALI,
-    applicaScritti, classificaArrivi, conStella, daSbloccare, datiDaEventi, deveSbloccare, eVergine, gruppoUscita,
+    applicaScritti, bfInScorta, classificaArrivi, conStella, daSbloccare, datiDaEventi, deveSbloccare, eVergine, gruppoUscita,
     haDaChiamare, ordinaScorta, primaAssegnazione, prioritaScorta, quantiDaChiamare, rangoOndata, rangoScorta,
     sempreVisibile, stimaGiorni, visibileInPrimaChiamata,
     type LeadScorta,
@@ -269,4 +269,24 @@ test('Black Friday ridato dal bot: sempre visibile, mai in scorta, sopra vergini
     assert.ok(r.get(v.id)! > r.get(s.id)!)
     const altro = lead({ scortaStato: 'scorta', scortaDal: oreFa(3) })
     assert.deepEqual(daSbloccare([bf, altro], ORA, 30, 5), [altro.id])
+})
+
+test('Black Friday mai in scorta (PO 09/11/2026): i BF scritti in scorta vanno riscritti visibili e contano da chiamare', () => {
+    const bfScorta = lead({ funnel: 'Black Friday ', scortaStato: 'scorta', scortaDal: oreFa(5) })
+    const bfVisibile = lead({ funnel: 'BLACK FRIDAY', scortaStato: 'visibile' })
+    const bfNuovo = lead({ funnel: 'BLACK FRIDAY', scortaStato: null, updatedAt: oreFa(1) })
+    const altro = lead({ scortaStato: 'scorta', scortaDal: oreFa(5) })
+    assert.deepEqual(bfInScorta([bfScorta, bfVisibile, bfNuovo, altro]), [bfScorta.id])
+    // un arrivo BF da classificare finisce visibile, mai in scorta
+    const c = classificaArrivi([bfNuovo, lead({ scortaStato: null })], ORA)
+    assert.deepEqual(c.visibili, [bfNuovo.id])
+    // il BF in scorta conta fra i da chiamare (non fa partire sblocchi falsi) ed esce in cima
+    assert.equal(quantiDaChiamare([bfScorta, altro], ORA), 1)
+    const dopo = applicaScritti([bfScorta, altro], { visibili: bfInScorta([bfScorta, altro]), scorta: [] })
+    assert.equal(dopo[0].scortaStato, 'visibile')
+    assert.equal(dopo[1].scortaStato, 'scorta')
+    // prima assegnazione: un BF non va mai nella parte in scorta
+    const pa = primaAssegnazione([bfScorta, ...Array.from({ length: 5 }, () => lead())], ORA, 2)
+    assert.ok(pa.visibili.includes(bfScorta.id))
+    assert.ok(!pa.scorta.includes(bfScorta.id))
 })

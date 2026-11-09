@@ -7,6 +7,7 @@ import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
 import { dayBoundsRome } from '@/lib/dateUtils';
 import { EVENTO_RIDATO_PARCHEGGIATO } from './iaVocale';
 import { instradamentoRidato, isWhatsappMaiConsegnato } from './maiConsegnato';
+import { notificaBfArrivati } from '@/lib/diretta/notificaBfDb';
 
 const FENICE = 'fenice';
 
@@ -43,6 +44,19 @@ export async function reassignBotLeadToHumanPool(
         /** Il lead ha riscritto dopo la restituzione (nota "il bot ha ripreso la chat"). */
         haRiscritto?: boolean;
     } = {},
+): Promise<ReassignResult> {
+    const esito = await assegna(leadId, reason, botUserId, botNote, opzioni);
+    // Lead Black Friday: il GDO che lo riceve lo sa subito dalla campanella (PO 09/11/2026).
+    if (esito.ok && esito.assignedToId) await notificaBfArrivati([leadId]);
+    return esito;
+}
+
+async function assegna(
+    leadId: string,
+    reason: ReassignReason,
+    botUserId: string,
+    botNote: string | null | undefined,
+    opzioni: { letto?: boolean | null; haRiscritto?: boolean },
 ): Promise<ReassignResult> {
     return await db.transaction(async (tx) => {
         // Un lead che ha già un appuntamento o una presenza non torna nel pool:

@@ -210,6 +210,15 @@ export function classificaArrivi(lista: readonly LeadScorta[], ora: Date): { vis
 }
 
 /**
+ * Black Friday scritti in scorta (PO 09/11/2026: "mai in scorta"): arrivati con
+ * lo stato del GDO di prima dopo uno spostamento, o finiti lì prima della
+ * regola. Vanno riscritti visibili.
+ */
+export function bfInScorta(lista: readonly LeadScorta[]): string[] {
+    return lista.filter(l => eBlackFriday(l) && l.scortaStato === 'scorta').map(l => l.id)
+}
+
+/**
  * C'è ancora qualcosa da chiamare in prima chiamata? Un lead VISIBILE mai
  * chiamato, con la stessa regola della board (visibileInPrimaChiamata): conta
  * solo quello che il GDO ha davanti.
