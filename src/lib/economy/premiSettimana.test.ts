@@ -86,16 +86,35 @@ test('premi della settimana: classifica 50/25/10, presenze dalla 5ª a 12 euro, 
     ])
 })
 
-test('premi della settimana: sotto le soglie non si paga niente, e il podio vuole almeno una presenza', () => {
+test('premi della settimana: sotto le soglie non si paga niente, e il podio vuole almeno 5 presenze', () => {
     const p = calcolaPremiSettimana(numeri({
         gdo: [{ userId: 'a', nome: 'Anthony', presenze: 4, fissati: 30 }, { userId: 'l', nome: 'Lorenzo', presenze: 0, fissati: 50 }],
         conferme: { chiusure: 16, presenze: 30, persone: [{ userId: 'al', nome: 'Alberto' }] },
     }), REGOLE)
-    assert.deepEqual(p.classifica.map(r => [r.nome, r.euro]), [['Anthony', 50]])
+    // Primo per presenze, ma 4 non bastano: podio vuoto (PO 09/11/2026).
+    assert.deepEqual(p.classifica, [])
     assert.deepEqual(p.presenzeGdo, [])
     assert.equal(p.conferme!.oltre, 0)
     assert.deepEqual(p.conferme!.persone, [])
-    assert.equal(p.totaleEuro, 50)
+    assert.equal(p.totaleEuro, 0)
+    // Con 5 presenze sale sul podio.
+    const cinque = calcolaPremiSettimana(numeri({ gdo: [{ userId: 'a', nome: 'Anthony', presenze: 5, fissati: 30 }] }), REGOLE)
+    assert.deepEqual(cinque.classifica.map(r => [r.posizione, r.nome, r.euro]), [[1, 'Anthony', 50]])
+})
+
+test('4 presenze = fuori dal podio anche se terzo', () => {
+    const p = calcolaPremiSettimana(numeri({
+        gdo: [
+            { userId: 'a', nome: 'Anthony', presenze: 7, fissati: 44 },
+            { userId: 'z', nome: 'Zora', presenze: 6, fissati: 47 },
+            { userId: 'r', nome: 'Riccardo', presenze: 4, fissati: 60 },
+            { userId: 'c', nome: 'Christian', presenze: 4, fissati: 50 },
+        ],
+    }), REGOLE)
+    assert.deepEqual(p.classifica.map(r => [r.posizione, r.nome, r.euro]), [[1, 'Anthony', 50], [2, 'Zora', 25]])
+    assert.equal(p.classifica.some(r => r.presenze < 5), false)
+    // I 10 euro del terzo posto non si pagano a nessuno.
+    assert.equal(p.classifica.reduce((t, r) => t + r.euro, 0), 75)
 })
 
 test('bonus Conferme a mese: la settimana non lo chiude', () => {

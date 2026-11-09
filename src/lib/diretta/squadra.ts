@@ -42,7 +42,8 @@ export function ordinaClassifica(membri: MembroSquadra[]): MembroSquadra[] {
 
 /**
  * Il podio: chi sta nelle prime tre posizioni con almeno `minPresenze`
- * presenze (una, di default). A pari merito si sta nella stessa posizione e
+ * presenze (5 nelle regole dell'economia dal 09/11/2026; 1 se non si passa).
+ * Chi sta sotto la soglia non compare sul podio neanche se è fra i primi tre. A pari merito si sta nella stessa posizione e
  * i premi si dividono (posizioniPremiate): il podio può avere più di tre persone.
  */
 export function primiTre(membri: MembroSquadra[], minPresenze = 1, premiEuro: readonly number[] = []) {
@@ -134,6 +135,8 @@ export interface SquadraView {
     scaliniSquadra: [number, number]
     punta: PuntaSnapshot | null
     sogliaFenici: number
+    /** Presenze minime per salire sul podio. */
+    minPresenze: number
     primiTre: PodioRow[]
     mancaPerSalire: number | null
     classifica: ClassificaRow[]
@@ -154,6 +157,7 @@ export function buildSquadraView(snap: SquadraSnapshot, viewerId: string): Squad
         scaliniSquadra: snap.scaliniSquadra,
         punta: snap.punta,
         sogliaFenici: snap.sogliaFenici,
+        minPresenze: snap.minPresenze,
         primiTre: snap.mode === 'top3'
             ? primiTre(snap.membri, snap.minPresenze, snap.premiEuro).map(x => ({ ...persona(x), posizione: x.posizione, presenze: x.presenze, premio: x.euro }))
             : [],

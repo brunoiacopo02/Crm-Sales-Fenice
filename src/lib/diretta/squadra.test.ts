@@ -139,6 +139,20 @@ test('podio: a pari presenze stessa posizione e premi sommati e divisi', () => {
     assert.deepEqual(buildSquadraView({ ...s, minPresenze: 5 }, 'd').primiTre, [])
 })
 
+test('soglia del podio a 5 (PO 09/11/2026): 4 presenze = fuori dal podio anche se terzo', () => {
+    const s = { ...snap('top3'), minPresenze: 5 }
+    s.membri = [m('a', 'Anthony', 7, 20), m('z', 'Zora', 5, 18), m('r', 'Riccardo', 4, 30), m('n', 'Noemi', 1, 4)]
+    const v = buildSquadraView(s, 'r')
+    assert.equal(v.minPresenze, 5)
+    assert.deepEqual(v.primiTre.map(x => [x.posizione, x.nome, x.presenze, x.premio]), [[1, 'Anthony', 7, 50], [2, 'Zora', 5, 25]])
+    assert.equal(v.primiTre.some(x => x.nome === 'Riccardo'), false)
+    // Riccardo vede quanto gli manca per pareggiare Zora.
+    assert.equal(v.mancaPerSalire, 1)
+    // Nella classifica completa resta in elenco, ma senza premio.
+    const c = buildSquadraView({ ...s, mode: 'completa' }, 'r')
+    assert.deepEqual(c.classifica.map(x => [x.posizione, x.nome, x.premio]), [[1, 'Anthony', 50], [2, 'Zora', 25], [3, 'Riccardo', 0], [4, 'Noemi', 0]])
+})
+
 test('podio con meno di tre persone con presenze: solo loro, premi dal primo', () => {
     const s = snap('top3')
     s.membri = [m('a', 'Anthony', 2, 3), m('b', 'Zora', 0, 9)]

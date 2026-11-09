@@ -86,7 +86,8 @@ test('default dell\'economia v2 (25/10/2026 sera)', () => {
     // Conferme, valori di Bruno del 25/10 sera: 4 alla conferma, 22 alla presenza, 30 con un'ora d'anticipo, tetto 14.
     assert.deepEqual(d.conferme.scintille, { conferma: 4, presenza: 22, inTempo: 8, inTempoMinuti: 60, tettoConfermeGiorno: 14 })
     assert.deepEqual(d.conferme.obiettivi, { presenze: { soglie: [14, 20], piume: [3, 4] }, chiusure: { soglie: [4, 6], piume: [4, 5] } })
-    assert.deepEqual(d.classifica, { premiEuro: [50, 25, 10], minPresenze: 1 })
+    // PO 09/11/2026: sul podio (e a premio) solo da 5 presenze nella settimana.
+    assert.deepEqual(d.classifica, { premiEuro: [50, 25, 10], minPresenze: 5 })
 })
 
 test('inizio economia: mezzanotte di Roma del 26/10/2026 (ora solare)', () => {

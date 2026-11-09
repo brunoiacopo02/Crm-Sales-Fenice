@@ -146,10 +146,15 @@ export function SquadraDiretta({ iniziale }: { iniziale: SquadraView }) {
                             <h2 className="text-lg font-semibold">I primi tre della settimana</h2>
                             <div className="mt-1 text-sm leading-relaxed text-[var(--d-muted)]">
                                 Da lunedì {GIORNO(view.settimana.lunedi)} a sabato {GIORNO(view.settimana.sabato)}, per presenze.
-                                A pari presenze si è pari merito: stessa posizione e premio diviso. Lunedì si riparte da zero.
+                                {view.minPresenze > 1 && <> Sul podio si sale da {view.minPresenze} presenze.</>}
+                                {' '}A pari presenze si è pari merito: stessa posizione e premio diviso. Lunedì si riparte da zero.
                             </div>
                             {view.primiTre.length === 0 ? (
-                                <div className="mt-4 text-[15px] text-[var(--d-muted)]">Ancora nessuna presenza questa settimana.</div>
+                                <div className="mt-4 text-[15px] text-[var(--d-muted)]">
+                                    {view.minPresenze > 1
+                                        ? `Ancora nessuno è arrivato a ${view.minPresenze} presenze questa settimana.`
+                                        : 'Ancora nessuna presenza questa settimana.'}
+                                </div>
                             ) : (
                                 <ol className="mt-3 divide-y-2 divide-[var(--d-surface)]">
                                     {view.primiTre.map(r => (

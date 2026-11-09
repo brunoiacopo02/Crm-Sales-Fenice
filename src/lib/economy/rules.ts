@@ -120,7 +120,8 @@ export const DEFAULT_ECONOMY_RULES: EconomyRules = {
         },
         perPersona: {},
     },
-    classifica: { premiEuro: [50, 25, 10], minPresenze: 1 },
+    // PO 09/11/2026: sul podio (e premiato) solo chi arriva almeno a 5 presenze nella settimana.
+    classifica: { premiEuro: [50, 25, 10], minPresenze: 5 },
     booster: DEFAULT_BOOSTER,
     moltiplicatore: DEFAULT_MOLTIPLICATORE,
     serie: DEFAULT_SERIE,
