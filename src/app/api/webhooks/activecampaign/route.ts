@@ -18,6 +18,7 @@ import { pushLeadToBot } from "@/lib/bot-fissatore/push";
 import { isBotHolidayWindow } from "@/lib/bot-fissatore/holidayWindow";
 import { getLeadRouting, finestraRientro, freschiSoloAlBot, regolaSoloGdo, tettoBotAdesso, BOT_DAILY_MIN, type LeadRouting } from "@/lib/bot-fissatore/leadRouting";
 import { tettoBotEffettivo } from "@/lib/bot-fissatore/capacitaBot";
+import { sqlFreschiBotOggiPerTetto } from "@/lib/bot-fissatore/conteggioTettoBot";
 import { numeroBotPerNuovoLead } from "@/lib/bot-fissatore/numeroBot";
 import { ordineRipiegoFreschi, ORDINE_FASCIA_MISTA, ORDINE_SOLO_GDO, SOLO_GDO_TETTO, SOLO_GDO_TETTO_PROPRIO, type LivelloFreschi, type LivelloFasciaMista, type LivelloSoloGdo } from "@/lib/diretta/instradamento";
 import { fasciaSoloGdoAttiva } from "@/lib/bot-fissatore/qualitaNumeri";
@@ -1592,6 +1593,8 @@ export async function POST(req: NextRequest) {
             // percorsi (li legge l'evento ASSIGNED a valle).
             let eligible: { id: string; isBot: boolean }[] = [];
             let fallbackUsed = false;
+            /** Freschi del bot di oggi contati per il tetto (BF esclusi), solo nel ramo bot_tetto. */
+            let tettoBotConteggio: number | null = null;
             if (!divertedTo) {
                 if (isBlackFriday) {
                     // Black Friday (PO 07/11/2026): solo il bot, a qualunque ora e
@@ -1611,13 +1614,14 @@ export async function POST(req: NextRequest) {
                     // Riserva serale (PO 06/11/2026): in orario GDO il tetto
                     // scende di BOT_RISERVA_FUORI_ORARIO, fuori orario è pieno.
                     const tettoOra = tettoBot === null ? 0 : tettoBotAdesso(now, tettoBot);
-                    const sottoTetto = sql`(
-                        SELECT count(*) FROM leads l
-                        WHERE l."assignedToId" = ${users.id}
-                          AND l."companyId" = ${FENICE_COMPANY}
-                          AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
-                    ) < ${tettoOra}`;
-                    eligible = await selectPool(and(gdoBase, eq(users.isBot, true), sottoTetto));
+                    // I Black Friday non contano (PO 09/11/2026): sono fuori dal
+                    // tetto e non tolgono posti ai lead normali.
+                    const freschiBotOggi = sqlFreschiBotOggiPerTetto(users.id, todayRome, FENICE_COMPANY);
+                    const conteggi = await tx.select({ id: users.id, n: sql<number>`${freschiBotOggi}`.mapWith(Number) })
+                        .from(users).where(and(gdoBase, eq(users.isBot, true)));
+                    tettoBotConteggio = conteggi.reduce((s, c) => s + c.n, 0);
+                    console.log(`[tetto-bot] freschi bot oggi senza BF: ${tettoBotConteggio} / tetto adesso ${tettoOra}`);
+                    eligible = await selectPool(and(gdoBase, eq(users.isBot, true), sql`${freschiBotOggi} < ${tettoOra}`));
                     if (eligible.length === 0) eligible = await selectSoloGdoSottoTetto();
                     if (eligible.length === 0) eligible = await selectSoloGdoTutti();
                 } else if (routing === 'solo_gdo') {
@@ -1714,12 +1718,12 @@ export async function POST(req: NextRequest) {
                 // `assignedGdoIsBot: false` e' cio' che impedisce al
                 // `after(() => pushLeadToBot(...))` a valle di partire: il lead
                 // e' di una persona, non del bot.
-                return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: false, routing, holidayWindow, fallbackUsed: false, divertedToSales: true };
+                return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: false, routing, holidayWindow, fallbackUsed: false, divertedToSales: true, tettoBotConteggio };
             }
 
             await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, assignedGdoId));
 
-            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routing, holidayWindow, fallbackUsed, divertedToSales: false };
+            return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routing, holidayWindow, fallbackUsed, divertedToSales: false, tettoBotConteggio };
         });
 
         if (txResult.kind === 'bf_convertito') {
@@ -1885,7 +1889,7 @@ export async function POST(req: NextRequest) {
                 routing: txResult.divertedToSales ? 'sales_pipeline' : isBlackFriday ? 'black_friday_bot' : txResult.routing,
                 ...(txResult.fallbackUsed ? { routingFallback: true } : {}),
                 ...(txResult.holidayWindow ? { botHolidayWindow: true } : {}),
-                ...(txResult.routing === 'bot_tetto' && tettoBotInfo ? { tettoBot: tettoBotInfo.valore, tettoBotFonte: tettoBotInfo.fonte } : {}),
+                ...(txResult.routing === 'bot_tetto' && tettoBotInfo ? { tettoBot: tettoBotInfo.valore, tettoBotFonte: tettoBotInfo.fonte, ...(txResult.tettoBotConteggio !== null ? { tettoBotConteggioSenzaBf: txResult.tettoBotConteggio } : {}) } : {}),
             },
             companyId: FENICE_COMPANY,
         });
