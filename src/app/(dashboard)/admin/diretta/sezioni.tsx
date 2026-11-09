@@ -475,3 +475,22 @@ export function LinkSalvadanai() {
         </Link>
     )
 }
+
+// ── Black Friday in diretta (PO 09/11/2026) ─────────────────────────────
+
+export function LinkBlackFriday() {
+    return (
+        <Link
+            href="/admin/diretta/black-friday"
+            className="flex items-center justify-between gap-3 rounded-[16px] bg-[#262626] px-5 py-4 transition-colors hover:bg-[#2E2E2E] sm:px-6"
+        >
+            <div className="min-w-0">
+                <div className="text-[17px] font-semibold">Black Friday in diretta</div>
+                <div className="mt-1 text-[14px] leading-snug text-[#BFBFBF]">
+                    Lead, appuntamenti, Conferme, chiusure e GDO sul Black Friday, aggiornati ogni minuto.
+                </div>
+            </div>
+            <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-[#BFBFBF]" strokeWidth={1.5} />
+        </Link>
+    )
+}

@@ -37,6 +37,9 @@ const FILE_ADMIN = [
     'app/(dashboard)/admin/diretta/registro/page.tsx',
     // Salvadanai dei GDO (PO 09/11/2026).
     'app/(dashboard)/admin/diretta/salvadanai/page.tsx',
+    // Monitor Black Friday (PO 09/11/2026).
+    'app/(dashboard)/admin/diretta/black-friday/page.tsx',
+    'app/actions/blackFridayMonitorActions.ts',
 ]
 
 test('le action e le pagine admin della Diretta non leggono il ruolo dai metadati', () => {
