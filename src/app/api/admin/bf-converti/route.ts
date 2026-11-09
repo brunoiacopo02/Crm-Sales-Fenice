@@ -13,7 +13,8 @@ import { BLACK_FRIDAY_FUNNEL, decidiConversioneBf } from '@/lib/acIntake/blackFr
  * passa al bot e push; lavoro di una persona o chiuso -> solo funnel.
  *
  * Sessione ADMIN (come /api/admin/bot-push-leads). Body:
- *   { leadIds: string[], esegui?: boolean, senzaPush?: string[] }
+ *   { leadIds: string[], esegui?: boolean, senzaPush?: string[], ripush?: string[] }
+ * `ripush`: lead gia' BF e del bot da mandare al bot adesso (quelli lasciati con senzaPush).
  * Senza `esegui` e' un dry-run: dice cosa farebbe e lo stato attuale (per il
  * ripristino). `senzaPush`: lead da convertire ma da non pushare adesso (es. chat
  * viva: il bot cambierebbe solo il funnel e l'apertura BF non partirebbe piu').
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
 
-    let body: { leadIds?: unknown; esegui?: unknown; senzaPush?: unknown } = {};
+    let body: { leadIds?: unknown; esegui?: unknown; senzaPush?: unknown; ripush?: unknown } = {};
     try {
         body = JSON.parse((await req.text()) || '{}');
     } catch {
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     }
     const leadIds = Array.isArray(body.leadIds) ? body.leadIds.map(String).slice(0, 50) : [];
     const senzaPush = new Set(Array.isArray(body.senzaPush) ? body.senzaPush.map(String) : []);
+    const ripush = new Set(Array.isArray(body.ripush) ? body.ripush.map(String) : []);
     const esegui = body.esegui === true;
     if (leadIds.length === 0) return NextResponse.json({ error: 'leadIds mancanti' }, { status: 400 });
 
@@ -77,6 +79,22 @@ export async function POST(req: NextRequest) {
             funnel: r.funnel, status: r.status, assignedToId: r.assignedToId, assignedAt: r.assignedAt,
             recallDate: r.recallDate, scortaStato: r.scortaStato, scortaDal: r.scortaDal, version: r.version,
         };
+        // `ripush`: lead gia' BLACK FRIDAY e del bot da (ri)mandare al bot col funnel BF,
+        // per chi era stato convertito con `senzaPush` (chat viva, es. Luciani 09/11).
+        if (decisione === 'gia_bf' && ripush.has(r.id) && r.assegnatoAlBot === true) {
+            const pushEsito = esegui ? await pushLeadToBot({
+                leadId: r.id, name: r.name, phone: r.phone, email: r.email,
+                funnel: BLACK_FRIDAY_FUNNEL, companyId: r.companyId,
+            }) : null;
+            if (esegui) {
+                await db.insert(leadEvents).values({
+                    id: crypto.randomUUID(), leadId: r.id, eventType: 'BF_RIPUSH', userId: null, timestamp: now,
+                    metadata: { motivo: 'apertura_bf_rimandata', adminId: user.id }, companyId: 'fenice',
+                });
+            }
+            esiti.push({ leadId: r.id, nome: r.name, decisione: 'ripush', push: true, prima, eseguito: esegui, pushEsito });
+            continue;
+        }
         if (!esegui || decisione === 'gia_bf') {
             esiti.push({ leadId: r.id, nome: r.name, decisione, push, prima, eseguito: false });
             continue;
