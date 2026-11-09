@@ -45,5 +45,8 @@ export async function POST(req: NextRequest) {
     if (!ore) {
         return NextResponse.json({ error: 'bad_request', detail: 'giorni: da 1 a 3 date YYYY-MM-DD, o lettura non riuscita' }, { status: 400 });
     }
+    // Una riga per chiamata: e' l'unica traccia che il bot sta davvero leggendo le ore
+    // (i log di Vercel registrano solo l'output delle funzioni). Niente dati di lead.
+    console.info(`[ore-occupate] ${Object.keys(ore.giorni).join(',')} soglia ${ore.soglia}`);
     return NextResponse.json(ore);
 }
