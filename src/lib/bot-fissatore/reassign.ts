@@ -6,12 +6,48 @@ import { isLeadLocked } from './contactRequests';
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
 import { dayBoundsRome } from '@/lib/dateUtils';
 import { EVENTO_RIDATO_PARCHEGGIATO } from './iaVocale';
-import { instradamentoRidato, isWhatsappMaiConsegnato } from './maiConsegnato';
+import { eFunnelBlackFriday, instradamentoRidato, isWhatsappMaiConsegnato } from './maiConsegnato';
 import { notificaBfArrivati } from '@/lib/diretta/notificaBfDb';
 
 const FENICE = 'fenice';
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/**
+ * Il prossimo GDO del giro dei ridati: squadra col flag Ridati (`botReturnIntake`),
+ * sotto il suo tetto giornaliero se ne ha uno (`dailyReturnCap`), a turno su
+ * `botReturnLastAssignedAt`. `ignoraTetto` (solo per i Black Friday, PO 07/11/2026:
+ * priorità su tutto) fa scegliere anche fra chi è già a tetto, con lo stesso turno.
+ * I GDO senza flag Ridati restano fuori in ogni caso.
+ */
+export async function prossimoGdoRidati(tx: Tx, now: Date, ignoraTetto = false): Promise<string | null> {
+    const inizioGiorno = dayBoundsRome(now).start;
+    const eligible = await tx.select({ id: users.id })
+        .from(users)
+        .where(and(
+            eq(users.companyId, FENICE),
+            eq(users.role, 'GDO'),
+            eq(users.isActive, true),
+            eq(users.botReturnIntake, true),
+            eq(users.isBot, false),
+            // L'account di prova (migr. 0050) non riceve mai ridati veri.
+            eq(users.isTest, false),
+            sql`btrim(coalesce(${users.firstName}, '')) <> ''`,
+            ignoraTetto ? undefined : or(
+                isNull(users.dailyReturnCap),
+                sql`(
+                    select count(*) from ${leadEvents} e
+                    where e."companyId" = ${FENICE}
+                      and e."userId" = ${users.id}
+                      and e."eventType" = 'REASSIGNED_FROM_BOT'
+                      and e."timestamp" >= ${inizioGiorno}
+                ) < ${users.dailyReturnCap}`,
+            ),
+        ))
+        .orderBy(asc(sql`coalesce(${users.botReturnLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
+        .limit(1);
+    return eligible[0]?.id ?? null;
+}
 
 /** `rifiutato_dal_bot` (PO 29/10/2026): il bot ha risposto `accettato:false` al push
  *  (fisso, numero scritto male): non ha mai avuto il lead, va al giro dei ridati. */
@@ -68,6 +104,7 @@ async function assegna(
             status: leads.status,
             presentedAt: leads.presentedAt,
             intakeBatch: leads.intakeBatch,
+            funnel: leads.funnel,
         })
             .from(leads).where(eq(leads.id, leadId)).limit(1);
         if (!cur) return { ok: true, assignedToId: null, note: 'lead_not_found' as const };
@@ -152,10 +189,17 @@ async function assegna(
         // e stella "Chiama per primo" non cambiano) e `instradato` ne dice il perché.
         // Dal 29/10/2026 (PO) anche il NON_RISPOSTO che ha LETTO il messaggio va al
         // giro (`letto` nel corpo, contratto v1.11); `instradato` dice perché.
-        const instradamento = instradamentoRidato(reason, botNote, opzioni.letto);
+        // Black Friday (PO 07/11/2026): mai parcheggiato, va ai GDO come la chat
+        // interrotta; `instradato: 'black_friday'` quando il motivo è solo il funnel.
+        const bf = eFunnelBlackFriday(cur.funnel);
+        const instradamento = instradamentoRidato(reason, botNote, opzioni.letto, cur.funnel);
         const extraMeta = {
             ...(reason === 'mai_risposto' && instradamento === 'giro_gdo'
-                ? { instradato: isWhatsappMaiConsegnato(botNote) ? 'mai_consegnato' as const : 'letto' as const }
+                ? {
+                    instradato: isWhatsappMaiConsegnato(botNote) ? 'mai_consegnato' as const
+                        : opzioni.letto === true ? 'letto' as const
+                        : 'black_friday' as const,
+                }
                 : {}),
             ...(opzioni.letto != null ? { letto: opzioni.letto } : {}),
             ...(opzioni.haRiscritto ? { haRiscritto: true } : {}),
@@ -207,34 +251,14 @@ async function assegna(
         // fino a domani. Senza tetto (null) il giro è quello di sempre. Il
         // conteggio passa dall'indice (companyId, userId, eventType, timestamp).
         // Stessa regola di `sottoTetto` in instradamento.ts.
-        const inizioGiorno = dayBoundsRome(now).start;
-        const eligible = await tx.select({ id: users.id })
-            .from(users)
-            .where(and(
-                eq(users.companyId, FENICE),
-                eq(users.role, 'GDO'),
-                eq(users.isActive, true),
-                eq(users.botReturnIntake, true),
-                eq(users.isBot, false),
-                // L'account di prova (migr. 0050) non riceve mai ridati veri.
-                eq(users.isTest, false),
-                sql`btrim(coalesce(${users.firstName}, '')) <> ''`,
-                or(
-                    isNull(users.dailyReturnCap),
-                    sql`(
-                        select count(*) from ${leadEvents} e
-                        where e."companyId" = ${FENICE}
-                          and e."userId" = ${users.id}
-                          and e."eventType" = 'REASSIGNED_FROM_BOT'
-                          and e."timestamp" >= ${inizioGiorno}
-                    ) < ${users.dailyReturnCap}`,
-                ),
-            ))
-            .orderBy(asc(sql`coalesce(${users.botReturnLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id))
-            .limit(1);
+        let gdoId = await prossimoGdoRidati(tx, now);
+        // Black Friday: se tutti sono a tetto, lo prende comunque il prossimo del giro.
+        if (!gdoId && bf) gdoId = await prossimoGdoRidati(tx, now, true);
 
-        if (eligible.length === 0) {
+        if (!gdoId) {
             // Nessun GDO nel giro: il lead resta non assegnato (recuperabile da admin).
+            // Un Black Friday NON va nel parcheggio (nessun RIDATO_PARCHEGGIATO): lo
+            // riprende `assegnaBfSenzaGdo` appena c'è un GDO col flag Ridati.
             await tx.update(leads)
                 .set({ ...resetFields, assignedToId: null })
                 .where(eq(leads.id, leadId));
@@ -245,14 +269,12 @@ async function assegna(
                 eventType: 'REASSIGNED_FROM_BOT',
                 userId: null,
                 timestamp: now,
-                metadata: { reason, ...extraMeta, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo' },
+                metadata: { reason, ...extraMeta, botNote: botNote ?? null, fromBot: botUserId, toGdo: null, note: 'no_eligible_gdo', ...(bf ? { bfInAttesa: true } : {}) },
                 companyId: FENICE,
             });
 
             return { ok: true, assignedToId: null, note: 'no_eligible_gdo' };
         }
-
-        const gdoId = eligible[0].id;
 
         await tx.update(leads)
             // Latch su assignedAt: il lead che il bot restituisce era già stato

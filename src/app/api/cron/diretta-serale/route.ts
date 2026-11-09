@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { eOraSerale, pianoSerale, riepilogoPerGdo } from '@/lib/diretta/automatico'
 import { applicaSerale, leggiGiro } from '@/lib/diretta/automaticoDb'
+import { assegnaBfSenzaGdo } from '@/lib/bot-fissatore/bfSenzaGdo'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -34,9 +35,11 @@ export async function GET(req: Request) {
     const force = url.searchParams.get('force') === '1'
     const acceso = ON.has((process.env.DIRETTA_SERALE_ENABLED ?? '').trim().toLowerCase())
 
-    if (!dryRun && !acceso) return NextResponse.json({ ok: true, skipped: 'disabled' })
+    // BF ridati senza GDO (PO 07/11/2026): si danno al giro dei ridati anche col giro spento.
+    const bfDati = dryRun ? 0 : await assegnaBfSenzaGdo()
+    if (!dryRun && !acceso) return NextResponse.json({ ok: true, skipped: 'disabled', bfDati })
     const ora = new Date()
-    if (!dryRun && !force && !eOraSerale(ora)) return NextResponse.json({ ok: true, skipped: 'fuori_orario' })
+    if (!dryRun && !force && !eOraSerale(ora)) return NextResponse.json({ ok: true, skipped: 'fuori_orario', bfDati })
 
     const { gdos, lista } = await leggiGiro(ora)
     const piano = pianoSerale(gdos, lista, ora)
@@ -50,5 +53,5 @@ export async function GET(req: Request) {
     }
     const esito = await applicaSerale(piano, lista, ora)
     console.log('[diretta-serale]', JSON.stringify({ esito, perGdo }))
-    return NextResponse.json({ ok: true, ...esito, perGdo })
+    return NextResponse.json({ ok: true, ...esito, perGdo, bfDati })
 }

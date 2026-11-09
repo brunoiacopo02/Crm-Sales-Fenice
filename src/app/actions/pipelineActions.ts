@@ -31,6 +31,7 @@ import { serveScortaGenerale } from "@/lib/diretta/automatico"
 import { scortaGeneraleAccesa } from "@/lib/diretta/automaticoDb"
 import { daNotificareBf, type ArrivoBf } from "@/lib/diretta/notificaBf"
 import { scriviNotificheBf } from "@/lib/diretta/notificaBfDb"
+import { assegnaBfSenzaGdoAlPiuOgniMinuto } from "@/lib/bot-fissatore/bfSenzaGdo"
 
 /**
  * La quarta chiamata ("4ª Recupero") si vede solo a chi fissa poco: regola e
@@ -557,6 +558,10 @@ export async function getPipelineLeads() {
             }))
         if (arriviBf.some(a => daNotificareBf(a, now))) after(() => scriviNotificheBf(arriviBf, now))
     }
+    // BF ridati rimasti senza GDO (PO 07/11/2026: mai nel parcheggio): appena un
+    // GDO apre la pipeline si danno al giro dei ridati. Dopo la risposta, al
+    // massimo una volta al minuto per istanza, mai bloccante.
+    if (isGdo && ctx.companyId === 'fenice') after(() => assegnaBfSenzaGdoAlPiuOgniMinuto(now))
 
     return {
         // 1ª chiamata (PO 25/10/2026): vergini del giorno in cima appena arrivano,

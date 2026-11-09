@@ -29,15 +29,24 @@ export function lettoDalCorpo(v: unknown): boolean | null {
     return typeof v === 'boolean' ? v : null
 }
 
-/** Dove va un lead restituito dal bot, dato il motivo, la nota del bot e se ha letto. */
+/** Funnel BLACK FRIDAY (stessa regola di `eBlackFriday` in lib/diretta/scorta.ts). */
+export function eFunnelBlackFriday(funnel: string | null | undefined): boolean {
+    return (funnel ?? '').trim().toUpperCase() === 'BLACK FRIDAY'
+}
+
+/** Dove va un lead restituito dal bot, dato il motivo, la nota del bot, se ha letto e il funnel. */
 export function instradamentoRidato(
     reason: 'mai_risposto' | 'chat_interrotta' | 'rifiutato_dal_bot',
     botNote: string | null | undefined,
     letto?: boolean | null,
+    funnel?: string | null,
 ): InstradamentoRidato {
     // Il lead che il bot non ha nemmeno preso (PO 29/10) va chiamato: nessuno ci ha parlato.
     if (reason === 'chat_interrotta' || reason === 'rifiutato_dal_bot') return 'giro_gdo'
     if (isWhatsappMaiConsegnato(botNote)) return 'giro_gdo'
+    // Black Friday (PO 07/11/2026): i ridati BF vanno ai GDO con priorità su tutto,
+    // anche se non hanno mai risposto né letto. Mai nel parcheggio.
+    if (eFunnelBlackFriday(funnel)) return 'giro_gdo'
     // PO 29/10/2026: chi ha LETTO il messaggio e non ha risposto non si parcheggia più,
     // va ai GDO come i ridati. Chi non l'ha letto (o il bot non lo dice) resta parcheggiato.
     return letto === true ? 'giro_gdo' : 'parcheggia'

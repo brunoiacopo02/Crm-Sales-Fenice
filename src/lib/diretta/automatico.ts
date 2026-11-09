@@ -82,7 +82,7 @@
 // dentro ogni gruppo il più fresco (nato più di recente).
 
 import {
-    conStella, eVergine, gruppoUscita, ordinaScorta, sempreVisibile, SBLOCCO, SOGLIA_SBLOCCO,
+    conStella, eBlackFriday, eVergine, gruppoUscita, ordinaScorta, sempreVisibile, SBLOCCO, SOGLIA_SBLOCCO,
     quantiDaChiamare, type LeadScorta,
 } from './scorta'
 
@@ -171,6 +171,8 @@ export function accantonabile(l: LeadGiro, ora: Date): boolean {
         && l.ridatoDalBot
         && !l.cercato
         && !conStella(l)
+        // Black Friday (PO 07/11/2026): priorità su tutto, mai accantonato.
+        && !eBlackFriday(l)
         && l.ultimoInstradato !== 'mai_consegnato'
         && !(l.ultimoMotivo ?? '').includes('senza_chat_bot')
         && ora.getTime() - l.createdAt.getTime() > GIORNI_RIDATO_VECCHIO * GIORNO_MS
