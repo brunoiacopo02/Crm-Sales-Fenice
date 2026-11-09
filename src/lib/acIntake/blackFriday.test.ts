@@ -81,6 +81,11 @@ test('conversione BF: lavoro di un GDO (appuntamento, chiamato da poco) o chiuso
     assert.equal(decidiConversioneBf({ ...base, status: 'REJECTED', assegnatoAlBot: true }, ADESSO), 'solo_funnel');
 });
 
+test('conversione BF: agenda appena mandata dal GDO -> solo funnel (Abiuso 09/11)', () => {
+    assert.equal(decidiConversioneBf({ ...base, agendaSentAt: new Date('2026-11-09T16:21:13Z') }, ADESSO), 'solo_funnel');
+    assert.equal(decidiConversioneBf({ ...base, agendaSentAt: new Date('2026-11-01T16:21:13Z') }, ADESSO), 'al_bot');
+});
+
 test('conversione BF: chiamate vecchie non fermano il passaggio al bot', () => {
     assert.equal(decidiConversioneBf({ ...base, callCount: 2, lastCallDate: new Date('2026-10-22T16:49:00Z') }, ADESSO), 'al_bot');
 });

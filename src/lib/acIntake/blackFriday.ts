@@ -117,14 +117,16 @@ export function decidiConversioneBf(l: {
     lastCallDate: Date | string | null;
     /** L'assegnatario attuale e' il bot (la chat c'e' gia'). */
     assegnatoAlBot: boolean;
+    /** Agenda mandata dal GDO: se e' recente il GDO lo sta fissando (Abiuso 09/11). */
+    agendaSentAt?: Date | string | null;
 }, now: Date): ConversioneBf {
     if ((l.funnel ?? '').trim().toUpperCase() === BLACK_FRIDAY_FUNNEL) return 'gia_bf';
     const aperto = l.status === 'NEW' || l.status === 'IN_PROGRESS';
     if (l.assegnatoAlBot && (aperto || l.status === 'APPOINTMENT')) return 'push_bot';
     if (!aperto || l.appointmentDate || l.assegnatoAlBot) return 'solo_funnel';
-    if ((l.callCount ?? 0) > 0 && l.lastCallDate) {
-        const ultima = new Date(l.lastCallDate).getTime();
-        if (!(now.getTime() - ultima >= 24 * 60 * 60 * 1000)) return 'solo_funnel';
-    }
+    const recente = (d: Date | string | null | undefined) =>
+        !!d && !(now.getTime() - new Date(d).getTime() >= 24 * 60 * 60 * 1000);
+    if ((l.callCount ?? 0) > 0 && recente(l.lastCallDate)) return 'solo_funnel';
+    if (recente(l.agendaSentAt)) return 'solo_funnel';
     return 'al_bot';
 }

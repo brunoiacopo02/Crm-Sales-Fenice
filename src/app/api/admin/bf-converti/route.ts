@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
         appointmentDate: leads.appointmentDate,
         callCount: leads.callCount,
         lastCallDate: leads.lastCallDate,
+        agendaSentAt: leads.agendaSentAt,
         recallDate: leads.recallDate,
         scortaStato: leads.scortaStato,
         scortaDal: leads.scortaDal,

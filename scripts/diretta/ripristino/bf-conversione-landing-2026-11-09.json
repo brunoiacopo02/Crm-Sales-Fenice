@@ -1,0 +1,15 @@
+{
+  "nota": "PO 09/11/2026: 4 lead arrivati dalla landing blackfriday2026 rimasti col funnel sbagliato, portati a BLACK FRIDAY con POST /api/admin/bf-converti (eventi BF_CONVERTITO e, se passati al bot, ASSIGNED in leadEvents). Ripristino: rimettere i campi 'prima' (UPDATE leads SET ... WHERE id = ...). Il push al bot non si annulla: la chat del bot resta.",
+  "esito_17_23_utc": {
+    "22c3e4a1-be0c-4caa-967c-fd2fd29828a8": "solo funnel BLACK FRIDAY, appuntamento/assegnatario/Conferme intatti; push al bot rimandato (chat viva: ultimo messaggio del lead 09/11 09:50 UTC, il bot manda l'apertura BF su appuntamento solo dopo 24 ore)",
+    "2dbf85a9-6a9e-478d-8758-bddaddcd5aa8": "funnel BLACK FRIDAY, passata al bot, push inviato",
+    "92f8b1a7-bb62-447c-aab8-03da83bc706d": "funnel BLACK FRIDAY, passato al bot, push inviato (riapertura BF sul bot)",
+    "f6aa4cd8-c1b4-415e-a18e-ae93e733fe6b": "funnel BLACK FRIDAY; passato al bot e pushato, poi RIDATO a GDO 105 (assegnazione, assignedAt e scorta 'visibile' rimessi) perche' alle 17:21 UTC il GDO gli aveva mandato l'agenda: lo stava fissando"
+  },
+  "prima": [
+    { "id": "22c3e4a1-be0c-4caa-967c-fd2fd29828a8", "nome": "Davide Luciani", "funnel": "JOB SIMULATOR", "status": "APPOINTMENT", "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538", "assignedAt": "2026-11-09 00:33:39.15+00", "recallDate": null, "scortaStato": null, "scortaDal": null, "version": 2 },
+    { "id": "f6aa4cd8-c1b4-415e-a18e-ae93e733fe6b", "nome": "Gerardo Abiuso", "funnel": "TELEGRAM", "status": "NEW", "assignedToId": "ef3988b2-d15e-4169-88a5-7516e6ddd146", "assignedAt": "2026-11-09 16:07:49.87+00", "recallDate": null, "scortaStato": "visibile", "scortaDal": null, "version": 1 },
+    { "id": "2dbf85a9-6a9e-478d-8758-bddaddcd5aa8", "nome": "Giulia Bossola", "funnel": "CORSO 10 ORE", "status": "NEW", "assignedToId": "a2d174ce-916c-4d02-92f6-e5b7c6ef5adf", "assignedAt": "2026-11-08 22:12:40.652+00", "recallDate": null, "scortaStato": "visibile", "scortaDal": null, "version": 2 },
+    { "id": "92f8b1a7-bb62-447c-aab8-03da83bc706d", "nome": "Emanuele Ferrero", "funnel": "Lancio Web Dev AI", "status": "IN_PROGRESS", "assignedToId": null, "assignedAt": "2026-09-21 09:08:49.188+00", "recallDate": null, "scortaStato": null, "scortaDal": null, "version": 4 }
+  ]
+}

@@ -1139,6 +1139,7 @@ export async function POST(req: NextRequest) {
                 appointmentDate: leads.appointmentDate,
                 callCount: leads.callCount,
                 lastCallDate: leads.lastCallDate,
+                agendaSentAt: leads.agendaSentAt,
                 version: leads.version,
                 assignedToId: leads.assignedToId,
                 assegnatoAlBot: users.isBot,
