@@ -74,6 +74,23 @@ export type GiornoCarico = {
     perFunnel: RigaGruppo[];
     perVenditore: RigaGruppo[];
     perConferme: RigaGruppo[];
+    /** Le call del giorno ora per ora, dalle 9 alle 21 (PO 09/11/2026). */
+    perOra: GrigliaOre;
+};
+
+/** Le call di un'ora: quante, con che esito, quante BF. */
+export type ContaOra = { totale: number; confermati: number; scartati: number; daFare: number; bf: number };
+export type RigaOra = ContaOra & { /** Ora di Roma, 9…21: la fascia 10:00 vuol dire dalle 10:00 alle 10:59. */ ora: number };
+export type GrigliaOre = {
+    /** Una riga per ogni ora piena dalle 9 alle 21, anche vuota. */
+    ore: RigaOra[];
+    /** Call prima delle 9 e dopo le 21: la board non le mostra, ma sono call del giorno. */
+    primaDelle9: ContaOra;
+    dopoLe21: ContaOra;
+    /** Prima delle 15 (comprese quelle prima delle 9) e dalle 15 (comprese quelle dopo le 21). */
+    mattina: ContaOra;
+    pomeriggio: ContaOra;
+    totale: ContaOra;
 };
 
 export type CaricoConferme = {
@@ -121,6 +138,46 @@ function aggiungi(c: Conteggio, fascia: Fascia, esito: EsitoConferme): void {
 function somma(cs: Conteggio[]): Conteggio {
     const out = vuoto();
     for (const c of cs) for (const k of Object.keys(out) as (keyof Conteggio)[]) out[k] += c[k];
+    return out;
+}
+
+/** Le ore piene della griglia: le stesse della board, dalle 9 alle 21. */
+export const ORE_GRIGLIA: readonly number[] = OGGI_ORE;
+
+export function vuotoOra(): ContaOra {
+    return { totale: 0, confermati: 0, scartati: 0, daFare: 0, bf: 0 };
+}
+
+function aggiungiOra(c: ContaOra, esito: EsitoConferme, bf: boolean): void {
+    c.totale++;
+    if (esito === 'confermato') c.confermati++;
+    else if (esito === 'scartato') c.scartati++;
+    else c.daFare++;
+    if (bf) c.bf++;
+}
+
+/**
+ * Le call di `giorno` ora per ora: stesse call di `caricoDelGiorno().call`
+ * (APPOINTMENT con la data della call quel giorno, parcheggiati esclusi), messe
+ * nell'ora piena di Roma in cui cadono. Le ore vuote restano, con zero.
+ */
+export function grigliaOre(rows: LeadCarico[], giorno: string): GrigliaOre {
+    const ore: RigaOra[] = ORE_GRIGLIA.map(ora => ({ ora, ...vuotoOra() }));
+    const out: GrigliaOre = { ore, primaDelle9: vuotoOra(), dopoLe21: vuotoOra(), mattina: vuotoOra(), pomeriggio: vuotoOra(), totale: vuotoOra() };
+    const prima = ORE_GRIGLIA[0];
+    const ultima = ORE_GRIGLIA[ORE_GRIGLIA.length - 1];
+    for (const l of rows) {
+        if (!l.appointmentDate || l.confNeedsReschedule) continue;
+        const appt = new Date(l.appointmentDate);
+        if (toRomeDateStr(appt) !== giorno) continue;
+        const ora = romeHour(appt);
+        const esito = esitoDi(l.confirmationsOutcome);
+        const bf = chiaveFunnel(l.funnel).bf;
+        const riga = ora < prima ? out.primaDelle9 : ora > ultima ? out.dopoLe21 : ore[ora - prima];
+        aggiungiOra(riga, esito, bf);
+        aggiungiOra(ora >= POMERIGGIO_DALLE ? out.pomeriggio : out.mattina, esito, bf);
+        aggiungiOra(out.totale, esito, bf);
+    }
     return out;
 }
 
@@ -214,6 +271,7 @@ export function caricoDelGiorno(rows: LeadCarico[], giorno: string): GiornoCaric
             const nome = l.conferme?.trim() || NESSUNA_CONFERME;
             return { id: nome, nome, bf: false };
         }),
+        perOra: grigliaOre(rows, giorno),
     };
 }
 

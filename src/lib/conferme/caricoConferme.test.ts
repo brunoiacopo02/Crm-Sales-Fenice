@@ -140,3 +140,51 @@ test('per funnel: maiuscole unite, BF segnato, senza funnel a parte', () => {
     // le righe per funnel tornano sul totale
     assert.equal(g.perFunnel.reduce((s, r) => s + r.totale, 0), g.totaleLavoro.totale);
 });
+
+test('ora per ora: una riga per ogni ora dalle 9 alle 21, anche vuota, con esito e BF', () => {
+    const rows = [
+        lead({ appointmentDate: roma('2026-11-10T10:00:00+01:00') }),
+        lead({ appointmentDate: roma('2026-11-10T10:30:00+01:00'), confirmationsOutcome: 'confermato' }),
+        lead({ appointmentDate: roma('2026-11-10T10:45:00+01:00'), funnel: 'Black Friday' }),
+        lead({ appointmentDate: roma('2026-11-10T14:59:00+01:00'), confirmationsOutcome: 'scartato' }),
+        lead({ appointmentDate: roma('2026-11-10T15:00:00+01:00'), funnel: 'BLACK FRIDAY', confirmationsOutcome: 'confermato' }),
+        lead({ appointmentDate: roma('2026-11-10T21:30:00+01:00') }),
+        lead({ appointmentDate: roma('2026-11-10T08:00:00+01:00') }), // prima delle 9
+        lead({ appointmentDate: roma('2026-11-10T22:00:00+01:00') }), // dopo le 21
+        // parcheggiato: non è una call
+        lead({ appointmentDate: roma('2026-11-10T11:00:00+01:00'), confNeedsReschedule: true, recallDate: roma('2026-11-10T11:00:00+01:00') }),
+        lead({ appointmentDate: roma('2026-11-11T10:00:00+01:00') }), // altro giorno
+    ];
+    const o = caricoDelGiorno(rows, '2026-11-10').perOra;
+    assert.deepEqual(o.ore.map(r => r.ora), [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    const ora = (h: number) => o.ore.find(r => r.ora === h)!;
+    assert.deepEqual(ora(10), { ora: 10, totale: 3, confermati: 1, scartati: 0, daFare: 2, bf: 1 });
+    // le ore vuote ci sono, a zero
+    assert.deepEqual(ora(9), { ora: 9, totale: 0, confermati: 0, scartati: 0, daFare: 0, bf: 0 });
+    assert.deepEqual(ora(11), { ora: 11, totale: 0, confermati: 0, scartati: 0, daFare: 0, bf: 0 });
+    assert.equal(ora(14).scartati, 1);
+    assert.equal(ora(15).bf, 1);
+    assert.equal(ora(21).daFare, 1);
+    assert.equal(o.primaDelle9.totale, 1);
+    assert.equal(o.dopoLe21.totale, 1);
+    // separazione alle 15: le 14:59 sono mattina, le 15:00 pomeriggio
+    assert.deepEqual(o.mattina, { totale: 5, confermati: 1, scartati: 1, daFare: 3, bf: 1 });
+    assert.deepEqual(o.pomeriggio, { totale: 3, confermati: 1, scartati: 0, daFare: 2, bf: 1 });
+    assert.deepEqual(o.totale, { totale: 8, confermati: 2, scartati: 1, daFare: 5, bf: 2 });
+    // le righe tornano sul totale, che è quello delle call del giorno
+    const somma = o.ore.reduce((s, r) => s + r.totale, 0) + o.primaDelle9.totale + o.dopoLe21.totale;
+    assert.equal(somma, o.totale.totale);
+    assert.equal(o.totale.totale, caricoDelGiorno(rows, '2026-11-10').call.totale);
+});
+
+test('ora per ora: un giorno senza call ha 13 ore a zero', () => {
+    const o = caricoDelGiorno([], '2026-11-10').perOra;
+    assert.equal(o.ore.length, 13);
+    assert.ok(o.ore.every(r => r.totale === 0));
+    assert.equal(o.totale.totale, 0);
+});
+
+test('ora per ora: con l\'ora legale la call delle 10 di Roma resta alle 10', () => {
+    const o = caricoDelGiorno([lead({ appointmentDate: roma('2026-06-10T10:00:00+02:00') })], '2026-06-10').perOra;
+    assert.equal(o.ore.find(r => r.ora === 10)!.totale, 1);
+});

@@ -85,7 +85,7 @@ async function leggi(): Promise<CaricoConferme> {
     return calcolaCarico(rows, now)
 }
 
-const inCache = unstable_cache(leggi, ['carico-conferme-v1'], { revalidate: CACHE_SECONDI, tags: [TAG_CARICO_CONFERME] })
+const inCache = unstable_cache(leggi, ['carico-conferme-v2'], { revalidate: CACHE_SECONDI, tags: [TAG_CARICO_CONFERME] })
 
 /** Carico delle Conferme, in cache 45 secondi. null se la lettura non riesce. */
 export async function leggiCaricoConferme(): Promise<CaricoConferme | null> {

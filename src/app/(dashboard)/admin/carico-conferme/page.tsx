@@ -3,7 +3,8 @@ import type { ReactNode } from "react"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { numeroIt, numeroItFino } from "@/lib/diretta/formato"
 import { leggiCaricoConferme } from "@/lib/conferme/caricoConfermeDb"
-import type { CaricoConferme, Conteggio, GiornoCarico, RigaGruppo } from "@/lib/conferme/caricoConferme"
+import type { CaricoConferme, ContaOra, Conteggio, GiornoCarico, RigaGruppo } from "@/lib/conferme/caricoConferme"
+import { POMERIGGIO_DALLE } from "@/lib/conferme/boardWindow"
 import { Indietro, NonDisponibile, PaginaAdmin, Sezione, TitoloAdmin, Vuoto } from "@/components/diretta/admin/ui"
 import { AggiornaCarico } from "./AggiornaCarico"
 
@@ -111,25 +112,114 @@ function Contenuto({ c }: { c: CaricoConferme }) {
     )
 }
 
-function CallPerOra({ c }: { c: CaricoConferme }) {
+// ── Ora per ora ──────────────────────────────────────────────────────────
+// In cima alla pagina (PO 09/11/2026): domani e dopodomani, una riga per ogni
+// ora piena dalle 9 alle 21, anche vuota. Barra proporzionale agli
+// appuntamenti dell'ora (stessa scala per i due giorni), "da chiamare" in
+// arancio, totali in fondo, separazione alle 15.
+
+const GRIGLIA = "grid grid-cols-[3rem_minmax(0,1fr)_3.25rem_2.5rem_2.5rem_2.5rem] items-center gap-x-2 sm:grid-cols-[4rem_minmax(0,1fr)_5rem_4.5rem_4.5rem_4rem] sm:gap-x-3"
+const C_CONF = "bg-[#5FB37A]"
+const C_SCART = "bg-[#595959]"
+const C_DAFARE = "bg-[#FF9330]"
+
+const hh = (ora: number) => `${String(ora).padStart(2, "0")}:00`
+
+function Barra({ r, scala }: { r: ContaOra; scala: number }) {
+    const w = (v: number) => `${scala > 0 ? (v / scala) * 100 : 0}%`
     return (
-        <Sezione titolo="Le call di domani e dopodomani, per ora" className="mt-4">
-            <Tabella intestazioni={["Giorno", "Mattina (prima delle 15)", "Pomeriggio (dalle 15)", "Totale", "Confermati", "Scartati", "Da fare"]} min={720}>
-                {c.giorni.map(g => (
-                    <tr key={g.giorno}>
-                        <th scope="row" className={TH_RIGA}>
-                            {etichettaGiorno(g.giorno)}
-                            {g.callFuoriBoard > 0 && <Piccolo>{n(g.callFuoriBoard)} prima delle 9 o dopo le 21: fuori dalla board</Piccolo>}
-                        </th>
-                        <td className={TD}><ConPc v={g.call.mattina} totale={g.call.totale} /></td>
-                        <td className={TD}><ConPc v={g.call.pomeriggio} totale={g.call.totale} /></td>
-                        <td className={`${TD} font-semibold`}>{n(g.call.totale)}</td>
-                        <td className={TD}><ConPc v={g.call.confermati} totale={g.call.totale} /></td>
-                        <td className={TD}><ConPc v={g.call.scartati} totale={g.call.totale} /></td>
-                        <td className={`${TD} font-semibold text-[#FF9330]`}><ConPc v={g.call.daFare} totale={g.call.totale} /></td>
-                    </tr>
+        <div className="flex h-3 min-w-0 flex-1 overflow-hidden rounded-[4px] bg-[#1F1F1F] sm:h-3.5" aria-hidden="true">
+            <div className={C_CONF} style={{ width: w(r.confermati) }} />
+            <div className={C_SCART} style={{ width: w(r.scartati) }} />
+            <div className={C_DAFARE} style={{ width: w(r.daFare) }} />
+        </div>
+    )
+}
+
+/** Numero con sotto la percentuale sul totale della giornata, se richiesta. */
+function Cifra({ v, totale, classe = "" }: { v: number; totale?: number; classe?: string }) {
+    return (
+        <div className={`text-right leading-tight ${classe} ${v === 0 ? "text-[#6B6B6B]" : ""}`}>
+            {n(v)}
+            {totale !== undefined && v > 0 && <div className="text-[11.5px] font-normal text-[#BFBFBF] sm:text-[12.5px]">{pc(v, totale)}</div>}
+        </div>
+    )
+}
+
+function RigaOraUi({ etichetta, r, scala, totaleGiorno, forte = false }: {
+    etichetta: ReactNode; r: ContaOra; scala?: number; totaleGiorno?: number; forte?: boolean
+}) {
+    return (
+        <div className={`${GRIGLIA} py-2 ${forte ? "font-semibold" : ""}`}>
+            <div className="text-[15px] font-semibold sm:text-[17px]">{etichetta}</div>
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <div className={`w-7 shrink-0 text-right text-[20px] font-semibold sm:w-9 sm:text-[24px] ${r.totale === 0 ? "text-[#6B6B6B]" : ""}`}>{n(r.totale)}</div>
+                {scala !== undefined && <Barra r={r} scala={scala} />}
+            </div>
+            <Cifra v={r.daFare} totale={totaleGiorno} classe={`text-[20px] font-semibold sm:text-[24px] ${r.daFare > 0 ? "text-[#FF9330]" : ""}`} />
+            <Cifra v={r.confermati} totale={totaleGiorno} classe="text-[16px] sm:text-[18px]" />
+            <Cifra v={r.scartati} totale={totaleGiorno} classe="text-[16px] sm:text-[18px]" />
+            <Cifra v={r.bf} totale={totaleGiorno} classe="text-[16px] sm:text-[18px]" />
+        </div>
+    )
+}
+
+function GiornoPerOra({ g, scala }: { g: GiornoCarico; scala: number }) {
+    const o = g.perOra
+    const T = o.totale.totale
+    const fuori = (r: ContaOra, testo: string) => r.totale > 0 && (
+        <div className="border-t border-[#2E2E2E]">
+            <RigaOraUi etichetta={<div className="text-[12.5px] font-normal leading-tight text-[#BFBFBF]">{testo}</div>} r={r} scala={scala} />
+        </div>
+    )
+    return (
+        <div className="min-w-0">
+            <h3 className="mb-2 text-[18px] font-semibold capitalize sm:text-[20px]">{etichettaGiorno(g.giorno)}</h3>
+            <div className={`${GRIGLIA} pb-1 text-[11.5px] leading-tight text-[#BFBFBF] sm:text-[13px]`}>
+                <div>Ora</div>
+                <div>Appuntamenti</div>
+                <div className="text-right text-[#FF9330]">Da chiamare</div>
+                <div className="text-right">Conf.</div>
+                <div className="text-right">Scart.</div>
+                <div className="text-right">BF</div>
+            </div>
+            <div className="tabular-nums">
+                {fuori(o.primaDelle9, "prima delle 9")}
+                {o.ore.map(r => (
+                    <div key={r.ora} className={r.ora === POMERIGGIO_DALLE ? "mt-1 border-t-2 border-[#FF9330]/60 pt-1" : "border-t border-[#2E2E2E]"}>
+                        {r.ora === POMERIGGIO_DALLE && <div className="text-[12px] text-[#FF9330]">Pomeriggio, dalle 15:00</div>}
+                        <RigaOraUi etichetta={hh(r.ora)} r={r} scala={scala} />
+                    </div>
                 ))}
-            </Tabella>
+                {fuori(o.dopoLe21, "dopo le 21")}
+                <div className="mt-2 border-t-2 border-[#595959] pt-1">
+                    <RigaOraUi etichetta={<div className="text-[13px] sm:text-[14px]">Mattina</div>} r={o.mattina} totaleGiorno={T} />
+                    <RigaOraUi etichetta={<div className="text-[13px] sm:text-[14px]">Pomer.</div>} r={o.pomeriggio} totaleGiorno={T} />
+                    <div className="border-t border-[#2E2E2E]">
+                        <RigaOraUi etichetta={<div className="text-[13px] sm:text-[14px]">Totale</div>} r={o.totale} totaleGiorno={T} forte />
+                    </div>
+                </div>
+            </div>
+            {(o.primaDelle9.totale > 0 || o.dopoLe21.totale > 0) && (
+                <div className="mt-2 text-[12.5px] leading-snug text-[#BFBFBF]">Le call prima delle 9 o dopo le 21 sono nei totali, ma la board delle Conferme non le mostra.</div>
+            )}
+        </div>
+    )
+}
+
+function CallPerOra({ c }: { c: CaricoConferme }) {
+    const scala = Math.max(1, ...c.giorni.flatMap(g => [g.perOra.primaDelle9, ...g.perOra.ore, g.perOra.dopoLe21].map(r => r.totale)))
+    return (
+        <Sezione titolo="Appuntamenti ora per ora" className="mt-4">
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-[#BFBFBF] sm:text-[13.5px]">
+                <div className="inline-flex items-center gap-1.5"><div className={`h-2.5 w-2.5 rounded-[2px] ${C_DAFARE}`} />da chiamare</div>
+                <div className="inline-flex items-center gap-1.5"><div className={`h-2.5 w-2.5 rounded-[2px] ${C_CONF}`} />confermati</div>
+                <div className="inline-flex items-center gap-1.5"><div className={`h-2.5 w-2.5 rounded-[2px] ${C_SCART}`} />scartati</div>
+                <div>BF = Black Friday. Le percentuali sono sul totale del giorno.</div>
+            </div>
+            <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+                {c.giorni.map(g => <GiornoPerOra key={g.giorno} g={g} scala={scala} />)}
+            </div>
             {c.callDomenica > 0 && (
                 <div className="mt-3 text-[13.5px] leading-snug text-[#FF9330]">
                     {c.callDomenica === 1 ? "C'è 1 call" : `Ci sono ${n(c.callDomenica)} call`} di domenica: la domenica le Conferme non lavorano e la board non le porta in nessun giorno.
