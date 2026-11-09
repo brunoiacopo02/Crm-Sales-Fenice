@@ -62,7 +62,7 @@ import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 // (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
 // Lead delle inserzioni Black Friday (PO 07/11/2026): funnel BLACK FRIDAY e solo al bot.
-import { isLeadBlackFridayAc, BLACK_FRIDAY_FUNNEL, BLACK_FRIDAY_LIST_NAME_NORMALIZED } from "@/lib/acIntake/blackFriday";
+import { isLeadBlackFridayAc, BLACK_FRIDAY_FUNNEL, BLACK_FRIDAY_LIST_NAME_NORMALIZED, segniBlackFridayDaCampi, decidiConversioneBf } from "@/lib/acIntake/blackFriday";
 // Pipeline autonoma del venditore: dirotta i primi N lead freschi. Tocca SOLO
 // l'intake normale qui sotto, mai il ramo del lancio (handleLancioIntake).
 import { decideDiversion } from "@/lib/salesPipeline/feeding";
@@ -893,9 +893,7 @@ export async function POST(req: NextRequest) {
         let bfRipresa = false;
         if (eventType === 'update' && (bfLista || isLeadBlackFridayAc({
             provenienza,
-            utmCampaign: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign),
-            utmContent: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent),
-            utmTerm: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm),
+            ...segniBlackFridayDaCampi(fieldValues),
         }))) {
             const cifre = rawPhone.replace(/\D/g, '').slice(-10);
             const [giaBf] = await db.select({ id: leads.id }).from(leads).where(and(
@@ -931,7 +929,7 @@ export async function POST(req: NextRequest) {
             // Black Friday (PO 07/11/2026): la campagna vince sulla Provenienza, che
             // per questi lead AC la scrive sbagliata o non la scrive.
             const updBlackFriday = existing.funnel === DEFAULT_FUNNEL && isLeadBlackFridayAc({
-                provenienza, utmCampaign, utmContent, utmTerm,
+                provenienza, ...segniBlackFridayDaCampi(fieldValues),
             });
             if (updBlackFriday) {
                 updatePayload.funnel = BLACK_FRIDAY_FUNNEL;
@@ -997,11 +995,7 @@ export async function POST(req: NextRequest) {
         // che non passa per questo webhook.
         // Black Friday (PO 07/11/2026): la quarantena di una Provenienza vecchia (ORG) non
         // ferma un contatto della lista o della campagna BF.
-        const bfPerQuarantena = bfLista || isLeadBlackFridayAc({
-            utmCampaign: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmCampaign),
-            utmContent: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmContent),
-            utmTerm: readFieldLocal(fieldValues, UTM_FIELD_IDS.utmTerm),
-        });
+        const bfPerQuarantena = bfLista || isLeadBlackFridayAc(segniBlackFridayDaCampi(fieldValues));
         if (provenienza && QUARANTINED_FUNNELS.has(provenienza.toUpperCase()) && !bfPerQuarantena) {
             console.log(`[AC webhook] skip contact ${contactId} — funnel '${provenienza}' in quarantena`);
             return NextResponse.json({
@@ -1027,7 +1021,7 @@ export async function POST(req: NextRequest) {
         // bloccate qui sopra.
         const blackFridayListIds = await getBlackFridayListIds();
         const isBlackFriday = bfLista || isLeadBlackFridayAc({
-            provenienza, utmCampaign, utmContent, utmTerm,
+            provenienza, ...segniBlackFridayDaCampi(fieldValues),
             blackFridayListIds,
             triggerListId: triggerListId ? String(triggerListId) : null,
             activeListIds,
@@ -1137,21 +1131,90 @@ export async function POST(req: NextRequest) {
             // stesso numero in funnel separati senza essere "duplicati").
             const [existing] = await tx.select({
                 id: leads.id,
+                name: leads.name,
+                phone: leads.phone,
+                email: leads.email,
+                funnel: leads.funnel,
+                status: leads.status,
+                appointmentDate: leads.appointmentDate,
+                callCount: leads.callCount,
+                lastCallDate: leads.lastCallDate,
+                version: leads.version,
                 assignedToId: leads.assignedToId,
-            }).from(leads).where(and(
-                eq(leads.companyId, FENICE_COMPANY),
-                gte(leads.createdAt, dedupCutoff),
-                sql`(${leads.acContactId} = ${contactId} OR ${leads.phone} = ${phoneFinal})`,
-            )).orderBy(desc(leads.createdAt)).limit(1);
+                assegnatoAlBot: users.isBot,
+            }).from(leads)
+                .leftJoin(users, eq(users.id, leads.assignedToId))
+                .where(and(
+                    eq(leads.companyId, FENICE_COMPANY),
+                    gte(leads.createdAt, dedupCutoff),
+                    sql`(${leads.acContactId} = ${contactId} OR ${leads.phone} = ${phoneFinal})`,
+                )).orderBy(desc(leads.createdAt)).limit(1);
 
             if (existing) {
-                return { kind: 'duplicate' as const, existingLeadId: existing.id };
+                // Black Friday su un lead nato nelle ultime 24 ore (PO 09/11/2026):
+                // niente doppione, ma il lead esistente diventa BLACK FRIDAY. Prima
+                // usciva qui senza fare niente e restava col funnel del modulo
+                // compilato poco prima (Luciani, Abiuso, Bossola il 09/11).
+                const conversione = isBlackFriday
+                    ? decidiConversioneBf({ ...existing, assegnatoAlBot: existing.assegnatoAlBot === true }, now)
+                    : 'gia_bf';
+                if (conversione === 'gia_bf') {
+                    return { kind: 'duplicate' as const, existingLeadId: existing.id };
+                }
+                let botId: string | null = null;
+                if (conversione === 'al_bot') {
+                    // Lo stesso bot del ramo BF qui sotto (selectBotPool senza soglie).
+                    const [bot] = await tx.select({ id: users.id }).from(users).where(and(
+                        eq(users.companyId, FENICE_COMPANY),
+                        eq(users.role, 'GDO'),
+                        eq(users.isBot, true),
+                        eq(users.isActive, true),
+                        eq(users.isTest, false),
+                    )).orderBy(asc(sql`coalesce(${users.acLastAssignedAt}, 'epoch'::timestamptz)`), asc(users.id)).limit(1);
+                    botId = bot?.id ?? null;
+                }
+                const alBot = conversione === 'al_bot' && botId !== null;
+                const updated = await tx.update(leads).set({
+                    funnel: BLACK_FRIDAY_FUNNEL,
+                    ...(alBot ? {
+                        assignedToId: botId,
+                        assignedAt: now,
+                        status: 'NEW',
+                        recallDate: null,
+                        scortaStato: null,
+                        scortaDal: null,
+                    } : {}),
+                    version: existing.version + 1,
+                    updatedAt: now,
+                }).where(and(
+                    eq(leads.companyId, FENICE_COMPANY),
+                    eq(leads.id, existing.id),
+                    eq(leads.version, existing.version),
+                )).returning({ id: leads.id });
+                if (updated.length === 0) {
+                    return { kind: 'duplicate' as const, existingLeadId: existing.id };
+                }
+                if (alBot) {
+                    await tx.update(users).set({ acLastAssignedAt: now }).where(eq(users.id, botId!));
+                }
+                return {
+                    kind: 'bf_convertito' as const,
+                    existingLeadId: existing.id,
+                    daFunnel: existing.funnel,
+                    conversione: alBot ? 'al_bot' as const : conversione === 'push_bot' ? 'push_bot' as const : 'solo_funnel' as const,
+                    daAssegnatario: existing.assignedToId,
+                    botId: alBot ? botId : null,
+                    lead: { name: existing.name, phone: existing.phone, email: existing.email },
+                };
             }
 
             // Guardia cross-azienda: se questo contatto è GIÀ un lead di un'altra
             // azienda (es. Serenamente, gestita via Twilio), NON creare un duplicato
             // Fenice. Evita che i contatti Serenamente finiscano nell'intake Fenice.
-            const [crossCompany] = await tx.select({ id: leads.id, companyId: leads.companyId })
+            // Black Friday escluso (PO 09/11/2026): chi compila la landing BF di Fenice
+            // e' un lead Fenice; Ferrero il 09/11 era rimasto fuori per un vecchio lead
+            // Serenamente (sospesa) con lo stesso numero.
+            const [crossCompany] = isBlackFriday ? [] : await tx.select({ id: leads.id, companyId: leads.companyId })
                 .from(leads)
                 .where(and(
                     sql`${leads.companyId} <> ${FENICE_COMPANY}`,
@@ -1657,6 +1720,62 @@ export async function POST(req: NextRequest) {
 
             return { kind: 'created' as const, assignedGdoId, assignedGdoIsBot: eligible[0].isBot, routing, holidayWindow, fallbackUsed, divertedToSales: false };
         });
+
+        if (txResult.kind === 'bf_convertito') {
+            // Black Friday su un lead delle ultime 24 ore (PO 09/11/2026): il lead
+            // e' diventato BLACK FRIDAY. Se era aperto e mai lavorato passa al bot; se
+            // e' (o diventa) del bot riceve il push col funnel BF, e l'apertura BF la
+            // manda il bot con le sue regole (anche su un suo appuntamento, intatto).
+            const leadId = txResult.existingLeadId;
+            await logLeadEvent({
+                leadId,
+                eventType: 'AC_UPDATED',
+                metadata: {
+                    source: 'activecampaign',
+                    acContactId: contactId,
+                    changes: [`funnel → ${BLACK_FRIDAY_FUNNEL}`],
+                    blackFriday: true,
+                    blackFridayVia: bfLista ? 'lista' : 'utm',
+                    conversioneBf: txResult.conversione,
+                    daFunnel: txResult.daFunnel,
+                },
+                companyId: FENICE_COMPANY,
+            });
+            if (txResult.conversione === 'al_bot' && txResult.botId) {
+                await logLeadEvent({
+                    leadId,
+                    eventType: 'ASSIGNED',
+                    metadata: {
+                        assignedToUser: txResult.botId,
+                        fromAssignee: txResult.daAssegnatario,
+                        source: 'activecampaign',
+                        routing: 'black_friday_bot',
+                        conversioneBf: true,
+                    },
+                    companyId: FENICE_COMPANY,
+                });
+            }
+            if (txResult.conversione === 'al_bot' || txResult.conversione === 'push_bot') {
+                const numeroBot = numeroBotPerNuovoLead(await contaBot2Oggi());
+                const l = txResult.lead;
+                after(() => pushLeadToBot({
+                    leadId,
+                    name: l.name,
+                    phone: l.phone,
+                    email: l.email,
+                    funnel: BLACK_FRIDAY_FUNNEL,
+                    companyId: FENICE_COMPANY,
+                    numeroBot,
+                }));
+            }
+            return NextResponse.json({
+                success: true,
+                bfConvertito: true,
+                leadId,
+                conversione: txResult.conversione,
+                funnel: BLACK_FRIDAY_FUNNEL,
+            });
+        }
 
         if (txResult.kind === 'duplicate') {
             return NextResponse.json({
