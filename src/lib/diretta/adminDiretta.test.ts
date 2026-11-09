@@ -16,9 +16,15 @@ const v = (href: string, name = href) => ({ name, href, icon: Phone })
 
 // Forma del menu classico dell'admin (Sidebar.tsx), ridotta.
 const CLASSICO: GruppoMenu[] = [
-    { label: 'Direzione', items: [v('/panoramica-generale', 'Sales Manager'), v('/manager-targets', 'Target & Previsioni')] },
+    {
+        label: 'Direzione',
+        items: [
+            v('/panoramica-generale', 'Sales Manager'), v('/manager-targets', 'Target & Previsioni'),
+            v('/admin/carico-conferme', 'Carico Conferme'), v('/admin/diretta/black-friday', 'Black Friday in diretta'),
+        ],
+    },
     { label: 'GDO', items: [v('/kpi-gdo', 'KPI GDO'), { ...v('/richieste-contatto', 'Richieste di Contatto'), badge: 3 }] },
-    { label: 'Lead & Import', items: [v('/import', 'Importa Lead')] },
+    { label: 'Lead & Import', items: [v('/import', 'Importa Lead'), v('/admin/diretta/regia-lead', 'Regia dei lead')] },
     {
         label: 'Gamification',
         items: [v('/admin/diretta', 'Diretta: centro di controllo'), v('/admin/diretta/conferme'), v('/manager-rpg-monitor'), v('/team/store')],
@@ -147,6 +153,8 @@ const FILE_UI = [
     'app/(dashboard)/admin/diretta/regia-lead/page.tsx',
     'app/(dashboard)/admin/diretta/regia-lead/AggiornaRegia.tsx',
     'app/(dashboard)/admin/diretta/regia-lead/RegiaClient.tsx',
+    'app/(dashboard)/admin/carico-conferme/page.tsx',
+    'app/(dashboard)/admin/carico-conferme/AggiornaCarico.tsx',
     'components/diretta/SalvadanaioMese.tsx',
     'app/(dashboard)/admin/citazioni/CitazioniAdminClient.tsx',
     'components/diretta/admin/ui.tsx',
@@ -163,8 +171,34 @@ test('pagine admin Diretta: nessun bottone dentro span o p, niente pillole', () 
     }
 })
 
-test('regia dei lead: nel menu Rinascita, solo ADMIN dalla tabella users in pagina e in ogni action', () => {
-    assert.ok(MENU_ADMIN_DIRETTA.some(v => v.href === '/admin/diretta/regia-lead'))
+test('menu admin (PO 09/11/2026): Carico Conferme e Black Friday nel Sales Manager, Regia dei lead in Lead e import, nessuno dei tre in Rinascita', () => {
+    const m = menuAdminDiretta(CLASSICO)
+    const gruppo = (label: string) => m.gruppi.find(g => g.label === label)?.items.map(i => i.href) ?? []
+    assert.ok(gruppo('Sales Manager').includes('/admin/carico-conferme'))
+    assert.ok(gruppo('Sales Manager').includes('/admin/diretta/black-friday'))
+    assert.ok(gruppo('Lead e import').includes('/admin/diretta/regia-lead'))
+    for (const href of ['/admin/carico-conferme', '/admin/diretta/black-friday', '/admin/diretta/regia-lead']) {
+        assert.ok(!gruppo('Rinascita').includes(href), href)
+        assert.ok(!MENU_ADMIN_DIRETTA.some(v => v.href === href), href)
+    }
+    // la pagina corrente apre il gruppo giusto, non la Rinascita del centro di controllo
+    assert.equal(gruppoDellaPagina(m.gruppi, '/admin/diretta/black-friday'), 'Sales Manager')
+    assert.equal(gruppoDellaPagina(m.gruppi, '/admin/diretta/regia-lead'), 'Lead e import')
+    assert.equal(gruppoDellaPagina(m.gruppi, '/admin/carico-conferme'), 'Sales Manager')
+    // nel menu classico le tre voci stanno nei gruppi giusti e solo per l'ADMIN
+    const sidebar = leggi('components/Sidebar.tsx')
+    const direzione = sidebar.slice(sidebar.indexOf('label: "Direzione"'), sidebar.indexOf('label: "GDO"', sidebar.indexOf('label: "Direzione"')))
+    assert.match(direzione, /role === "ADMIN" \? \[\s*\{ name: "Carico Conferme", href: "\/admin\/carico-conferme"[\s\S]*?\{ name: "Black Friday in diretta", href: "\/admin\/diretta\/black-friday"/)
+    const leadImport = sidebar.slice(sidebar.indexOf('label: "Lead & Import"'), sidebar.indexOf('label: "Qualità"', sidebar.indexOf('label: "Lead & Import"')))
+    assert.match(leadImport, /role === "ADMIN" \? \[\{ name: "Regia dei lead", href: "\/admin\/diretta\/regia-lead"/)
+    // le pagine restano solo ADMIN, dalla tabella users
+    for (const f of ['app/(dashboard)/admin/carico-conferme/page.tsx', 'app/(dashboard)/admin/diretta/black-friday/page.tsx']) {
+        assert.match(leggi(f), /if \(!\(await conRuoloDb\(\["ADMIN"\]\)\)\) redirect\("\/unauthorized"\)/, f)
+    }
+    assert.match(leggi('app/actions/caricoConfermeActions.ts'), /if \(!\(await conRuoloDb\(\['ADMIN'\]\)\)\) return \{ success: false \}/)
+})
+
+test('regia dei lead: in Lead e import, solo ADMIN dalla tabella users in pagina e in ogni action', () => {
     assert.match(leggi('app/(dashboard)/admin/diretta/regia-lead/page.tsx'), /if \(!\(await conRuoloDb\(\["ADMIN"\]\)\)\) redirect\("\/unauthorized"\)/)
     const codice = leggi('app/actions/regiaLeadActions.ts')
     assert.match(codice, /^"use server"/)

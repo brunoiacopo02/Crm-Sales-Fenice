@@ -40,6 +40,9 @@ const FILE_ADMIN = [
     // Monitor Black Friday (PO 09/11/2026).
     'app/(dashboard)/admin/diretta/black-friday/page.tsx',
     'app/actions/blackFridayMonitorActions.ts',
+    // Carico delle Conferme (PO 09/11/2026).
+    'app/(dashboard)/admin/carico-conferme/page.tsx',
+    'app/actions/caricoConfermeActions.ts',
 ]
 
 test('le action e le pagine admin della Diretta non leggono il ruolo dai metadati', () => {

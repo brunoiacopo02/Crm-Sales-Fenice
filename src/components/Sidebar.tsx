@@ -25,6 +25,9 @@ import {
     PhoneCall,
     Gift,
     User,
+    ShoppingBag,
+    SlidersHorizontal,
+    Headphones,
     type LucideIcon,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
@@ -235,6 +238,12 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                         ...(role === "ADMIN" ? [{ name: "Incassi", href: "/incassi", icon: Briefcase }] : []),
                         ...(role === "ADMIN" ? [{ name: "Bonus", href: "/bonus", icon: Gift }] : []),
                         { name: "Target & Previsioni", href: "/manager-targets", icon: Target },
+                        // PO 09/11/2026: carico delle Conferme e Black Friday stanno col
+                        // Sales Manager (il BF prima era nella Rinascita). Solo ADMIN.
+                        ...(role === "ADMIN" ? [
+                            { name: "Carico Conferme", href: "/admin/carico-conferme", icon: Headphones },
+                            { name: "Black Friday in diretta", href: "/admin/diretta/black-friday", icon: ShoppingBag },
+                        ] : []),
                     ],
                 },
                 {
@@ -278,6 +287,8 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                         { name: "Archivio Storico", href: "/archivio", icon: Database },
                         { name: "Richiami", href: "/richiami", icon: Calendar },
                         { name: "Scartati (Marketing)", href: "/scartati", icon: Database },
+                        // PO 09/11/2026: la regia dei lead sta coi lead, non nella Rinascita. Solo ADMIN.
+                        ...(role === "ADMIN" ? [{ name: "Regia dei lead", href: "/admin/diretta/regia-lead", icon: SlidersHorizontal }] : []),
                     ],
                 },
                 {
