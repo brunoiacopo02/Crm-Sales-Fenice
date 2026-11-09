@@ -9,7 +9,7 @@ import { PaginaAdmin, Sezione, TitoloAdmin, oraDi } from "@/components/diretta/a
 import { InterruttoriDiretta } from "./InterruttoriDiretta"
 import { AggiornaCentro } from "./AggiornaCentro"
 import {
-    LinkPremiSettimana, SezioneBonusConferme, SezioneCitazioni, SezioneAppuntamenti, SezioneNegozio,
+    LinkPremiSettimana, LinkSalvadanai, SezioneBonusConferme, SezioneCitazioni, SezioneAppuntamenti, SezioneNegozio,
     SezioneObiettivi, SezioneOggi, SezioneRegistro,
 } from "./sezioni"
 
@@ -61,6 +61,7 @@ export default async function CentroDirettaPage() {
                     <SezioneNegozio negozio={centro.negozio} oggi={centro.giorno} />
                     <SezioneCitazioni calendario={calendario} />
                     <LinkPremiSettimana />
+                    <LinkSalvadanai />
                     <SezioneBonusConferme bonus={bonus} adesso={adesso} />
                 </div>
             </div>

@@ -18,6 +18,7 @@ import { useDirettaLive } from "./useDirettaLive"
 import { useOrologio } from "./useOrologio"
 import { DailyQuoteSlot } from "./DailyQuoteSlot"
 import type { TodayQuotes } from "@/lib/quotes/display"
+import type { Salvadanaio } from "@/lib/economy/premiMese"
 
 type LeadList = any[] // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -36,9 +37,11 @@ type Props = {
     pipelineError: string
     /** Frase e consiglio del giorno, letti sul server (in cache): restano anche dopo l'inizio turno. */
     frasi?: TodayQuotes | null
+    /** Bonus del mese (settimane chiuse + quella in corso), letti sul server in cache. */
+    salvadanaio?: Salvadanaio | null
 }
 
-export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls, pipelineError, frasi = null }: Props) {
+export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fourthCall, isFourthCallActive, recalls, pipelineError, frasi = null, salvadanaio = null }: Props) {
     const { live, fissatiOggi, squadra, punta, momento } = useDirettaLive()
     const obiettivi = live?.squadra.obiettivi ?? DEFAULT_TARGETS
     const adesso = useOrologio(30_000)
@@ -100,7 +103,7 @@ export function DirettaHome({ userId, nome, firstCall, secondCall, thirdCall, fo
                     <div className="flex flex-col gap-6 md:grid md:grid-cols-2 md:items-start xl:flex xl:w-[300px] xl:shrink-0 xl:flex-col xl:overflow-y-auto xl:pb-6">
                         {/* Frase, poi risultati personali, poi cronaca (PO 26/10/2026): la cronaca spingeva la scheda fuori dallo schermo. */}
                         {frasi && <DailyQuoteSlot initial={frasi} compatta />}
-                        <SchedaPersonale mia={live?.mia ?? null} obiettivi={obiettivi} />
+                        <SchedaPersonale mia={live?.mia ?? null} obiettivi={obiettivi} salvadanaio={salvadanaio} />
                         <Cronaca voci={(live?.squadra.cronaca ?? []).slice(0, CRONACA_IN_VISTA)} mioId={live?.io.id ?? userId} caricato={!!live} />
                     </div>
                 </div>

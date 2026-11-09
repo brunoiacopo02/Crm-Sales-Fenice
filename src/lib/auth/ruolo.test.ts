@@ -35,6 +35,8 @@ const FILE_ADMIN = [
     'app/actions/centroDirettaActions.ts',
     'app/(dashboard)/admin/diretta/obiettivi/page.tsx',
     'app/(dashboard)/admin/diretta/registro/page.tsx',
+    // Salvadanai dei GDO (PO 09/11/2026).
+    'app/(dashboard)/admin/diretta/salvadanai/page.tsx',
 ]
 
 test('le action e le pagine admin della Diretta non leggono il ruolo dai metadati', () => {

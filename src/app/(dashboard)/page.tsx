@@ -9,6 +9,8 @@ import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 import { direttaAccesa, leggiIo } from "@/lib/diretta/io"
 import { readTodayQuotes } from "@/lib/quotes/today"
+import { meseDelSalvadanaio, salvadanaioDi } from "@/lib/economy/premiMese"
+import { leggiPremiMese } from "@/lib/economy/premiMeseDb"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 
@@ -63,10 +65,14 @@ export default async function DashboardPage() {
     // Restyle "Diretta" (PO 25/10/2026): con l'interruttore acceso il GDO vede la
     // home nuova; spento, l'albero qui sotto resta quello di sempre.
     if (session?.user?.role === 'GDO' && await direttaAccesa('GDO')) {
-        const [io, frasi] = await Promise.all([
+        const [io, frasi, salvadanaio] = await Promise.all([
             leggiIo(session.user.id, session.user.name ?? null).catch(() => null),
             // In cache sul server (un quarto d'ora): niente giro in più dal browser.
             readTodayQuotes('GDO').catch(() => null),
+            // Bonus del mese (PO 09/11/2026): uguali per tutti, in cache 2 minuti.
+            leggiPremiMese('fenice', meseDelSalvadanaio(new Date()))
+                .then(m => salvadanaioDi(m, session.user.id))
+                .catch((e: unknown) => { console.error('[home Diretta] salvadanaio del mese', e); return null }),
         ])
         return (
             <>
@@ -82,6 +88,7 @@ export default async function DashboardPage() {
                     recalls={recalls}
                     pipelineError={pipelineError}
                     frasi={frasi}
+                    salvadanaio={salvadanaio}
                 />
             </>
         )

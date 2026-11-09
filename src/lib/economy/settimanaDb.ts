@@ -21,10 +21,13 @@ import type { NumeriSettimana, SettimanaLunSab } from './premiSettimana'
 const nomeConferme = (u: { firstName: string | null; name: string | null; displayName: string | null; id: string }) =>
     u.firstName?.trim() || u.name || u.displayName || u.id
 
-export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab): Promise<NumeriSettimana> {
-    // GDO umani con un nome (fuori 108 e 201) e veri (fuori la prova, migr.
-    // 0050). Anche chi è stato disattivato dopo: se ha lavorato quella
-    // settimana, il suo bonus va pagato.
+/**
+ * GDO umani con un nome (fuori 108 e 201) e veri (fuori la prova, migr.
+ * 0050). Anche chi è stato disattivato dopo: se ha lavorato quella
+ * settimana, il suo bonus va pagato. Gli stessi del salvadanaio del mese
+ * (./premiMeseDb.ts).
+ */
+export async function leggiRosterGdo(companyId: string) {
     const roster = await db.select({
         id: users.id, role: users.role, isActive: users.isActive, isBot: users.isBot, isTest: users.isTest,
         firstName: users.firstName, displayName: users.displayName, name: users.name,
@@ -35,7 +38,11 @@ export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab
         isNotNull(users.firstName),
         or(eq(users.companyId, companyId), sql`${companyId} = ANY(${users.allowedCompanies})`),
     ))
-    const gdo = roster.filter(u => !!u.firstName?.trim())
+    return roster.filter(u => !!u.firstName?.trim())
+}
+
+export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab): Promise<NumeriSettimana> {
+    const gdo = await leggiRosterGdo(companyId)
     const ids = gdo.map(u => u.id)
     const [presenze, fissati] = await Promise.all([
         Promise.all(ids.map(id => countPresences(id, s.start, s.end, companyId))),

@@ -4,7 +4,7 @@
 // (PO 26/10/2026): era un doppione della coda Richiami dentro la Pipeline.
 
 import {
-    Calendar, Coins, KeyRound, Gauge, Gift, LayoutDashboard, Phone, Quote, Store, Target, User, Users,
+    Calendar, Coins, KeyRound, Gauge, Gift, LayoutDashboard, Phone, PiggyBank, Quote, Store, Target, User, Users,
     type LucideIcon,
 } from "lucide-react"
 
@@ -49,6 +49,7 @@ export const MENU_ADMIN_DIRETTA: VoceGruppo[] = [
     { name: "Citazioni del giorno", href: "/admin/citazioni", icon: Quote },
     { name: "Premi del negozio", href: "/admin/premi", icon: Gift },
     { name: "Registro delle monete", href: "/admin/diretta/registro", icon: Coins },
+    { name: "Salvadanai dei GDO", href: "/admin/diretta/salvadanai", icon: PiggyBank },
     { name: "Bonus e obiettivi Conferme", href: "/admin/diretta/conferme", icon: Target },
     { name: "Pagina Squadra", href: "/classifica", icon: Users },
 ]

@@ -12,8 +12,10 @@ import { binarioPresenze, chiaveSettimana, etichettaSettimana, euro } from "@/li
 import { numeroIt } from "@/lib/diretta/formato"
 import { testoSerie, type SerieDaMostrare } from "@/lib/diretta/serieTesto"
 import { Flame, Shield } from "lucide-react"
+import type { Salvadanaio } from "@/lib/economy/premiMese"
+import { SalvadanaioMese } from "./SalvadanaioMese"
 
-export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; obiettivi: GamificationTargets }) {
+export function SchedaPersonale({ mia, obiettivi, salvadanaio = null }: { mia: DirettaMia | null; obiettivi: GamificationTargets; salvadanaio?: Salvadanaio | null }) {
     const presenze = mia?.presenzeSettimana ?? 0
     const caselle = binarioPresenze(presenze, obiettivi)
     const sogliaRaggiunta = presenze >= obiettivi.presenzeSogliaEuro
@@ -77,6 +79,8 @@ export function SchedaPersonale({ mia, obiettivi }: { mia: DirettaMia | null; ob
                 </div>
                 <div className="text-[32px] font-semibold leading-none tabular-nums">{euro(mia?.euroSettimana ?? 0)}</div>
             </div>
+            {/* Bonus del mese che si accumulano (PO 09/11/2026), letti al caricamento della pagina. */}
+            {salvadanaio && <SalvadanaioMese s={salvadanaio} euroPresenzeOra={mia ? mia.euroSettimana : null} />}
 
             {mia?.serie && <Serie serie={mia.serie} />}
 

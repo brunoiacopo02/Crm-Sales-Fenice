@@ -124,7 +124,7 @@ test('centro di controllo: collegato alle pagine di dettaglio', () => {
     const centro = leggi('app/(dashboard)/admin/diretta/page.tsx') + leggi('app/(dashboard)/admin/diretta/sezioni.tsx')
     for (const href of [
         '/admin/diretta/obiettivi', '/admin/citazioni', '/admin/premi', '/admin/diretta/premi-settimana',
-        '/admin/diretta/conferme', '/admin/diretta/registro', '/classifica',
+        '/admin/diretta/salvadanai', '/admin/diretta/conferme', '/admin/diretta/registro', '/classifica',
     ]) {
         assert.ok(centro.includes(`href="${href}`), href)
     }
@@ -141,6 +141,8 @@ const FILE_UI = [
     'app/(dashboard)/admin/diretta/InterruttoriDiretta.tsx',
     'app/(dashboard)/admin/diretta/obiettivi/ObiettiviForm.tsx',
     'app/(dashboard)/admin/diretta/registro/page.tsx',
+    'app/(dashboard)/admin/diretta/salvadanai/page.tsx',
+    'components/diretta/SalvadanaioMese.tsx',
     'app/(dashboard)/admin/citazioni/CitazioniAdminClient.tsx',
     'components/diretta/admin/ui.tsx',
     'components/diretta/MenuAdminGruppi.tsx',
