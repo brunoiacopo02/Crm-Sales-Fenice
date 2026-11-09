@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT_TARGETS } from '@/lib/diretta/config'
 import {
-    calcolaMonitorBf, canaleDi, cascataSm, giorniDal, oreDiTurno, pct, sigleNumero, stadiSm,
+    CAMBIO_FUNNEL_BF, calcolaMonitorBf, canaleDi, cascataSm, eConversioneBf, giorniDal, ingressoBf, oreDiTurno, pct, sigleNumero, stadiSm,
     type BotLeadBf, type DatiBotBf, type InputMonitorBf, type LeadBf,
 } from './monitor'
 
@@ -404,4 +404,60 @@ test('salesManager: BF totale e per giorno di ingresso, altri funnel accanto', (
     assert.equal(r.salesManager.altri!.pctFissaggio, 10)
     assert.equal(r.salesManager.altri!.pctPresenze, 50)
     assert.equal(r.salesManager.altri!.pctChiusure, 33.3)
+})
+
+test('eConversioneBf: BF_CONVERTITO e AC_UPDATED col cambio di funnel a BLACK FRIDAY', () => {
+    assert.equal(CAMBIO_FUNNEL_BF, 'funnel → BLACK FRIDAY')
+    assert.equal(eConversioneBf({ eventType: 'BF_CONVERTITO' }), true)
+    assert.equal(eConversioneBf({ eventType: 'AC_UPDATED', changes: ['funnel → BLACK FRIDAY'] }), true)
+    assert.equal(eConversioneBf({ eventType: 'AC_UPDATED', changes: ['utmSource', 'funnel → BLACK FRIDAY'] }), true)
+    assert.equal(eConversioneBf({ eventType: 'AC_UPDATED', changes: ['funnel → CORSO 10 ORE'] }), false)
+    assert.equal(eConversioneBf({ eventType: 'AC_UPDATED' }), false)
+    assert.equal(eConversioneBf({ eventType: 'BF_RIPUSH' }), false)
+})
+
+test('ingressoBf: nato dal 7/11, convertito dopo, fuori perimetro', () => {
+    const nato = new Date('2026-11-08T10:00:00Z')
+    // Nato BF dal 7/11: entra alla creazione.
+    assert.deepEqual(ingressoBf(nato, null, INIZIO), nato)
+    // Lead di settembre convertito il 9/11 (Ferrero): entra alla conversione.
+    const conv = new Date('2026-11-09T17:23:51Z')
+    assert.deepEqual(ingressoBf(new Date('2026-09-21T09:08:49Z'), conv, INIZIO), conv)
+    // Nato dopo il 7/11 con un altro funnel e convertito: vale la conversione.
+    assert.deepEqual(ingressoBf(nato, conv, INIZIO), conv)
+    // BF vecchio (provenienza Black Friday di maggio) senza conversione dal 7/11: fuori.
+    assert.equal(ingressoBf(new Date('2026-05-08T09:53:33Z'), null, INIZIO), null)
+    // Conversione prima del 7/11: non vale, fuori.
+    assert.equal(ingressoBf(new Date('2026-10-01T09:00:00Z'), new Date('2026-11-01T09:00:00Z'), INIZIO), null)
+})
+
+test('convertito: giorno, età e fermi dalla conversione; chiamate e ridati di prima del 7/11 non contano', () => {
+    const conv = new Date('2026-11-09T12:00:00Z') // 13:00 Roma del 9/11
+    const r = calcolaMonitorBf(base({
+        leads: [
+            lead({ id: 'nato', createdAt: new Date('2026-11-07T08:00:00Z') }),
+            lead({ id: 'ferrero', createdAt: conv }),
+        ],
+        eventi: [
+            { leadId: 'ferrero', eventType: 'REASSIGNED_FROM_BOT', reason: 'mai_risposto', manuale: false, at: new Date('2026-09-23T10:00:00Z') },
+        ],
+        chiamate: [
+            { leadId: 'ferrero', userId: BOT, outcome: 'DA_SCARTARE', at: new Date('2026-09-22T10:00:00Z') },
+            { leadId: 'ferrero', userId: ZORA, outcome: 'NON_RISPONDE', at: new Date('2026-09-24T10:00:00Z') },
+        ],
+    }))
+    assert.equal(r.imbuto.totale.entrati, 2)
+    const g = Object.fromEntries(r.imbuto.giorni.map(x => [x.giorno, x.dati.entrati]))
+    assert.equal(g['2026-11-07'], 1)
+    assert.equal(g['2026-11-09'], 1)
+    // Ferrero è col bot, senza esiti né ridati vecchi.
+    const esiti = Object.fromEntries(r.esiti.voci.map(v => [v.chiave, v.lead]))
+    assert.equal(esiti.col_bot, 2)
+    assert.equal(esiti.scartato_bot, undefined)
+    assert.equal(r.ridati.totale, 0)
+    // Età media dall'ingresso: (54 + 2) / 2 = 28 ore.
+    assert.equal(r.confronto.bfTutti.etaMediaOre, 28)
+    // Fermo sul bot solo il lead nato il 7/11, non il convertito di oggi.
+    assert.equal(r.attenzioni.find(a => a.chiave === 'fermi_sul_bot')?.numero, 1)
+    assert.equal(r.controlli.ok, true)
 })

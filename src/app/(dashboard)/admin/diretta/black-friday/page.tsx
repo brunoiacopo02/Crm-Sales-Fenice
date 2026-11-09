@@ -32,7 +32,7 @@ export default async function BlackFridayPage() {
             <TitoloAdmin
                 prima="Black Friday"
                 accento="in diretta"
-                sotto={<>Tutti i lead Black Friday entrati nel CRM da sabato 7/11. Le percentuali sono sempre sul totale dei lead, come per i GDO, salvo dove è scritto.</>}
+                sotto={<>Tutti i lead Black Friday entrati nel CRM da sabato 7/11, compresi quelli diventati Black Friday dopo (per loro conta la data della conversione). Le percentuali sono sempre sul totale dei lead, come per i GDO, salvo dove è scritto.</>}
             />
             {!m ? (
                 <div className="mt-6 rounded-[16px] bg-[#262626] p-5"><NonDisponibile /></div>

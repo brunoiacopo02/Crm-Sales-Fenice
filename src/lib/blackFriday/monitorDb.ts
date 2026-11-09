@@ -19,7 +19,7 @@ import { contaNeiKpiSql } from '@/lib/intakeBatch'
 import { readGamificationTargets } from '@/lib/diretta/settings'
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import {
-    BF_FUNNEL, calcolaMonitorBf, stadiSm,
+    BF_FUNNEL, CAMBIO_FUNNEL_BF, EVENTO_BF_CONVERTITO, calcolaMonitorBf, ingressoBf, stadiSm,
     type AltriFunnelSm, type BotFunnelChat, type BotLeadBf, type DatiBotBf, type MonitorBf,
 } from './monitor'
 
@@ -62,6 +62,7 @@ export async function leggiDatiBot(
     const body = JSON.stringify({
         ts: new Date().toISOString(),
         dal: INIZIO_BF.toISOString(),
+        // `ingresso` = data di ingresso BF (la conversione per chi è diventato BF dopo).
         leads: lead.map(l => ({ id: l.id, ingresso: l.createdAt.toISOString(), telefono: l.phone })),
     })
     try {
@@ -131,10 +132,29 @@ async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<AltriFunnel
     return { lead: Number(conteggio[0]?.c ?? 0), stadi: stadiSm(righe, inizio, adesso) }
 }
 
+/**
+ * Prima conversione a BLACK FRIDAY del lead dal 7/11 (null se mai convertito):
+ * BF_CONVERTITO di /api/admin/bf-converti o AC_UPDATED del webhook AC con
+ * 'funnel → BLACK FRIDAY' nei changes (vedi eConversioneBf in monitor.ts).
+ */
+const conversioneBfAt = sql<string | Date | null>`(
+    select min(${leadEvents.timestamp}) from ${leadEvents}
+    where ${leadEvents.leadId} = ${leads.id}
+      and ${leadEvents.timestamp} >= ${INIZIO_BF}
+      and (${leadEvents.eventType} = ${EVENTO_BF_CONVERTITO}
+        or (${leadEvents.eventType} = 'AC_UPDATED' and ${leadEvents.metadata}->'changes' @> ${JSON.stringify([CAMBIO_FUNNEL_BF])}::jsonb))
+)`
+
+const comeData = (v: string | Date | null): Date | null => (v === null ? null : v instanceof Date ? v : new Date(v))
+
 async function leggi(): Promise<MonitorBf> {
     const adesso = new Date()
     const oggi = dayBoundsRome(adesso)
-    const leadBf = and(eq(leads.companyId, FENICE), eq(leads.funnel, BF_FUNNEL), gte(leads.createdAt, INIZIO_BF), leadVero())
+    // Perimetro (PO 09/11/2026): funnel BF e (nato dal 7/11 oppure diventato BF dal 7/11).
+    const leadBf = and(
+        eq(leads.companyId, FENICE), eq(leads.funnel, BF_FUNNEL), leadVero(),
+        or(gte(leads.createdAt, INIZIO_BF), sql`${conversioneBfAt} is not null`),
+    )
     const idBf = db.select({ id: leads.id }).from(leads).where(leadBf)
 
     // I GDO prima: servono gli id per leggere le chiamate di oggi sull'indice (userId, createdAt).
@@ -155,6 +175,7 @@ async function leggi(): Promise<MonitorBf> {
             closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct,
             appointmentCreatedAt: leads.appointmentCreatedAt, confirmationsTimestamp: leads.confirmationsTimestamp,
             salespersonOutcomeAt: leads.salespersonOutcomeAt, phone: leads.phone,
+            convertitoAt: conversioneBfAt,
         }).from(leads).where(leadBf),
 
         db.select({
@@ -195,11 +216,12 @@ async function leggi(): Promise<MonitorBf> {
             funnel: sql<string>`coalesce(${leads.funnel}, 'SENZA FUNNEL')`,
             lead: sql<number>`count(*)::int`,
             appuntamenti: sql<number>`count(*) filter (where ${leads.appointmentDate} is not null or ${leads.status} = 'APPOINTMENT')::int`,
-            etaMediaOre: sql<number>`coalesce(avg(extract(epoch from (${adesso}::timestamptz - ${leads.createdAt}))) / 3600, 0)::float8`,
+            etaMediaOre: sql<number>`coalesce(avg(extract(epoch from (${adesso}::timestamptz - greatest(${leads.createdAt}, coalesce(${conversioneBfAt}, ${leads.createdAt}))))) / 3600, 0)::float8`,
         })
             .from(leads)
             .where(and(
-                eq(leads.companyId, FENICE), gte(leads.createdAt, INIZIO_BF), leadVero(),
+                eq(leads.companyId, FENICE), leadVero(),
+                or(gte(leads.createdAt, INIZIO_BF), and(eq(leads.funnel, BF_FUNNEL), sql`${conversioneBfAt} is not null`)),
                 exists(db.select({ x: sql`1` }).from(leadEvents).where(and(eq(leadEvents.leadId, leads.id), eq(leadEvents.eventType, 'BOT_PUSHED')))),
             ))
             .groupBy(sql`coalesce(${leads.funnel}, 'SENZA FUNNEL')`),
@@ -212,13 +234,19 @@ async function leggi(): Promise<MonitorBf> {
         }),
     ])
 
-    const bot = await leggiDatiBot(righeLead)
+    // Data di ingresso BF: la conversione per chi è diventato BF dopo (ingressoBf).
+    // Il filtro SQL garantisce che ogni riga sia nel perimetro; il ripiego su
+    // createdAt copre solo una riga sfuggita fra le due letture.
+    const leadIn = righeLead.map(l => ({
+        ...l, createdAt: ingressoBf(l.createdAt, comeData(l.convertitoAt), INIZIO_BF) ?? l.createdAt,
+    }))
+    const bot = await leggiDatiBot(leadIn)
 
     return calcolaMonitorBf({
         adesso,
         inizio: INIZIO_BF,
         // Il telefono serve solo al bot per trovare la chat: non entra nei conti né nella cache della pagina.
-        leads: righeLead.map(l => ({
+        leads: leadIn.map(l => ({
             id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, status: l.status, assignedToId: l.assignedToId,
             appointmentDate: l.appointmentDate, confirmationsOutcome: l.confirmationsOutcome,
             confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
@@ -238,7 +266,7 @@ async function leggi(): Promise<MonitorBf> {
     })
 }
 
-const inCache = unstable_cache(leggi, ['monitor-black-friday-v2'], { revalidate: CACHE_SECONDI, tags: [TAG_MONITOR_BF] })
+const inCache = unstable_cache(leggi, ['monitor-black-friday-v3'], { revalidate: CACHE_SECONDI, tags: [TAG_MONITOR_BF] })
 
 /** Numeri del monitor, in cache 45 secondi. null se la lettura non riesce. */
 export async function leggiMonitorBf(): Promise<MonitorBf | null> {

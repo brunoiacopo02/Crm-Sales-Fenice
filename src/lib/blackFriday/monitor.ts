@@ -22,6 +22,11 @@ import { stageHits, type FunnelStageLead } from '@/lib/kpi/funnelStages'
 
 export interface LeadBf {
     id: string
+    /**
+     * Data di ingresso nel Black Friday (ingressoBf): la creazione per chi nasce
+     * BF, la conversione per chi lo diventa dopo. Giorno dell'imbuto, età e ritardi
+     * partono da qui; chiamate, ridati e stadi di prima non contano.
+     */
     createdAt: Date
     utmSource: string | null
     status: string
@@ -92,6 +97,34 @@ export interface InputMonitorBf {
 }
 
 export const BF_FUNNEL = 'BLACK FRIDAY'
+
+// ── Perimetro (PO 09/11/2026) ──
+// Un lead è del monitor se ha funnel BLACK FRIDAY e (è nato dal 7/11 oppure è
+// diventato BF dal 7/11). Un lead diventa BF dopo la nascita in tre modi, e
+// ognuno lascia un evento in leadEvents:
+//  - /api/admin/bf-converti                       → BF_CONVERTITO
+//  - webhook AC, BF su un lead delle ultime 24 ore → AC_UPDATED con changes ['funnel → BLACK FRIDAY']
+//  - webhook AC `update` su un lead SCONOSCIUTO    → AC_UPDATED con changes ['funnel → BLACK FRIDAY']
+/** Evento della conversione fatta da /api/admin/bf-converti. */
+export const EVENTO_BF_CONVERTITO = 'BF_CONVERTITO'
+/** Voce di metadata.changes che il webhook AC scrive in AC_UPDATED quando il lead diventa BF. */
+export const CAMBIO_FUNNEL_BF = `funnel → ${BF_FUNNEL}`
+
+/** L'evento segna un lead diventato BLACK FRIDAY? */
+export function eConversioneBf(e: { eventType: string; changes?: unknown }): boolean {
+    if (e.eventType === EVENTO_BF_CONVERTITO) return true
+    return e.eventType === 'AC_UPDATED' && Array.isArray(e.changes) && e.changes.includes(CAMBIO_FUNNEL_BF)
+}
+
+/**
+ * Data di ingresso BF di un lead col funnel BLACK FRIDAY, o null se fuori dal
+ * perimetro. `convertitoAt` = prima conversione dal 7/11 (null se mai convertito):
+ * per un convertito vale la conversione, anche se il lead è nato dopo il 7/11.
+ */
+export function ingressoBf(createdAt: Date, convertitoAt: Date | null, inizio: Date): Date | null {
+    if (convertitoAt && convertitoAt >= inizio) return convertitoAt > createdAt ? convertitoAt : createdAt
+    return createdAt >= inizio ? createdAt : null
+}
 /** ORE DI TURNO GDO oltre le quali un ridato dal bot non ancora chiamato va segnalato (PO 09/11/2026). */
 export const ORE_RIDATO_NON_CHIAMATO = 2
 /** Numero WhatsApp segnalato se ha almeno questi lead BF... */
@@ -425,7 +458,9 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
 
     // Chiamate per lead, e del bot per esito.
     const chiamatePerLead = new Map<string, ChiamataBf[]>()
-    for (const c of input.chiamate) {
+    // Solo la storia dal 7/11: le chiamate e i ridati di un convertito (es. un lead
+    // di settembre diventato BF) di prima dell'offerta non sono lavoro sul BF.
+    for (const c of input.chiamate.filter(c => c.at >= inizio)) {
         const arr = chiamatePerLead.get(c.leadId) ?? []
         arr.push(c)
         chiamatePerLead.set(c.leadId, arr)
@@ -438,7 +473,7 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
     // Primo ridato (non manuale) e passaggi a mano, per lead.
     const ridato = new Map<string, EventoBf>()
     const aMano = new Set<string>()
-    for (const e of [...input.eventi].sort((a, b) => a.at.getTime() - b.at.getTime())) {
+    for (const e of input.eventi.filter(e => e.at >= inizio).sort((a, b) => a.at.getTime() - b.at.getTime())) {
         if (e.eventType !== 'REASSIGNED_FROM_BOT') continue
         if (e.manuale) { aMano.add(e.leadId); continue }
         if (!ridato.has(e.leadId)) ridato.set(e.leadId, e)
