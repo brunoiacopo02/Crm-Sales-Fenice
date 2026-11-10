@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    MINUTI_PROTEZIONE, annullabile, fotografa, motivoEsclusione, normalizzaFiltri, ripartisci, ripristino,
+    MINUTI_PROTEZIONE, annullaRinfrescaUpdatedAt, annullabile, fotografa, motivoEsclusione, normalizzaFiltri, ripartisci, ripristino,
     tettoValido, type LeadControllo,
 } from './regia'
 
@@ -96,4 +96,18 @@ test('tetto freschi: intero fra 0 e 1000 oppure vuoto', () => {
     assert.equal(tettoValido(1001), false)
     assert.equal(tettoValido(2.5), false)
     assert.equal(tettoValido(-1), false)
+})
+
+test('annulla: updatedAt si rinfresca solo se entra/esce dal bot o lo stato cambia davvero', () => {
+    // Prova in produzione del 10/11: sposta da senza assegnatario a un GDO, annulla → updatedAt era diventato "adesso".
+    const prima = { assignedToId: null, status: 'NEW', callCount: 0, scortaStato: null }
+    const dopo = { assignedToId: 'g107', status: 'NEW', callCount: 0, scortaStato: 'scorta' }
+    assert.equal(annullaRinfrescaUpdatedAt(prima, dopo, 'bot'), false)
+    // in cima: stesso titolare, stesso stato
+    assert.equal(annullaRinfrescaUpdatedAt({ assignedToId: 'g105', status: 'IN_PROGRESS', scortaStato: 'scorta' }, { assignedToId: 'g105', status: 'IN_PROGRESS', scortaStato: 'visibile' }, 'bot'), false)
+    // scarta: lo stato cambia
+    assert.equal(annullaRinfrescaUpdatedAt({ assignedToId: 'g105', status: 'NEW' }, { assignedToId: 'g105', status: 'REJECTED' }, 'bot'), true)
+    // dai al bot / tolto al bot
+    assert.equal(annullaRinfrescaUpdatedAt({ assignedToId: 'g105', status: 'NEW' }, { assignedToId: 'bot', status: 'NEW' }, 'bot'), true)
+    assert.equal(annullaRinfrescaUpdatedAt({ assignedToId: 'bot', status: 'NEW' }, { assignedToId: 'g105', status: 'NEW' }, 'bot'), true)
 })

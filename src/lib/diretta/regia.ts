@@ -199,6 +199,20 @@ export function ripristino(prima: Fotografia, dopo: Fotografia): Fotografia {
     return out
 }
 
+/**
+ * L'annulla deve rinfrescare updatedAt? Solo se il lead entra o esce dal bot
+ * (il feed del bot legge updatedAt) o se lo stato cambia davvero (lead
+ * riaperto, appuntamento tolto). `status` sta sempre nel "dopo" come guardia:
+ * contarlo come cambio rinfrescava updatedAt anche su sposta/accantona/in cima,
+ * che lo lasciano intatto, e il lead risultava "lavorato da meno di 30 minuti".
+ */
+export function annullaRinfrescaUpdatedAt(prima: Fotografia, dopo: Fotografia, botId: string | null): boolean {
+    const primaA = prima.assignedToId ?? null, dopoA = dopo.assignedToId ?? null
+    const daBot = !!botId && dopoA === botId && primaA !== botId
+    const alBot = !!botId && primaA === botId && dopoA !== botId
+    return daBot || alBot || ('status' in dopo && !stesso(prima.status, dopo.status))
+}
+
 /** Tetto giornaliero dei freschi: intero fra 0 e 1000, oppure vuoto (nessun tetto). Come /gestione. */
 export function tettoValido(cap: number | null): boolean {
     return cap === null || (Number.isInteger(cap) && cap >= 0 && cap <= 1000)

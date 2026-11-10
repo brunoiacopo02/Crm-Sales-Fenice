@@ -26,7 +26,7 @@ import { nonToltoAlBotSql } from '@/lib/toltiAlBot'
 import { personName } from './config'
 import {
     APERTI, CAMPI_APPUNTAMENTO, CAMPI_DATA, CAMPI_GDO, CAMPI_LEAD, MASSIMO_AL_BOT, MASSIMO_PER_OPERAZIONE,
-    annullabile, fotografa, motivoEsclusione, ripartisci, ripristino, tettoValido,
+    annullabile, annullaRinfrescaUpdatedAt, fotografa, motivoEsclusione, ripartisci, ripristino, tettoValido,
     type FiltriLead, type Fotografia, type LeadControllo, type Valore,
 } from './regia'
 
@@ -884,9 +884,8 @@ export async function annullaOperazione(operazioneId: string, adminId: string, p
             const set: Record<string, unknown> = {}
             for (const [k, x] of Object.entries(resto)) set[k] = comeData(k, x)
             const daBot = !!bot && v.dopo.assignedToId === bot.id && v.prima.assignedToId !== bot.id
-            const alBot = !!bot && v.prima.assignedToId === bot.id && v.dopo.assignedToId !== bot.id
             // Il feed del bot (cursore su updatedAt) deve vedere i lead che entrano o escono dal bot.
-            if (daBot || alBot || 'status' in resto) set.updatedAt = t
+            if (annullaRinfrescaUpdatedAt(v.prima, v.dopo, bot?.id ?? null)) set.updatedAt = t
             await tx.update(leads).set({ ...set, version: sql`${leads.version} + 1` }).where(eq(leads.id, v.id))
             if ('scortaStato' in indietro || 'scortaDal' in indietro) {
                 await scriviScorta(tx, v.id, (scortaStato as string | null) ?? null, scortaDal ? new Date(scortaDal as string) : null)
