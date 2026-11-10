@@ -23,6 +23,7 @@ test('rifiutoDalCorpo: preso, doppione o corpo illeggibile → nessun rifiuto', 
 test('rifiutoDaRidare: solo i motivi in cui il bot non ha creato niente', () => {
     assert.equal(rifiutoDaRidare('telefono_non_valido'), true)
     assert.equal(rifiutoDaRidare('arruolamento_fallito'), true)
+    assert.equal(rifiutoDaRidare('chat_con_appuntamento'), true)
     assert.equal(rifiutoDaRidare('apertura_non_partita'), false)
     assert.equal(rifiutoDaRidare('sconosciuto'), false)
 })
@@ -45,4 +46,18 @@ test('numeroNonChiamabile: solo i numeri che non si chiamano nemmeno a voce', ()
 test('il rifiuto del bot va al giro dei GDO, mai parcheggiato', () => {
     assert.equal(instradamentoRidato('rifiutato_dal_bot', null), 'giro_gdo')
     assert.match(notaRifiuto('telefono_non_valido'), /Chiamare a voce/)
+})
+
+// Contratto v1.16 (PO 10/11/2026): chat del numero con l'APPUNTAMENTO di un altro lead.
+test('chat_con_appuntamento: rifiuto letto con la data, nota chiara, al giro dei GDO', () => {
+    const r = rifiutoDalCorpo('{"ok":true,"accettato":false,"motivo":"chat_con_appuntamento","conversationId":11221,"leadIdAppuntamento":"3d6c3213","appuntamento":"2026-09-12T14:00:00+00:00"}')
+    assert.deepEqual(r, { motivo: 'chat_con_appuntamento', appuntamento: '2026-09-12T14:00:00+00:00', leadIdAppuntamento: '3d6c3213' })
+    assert.equal(rifiutoDaRidare(r!.motivo), true)
+    const n = notaRifiuto(r!.motivo, { appuntamento: r!.appuntamento })
+    assert.match(n, /^Doppione: questo numero ha già un appuntamento fissato su un altro lead/)
+    assert.match(n, /12 settembre/)
+    assert.match(n, /16:00/)
+    assert.match(n, /chiamare a voce/i)
+    assert.match(notaRifiuto('chat_con_appuntamento'), /altro lead\. La richiesta nuova/)
+    assert.equal(instradamentoRidato('rifiutato_dal_bot', n, null, 'BLACK FRIDAY'), 'giro_gdo')
 })

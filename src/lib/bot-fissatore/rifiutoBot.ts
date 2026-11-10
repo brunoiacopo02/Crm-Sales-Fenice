@@ -14,18 +14,31 @@
  * Parte pura qui (testabile senza DB); la scrittura in `gestisciRifiutoBot`.
  */
 
-/** I motivi per cui il bot non ha creato niente e il lead resterebbe fermo. */
-const MOTIVI_DA_RIDARE = new Set(['telefono_non_valido', 'arruolamento_fallito'])
+/**
+ * I motivi per cui il bot non ha preso il lead e il lead resterebbe fermo.
+ * `chat_con_appuntamento` (contratto v1.16, PO 10/11/2026): il numero ha già una chat
+ * con un APPUNTAMENTO del bot su un ALTRO lead. Il bot non può riaprirla per il lead
+ * nuovo (APPUNTAMENTO terminale) e prima lo attaccava lì: il lead nuovo restava NEW sul
+ * bot per sempre (Sara 1e6c1430, Massimiliano 62089433, tania 0fce48cb, 09-10/11).
+ */
+export const MOTIVO_CHAT_CON_APPUNTAMENTO = 'chat_con_appuntamento'
+const MOTIVI_DA_RIDARE = new Set(['telefono_non_valido', 'arruolamento_fallito', MOTIVO_CHAT_CON_APPUNTAMENTO])
 
-export type CorpoIntake = { accettato?: unknown; motivo?: unknown; duplicato?: unknown }
+export type CorpoIntake = { accettato?: unknown; motivo?: unknown; duplicato?: unknown; appuntamento?: unknown; leadIdAppuntamento?: unknown }
+
+export type RifiutoBot = { motivo: string; appuntamento?: string; leadIdAppuntamento?: string }
 
 /** Il corpo di una risposta 2xx dell'intake dice che il lead NON è stato preso? */
-export function rifiutoDalCorpo(bodyText: string | null): { motivo: string } | null {
+export function rifiutoDalCorpo(bodyText: string | null): RifiutoBot | null {
     if (!bodyText) return null
     let c: CorpoIntake
     try { c = JSON.parse(bodyText) as CorpoIntake } catch { return null }
     if (!c || c.accettato !== false || c.duplicato === true) return null
-    return { motivo: typeof c.motivo === 'string' ? c.motivo : 'sconosciuto' }
+    return {
+        motivo: typeof c.motivo === 'string' ? c.motivo : 'sconosciuto',
+        ...(typeof c.appuntamento === 'string' && c.appuntamento ? { appuntamento: c.appuntamento } : {}),
+        ...(typeof c.leadIdAppuntamento === 'string' && c.leadIdAppuntamento ? { leadIdAppuntamento: c.leadIdAppuntamento } : {}),
+    }
 }
 
 /**
@@ -53,7 +66,14 @@ export function numeroNonChiamabile(phone: string | null | undefined): boolean {
 }
 
 /** Nota che finisce nel ridato al GDO e nella timeline del lead. */
-export function notaRifiuto(motivo: string): string {
+export function notaRifiuto(motivo: string, dettagli: { appuntamento?: string } = {}): string {
+    if (motivo === MOTIVO_CHAT_CON_APPUNTAMENTO) {
+        const ms = dettagli.appuntamento ? Date.parse(dettagli.appuntamento) : NaN
+        const quando = Number.isNaN(ms) ? '' : ` (videocall del ${new Date(ms).toLocaleString('it-IT', {
+            timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+        })})`
+        return `Doppione: questo numero ha già un appuntamento fissato su un altro lead${quando}. La richiesta nuova non l'ha lavorata nessuno: chiamare a voce.`
+    }
     return motivo === 'telefono_non_valido'
         ? 'Il bot non ha preso il lead: numero non raggiungibile su WhatsApp (fisso o scritto male). Chiamare a voce.'
         : `Il bot non ha preso il lead (${motivo}). Chiamare a voce.`

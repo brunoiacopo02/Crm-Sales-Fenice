@@ -1,7 +1,13 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.15 — 2026-11-10. Cosa cambia rispetto alla 1.14: campo opzionale
+> **Versione:** 1.16 — 2026-11-10. Cosa cambia rispetto alla 1.15: nuovo `motivo` di
+> `accettato:false` nella risposta dell'intake, **`chat_con_appuntamento`**: il numero ha
+> già una chat con un APPUNTAMENTO del bot sotto un **altro** `leadId`. Il bot non prende il
+> lead nuovo (non tocca la chat) e il CRM lo dà subito ai GDO con la nota del motivo.
+> Vedi [Risposta attesa](#risposta-attesa).
+>
+> **Versione precedente:** 1.15 — 2026-11-10. Cosa cambiava rispetto alla 1.14: campo opzionale
 > **`professione`** nel `BotIntakePayload` (Direzione 1). Lo porta solo il lead AC della
 > campagna brochure ("Campagna di Ret - pdf"), che dal 10/11 entra col funnel
 > `PROFESSIONI`: è lo slug del corso letto dall'`utm_content` dell'inserzione
@@ -414,6 +420,22 @@ Il CRM legge dal corpo di risposta solo `duplicato: true` (il fornitore riconosc
 lead come già entrato — risposta a un nostro ritento, non un lead nuovo né uno scarto)
 e si aspetta comunque HTTP `2xx`. In caso di errore lato bot il push viene considerato
 completato (no retry automatico).
+
+> **`accettato:false` (dal 29/10/2026) e `chat_con_appuntamento` (nuovo in v1.16).** Il
+> CRM legge anche `accettato:false` + `motivo` (senza `duplicato:true`): con
+> `telefono_non_valido`, `arruolamento_fallito` e `chat_con_appuntamento` il lead lascia
+> subito il bot e va al giro dei ridati (`gestisciRifiutoBot`, evento `REASSIGNED_FROM_BOT`
+> reason `rifiutato_dal_bot`); `apertura_non_partita` resta al bot, che riprova da solo.
+> `chat_con_appuntamento` (PO 10/11/2026, bot `fenice-enroll.ts`
+> `restituisciPerChatConAppuntamento`): la chat del numero ha `bot_outcome = APPUNTAMENTO`
+> sotto un `leadId` diverso da quello pushato. APPUNTAMENTO è terminale, quindi la chat non
+> si riapre per il lead nuovo: prima il lead nuovo ci restava attaccato e fermo NEW sul bot
+> per sempre (Sara 1e6c1430, Massimiliano 62089433, tania 0fce48cb, Enrico 388a0d18).
+> Il corpo porta anche `leadIdAppuntamento` e, se nota, `appuntamento` (ISO, la data della
+> call del lead vecchio): il CRM la mette nella nota del ridato («Doppione: questo numero
+> ha già un appuntamento fissato su un altro lead (videocall del …)»). La chat del bot
+> resta com'era: niente esito, `crm_lead_id`, funnel o apertura. Il ritento dello stesso
+> push risponde allo stesso modo e il CRM non fa nulla (il lead non è più del bot).
 
 > **Campo `apertura` (nuovo in v1.7, informativo).** Il bot può rispondere anche con
 > `apertura: "saltata_chat_in_corso"` quando il lead che gli abbiamo appena pushato ha

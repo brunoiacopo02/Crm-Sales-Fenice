@@ -268,7 +268,7 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResu
                 if (rifiuto) {
                     let gestione: EsitoRifiuto | 'errore';
                     try {
-                        gestione = await gestisciRifiutoBot(payload.leadId, rifiuto.motivo);
+                        gestione = await gestisciRifiutoBot(payload.leadId, rifiuto.motivo, { appuntamento: rifiuto.appuntamento });
                     } catch (e) {
                         console.error(`[bot-fissatore] gestione rifiuto fallita for lead ${payload.leadId}`, e);
                         gestione = 'errore';

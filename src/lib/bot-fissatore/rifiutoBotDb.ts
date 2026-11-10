@@ -17,7 +17,7 @@ export type EsitoRifiuto =
  * riscaldamento su un lead del GDO, o un lead già spostato da qualcun altro, resta
  * dov'è. Best-effort: un errore qui non deve far fallire il push.
  */
-export async function gestisciRifiutoBot(leadId: string, motivo: string): Promise<EsitoRifiuto> {
+export async function gestisciRifiutoBot(leadId: string, motivo: string, dettagli: { appuntamento?: string } = {}): Promise<EsitoRifiuto> {
     if (!rifiutoDaRidare(motivo)) return 'lasciato';
     const [l] = await db.select({
         status: leads.status, phone: leads.phone, assignedToId: leads.assignedToId, companyId: leads.companyId,
@@ -43,7 +43,7 @@ export async function gestisciRifiutoBot(leadId: string, motivo: string): Promis
         return 'chiuso_numero_non_valido';
     }
 
-    const r = await reassignBotLeadToHumanPool(leadId, 'rifiutato_dal_bot', botUserId, notaRifiuto(motivo));
+    const r = await reassignBotLeadToHumanPool(leadId, 'rifiutato_dal_bot', botUserId, notaRifiuto(motivo, dettagli));
     if (r.assignedToId) return 'ridato_ai_gdo';
     return 'note' in r && r.note === 'no_eligible_gdo' ? 'nessun_gdo' : 'lasciato';
 }
