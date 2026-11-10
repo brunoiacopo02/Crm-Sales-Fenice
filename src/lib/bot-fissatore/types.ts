@@ -67,4 +67,10 @@ export interface BotIntakePayload {
      * fra quei numeri. Assente = lead ordinario.
      */
     codaMarketing?: boolean;
+    /**
+     * Corso del funnel PROFESSIONI quando il CRM lo conosce (PO 10/11/2026): i lead
+     * AC della campagna brochure lo portano nell'utm_content ("Video 1 smm").
+     * Slug del bot (`social_media_manager`, ...). Assente = Mario lo chiede.
+     */
+    professione?: string;
 }

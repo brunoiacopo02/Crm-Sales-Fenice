@@ -63,6 +63,7 @@ import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 // (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
 // Lead delle inserzioni Black Friday (PO 07/11/2026): funnel BLACK FRIDAY e solo al bot.
+import { isLeadBrochureAc, BROCHURE_FUNNEL, professioneDaUtmContent } from "@/lib/acIntake/brochure";
 import { isLeadBlackFridayAc, BLACK_FRIDAY_FUNNEL, BLACK_FRIDAY_LIST_NAME_NORMALIZED, segniBlackFridayDaCampi, decidiConversioneBf } from "@/lib/acIntake/blackFriday";
 // Pipeline autonoma del venditore: dirotta i primi N lead freschi. Tocca SOLO
 // l'intake normale qui sotto, mai il ramo del lancio (handleLancioIntake).
@@ -932,9 +933,16 @@ export async function POST(req: NextRequest) {
             const updBlackFriday = existing.funnel === DEFAULT_FUNNEL && isLeadBlackFridayAc({
                 provenienza, ...segniBlackFridayDaCampi(fieldValues),
             });
+            // Brochure (PO 10/11/2026): la campagna del PDF vince sulla Provenienza
+            // (TELEGRAM), il Black Friday vince su tutto.
+            const updBrochure = existing.funnel === DEFAULT_FUNNEL && !updBlackFriday
+                && isLeadBrochureAc({ utmSource, utmMedium, utmCampaign, utmContent, utmTerm });
             if (updBlackFriday) {
                 updatePayload.funnel = BLACK_FRIDAY_FUNNEL;
                 changes.push(`funnel → ${BLACK_FRIDAY_FUNNEL}`);
+            } else if (updBrochure) {
+                updatePayload.funnel = BROCHURE_FUNNEL;
+                changes.push(`funnel → ${BROCHURE_FUNNEL}`);
             } else if (provenienza && existing.funnel === DEFAULT_FUNNEL) {
                 updatePayload.funnel = provenienza.toUpperCase();
                 changes.push(`funnel → ${provenienza.toUpperCase()}`);
@@ -1068,7 +1076,13 @@ export async function POST(req: NextRequest) {
         // Black Friday anche su chi e' gia' cliente o ha un appuntamento futuro (PO 07/11/2026:
         // "se mandano il lead li' sono da contattare"): nessuna eccezione, entra come gli altri.
 
-        const funnel = isBlackFriday ? BLACK_FRIDAY_FUNNEL : provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
+        // Brochure (PO 10/11/2026): la campagna del PDF ("Campagna di Ret - pdf") entra
+        // col funnel PROFESSIONI anche se AC scrive Provenienza TELEGRAM, cosi' il bot le
+        // manda l'apertura della scheda e non quella del Telegram. Il Black Friday vince.
+        // Instradamento e tetto del bot restano quelli di sempre (nessun fuori tetto).
+        const isBrochure = !isBlackFriday && isLeadBrochureAc({ utmSource, utmMedium, utmCampaign, utmContent, utmTerm });
+        const professioneBrochure = isBrochure ? professioneDaUtmContent(utmContent) : null;
+        const funnel = isBlackFriday ? BLACK_FRIDAY_FUNNEL : isBrochure ? BROCHURE_FUNNEL : provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
         const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Lead senza nome';
         const newLeadId = crypto.randomUUID();
         const now = new Date();
@@ -1856,6 +1870,7 @@ export async function POST(req: NextRequest) {
                 funnel,
                 companyId: FENICE_COMPANY,
                 numeroBot,
+                ...(professioneBrochure ? { professione: professioneBrochure } : {}),
             }));
         }
 
@@ -1872,6 +1887,7 @@ export async function POST(req: NextRequest) {
                 phoneRaw: phoneSuspicious ? rawPhone : undefined,
                 ...(isBlackFriday ? { blackFriday: true, blackFridayVia: bfLista ? 'lista' : 'utm' } : {}),
                 ...(bfRipresa ? { ripresaDaUpdate: true } : {}),
+                ...(isBrochure ? { brochure: true, ...(professioneBrochure ? { professione: professioneBrochure } : {}) } : {}),
             },
             companyId: FENICE_COMPANY,
         });
