@@ -4,6 +4,7 @@ import { useState } from "react";
 import { getMarketingStats, saveMarketingBudget, getMarketingStatsByGdo, getInboundSpontaneiStats } from "@/app/actions/marketingActions";
 import { Loader2, TrendingUp, Save, Filter, Users, Send } from "lucide-react";
 import { numeroIt } from "@/lib/diretta/formato";
+import { etichettaFunnel } from "@/lib/kpi/marketingFunnels";
 
 type Stat = {
     funnel: string;
@@ -244,7 +245,7 @@ export default function MarketingAnalyticsClient({
                             >
                                 <option value="">Seleziona funnel...</option>
                                 {uniqueFunnels.map(f => (
-                                    <option key={f} value={f}>{f}</option>
+                                    <option key={f} value={f}>{etichettaFunnel(f)}</option>
                                 ))}
                             </select>
                         </div>
@@ -306,7 +307,7 @@ export default function MarketingAnalyticsClient({
                                 <tbody className="divide-y divide-ash-200">
                                     {stats.map((row) => (
                                         <tr key={row.funnel} className="hover:bg-ash-50 transition-colors">
-                                            <td className="px-4 py-3 font-medium text-ash-900">{row.funnel}</td>
+                                            <td className="px-4 py-3 font-medium text-ash-900">{etichettaFunnel(row.funnel)}</td>
                                             <td className="px-4 py-3 text-right font-medium">{row.leadAssegnati}</td>
                                             <td className="px-4 py-3 text-right text-ash-500">{row.ridatiDaChiamare}</td>
                                             <td className="px-4 py-3 text-right">{row.apps}</td>
@@ -364,7 +365,7 @@ export default function MarketingAnalyticsClient({
                                 return (
                                     <div key={funnelItem.funnel} className="bg-white rounded-xl border border-ash-200 shadow-sm overflow-hidden">
                                         <div className="bg-orange-50 border-b border-orange-100 px-6 py-4 flex items-center justify-between">
-                                            <h3 className="text-lg font-bold text-orange-900 uppercase tracking-wider">{funnelItem.funnel}</h3>
+                                            <h3 className="text-lg font-bold text-orange-900 uppercase tracking-wider">{etichettaFunnel(funnelItem.funnel)}</h3>
                                             <span className="text-sm font-medium text-brand-orange bg-orange-100 px-3 py-1 rounded-full">
                                                 {funnelItem.gdoStats.length} GDO attivi
                                             </span>

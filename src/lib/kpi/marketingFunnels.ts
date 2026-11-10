@@ -26,7 +26,21 @@ export const SERVICE_FUNNELS = ['TEST', 'BLT', ''] as const;
  * `test`): la chiave le fonde, come fa da sempre `funnel.toUpperCase()`.
  */
 export function funnelKey(funnel: string | null | undefined): string {
-    return (funnel ?? '').trim().toUpperCase();
+    const k = (funnel ?? '').trim().toUpperCase();
+    // Corso 10 ore TikTok (PO 10/11/2026): il funnel arriva come 'CORSO10ORE-TK',
+    // la landing si chiama 'corso-10-ore-tk'. Tutte le grafie finiscono in una
+    // riga sola, separata dal Corso 10 ore normale (mai accorpata).
+    if (CORSO_10_ORE_TK_GRAFIE.has(k.replace(/[\s_-]+/g, ''))) return CORSO_10_ORE_TK;
+    return k;
+}
+
+/** Il Corso 10 ore delle inserzioni TikTok: riga propria, mai dentro 'CORSO 10 ORE'. */
+export const CORSO_10_ORE_TK = 'CORSO10ORE-TK';
+const CORSO_10_ORE_TK_GRAFIE = new Set(['CORSO10ORETK', 'CORSO10HTK', 'CORSO10ORETIKTOK', 'CORSO10HTIKTOK']);
+
+/** Nome da leggere in pagina; la chiave resta quella del DB (budget, filtri). */
+export function etichettaFunnel(key: string): string {
+    return key === CORSO_10_ORE_TK ? 'CORSO 10 ORE TIKTOK' : key;
 }
 
 /** true se il funnel è di test/servizio e va escluso dalle statistiche. */
@@ -46,6 +60,9 @@ export const PINNED_FUNNELS = [
     'TELEGRAM',
     'JOB SIMULATOR',
     'CORSO 10 ORE',
+    // Corso 10 ore dalle inserzioni TikTok (PO 10/11/2026): accanto al corso
+    // normale, così si confrontano a colpo d'occhio.
+    'CORSO10ORE-TK',
     'ORG',
     'DATABASE',
     'TELEGRAM-TK',
