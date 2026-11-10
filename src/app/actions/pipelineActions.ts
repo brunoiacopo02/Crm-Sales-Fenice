@@ -6,7 +6,7 @@ import { leads, callLogs, pipelineSnapshots, users, leadEvents, botContactReques
 import { CONFERME_DISCARD_RESET } from "@/lib/confermeReset"
 import { contaNeiKpiSql } from "@/lib/intakeBatch"
 import { isRecoverableCategory } from "@/lib/bot-fissatore/contactRequests"
-import { oraArrivo, eVergineDelGiorno, ordinaPrimaChiamata, type EventoLead } from "@/lib/diretta/arrivo"
+import { oraArrivo, eVergineDelGiorno, eVergineMaiContattato, ordinaPrimaChiamata, type EventoLead } from "@/lib/diretta/arrivo"
 import { paroleDelLead } from "@/lib/diretta/vistaGdo"
 import { leadsPerGdo, noteDelBotPerLead } from "@/lib/diretta/noteBotDb"
 import { notaPerGdo } from "@/lib/diretta/noteBotPerGdo"
@@ -436,20 +436,21 @@ export async function getPipelineLeads() {
         assignedToId: string | null; assignedAt: Date | null; createdAt: Date; tiHaCercato: boolean
     }
     const withArrivo = <T extends PerArrivo>(arr: T[]) =>
-        arr.map(l => ({
-            ...l,
-            arrivedAt: oraArrivo({
-                eventi: eventiAssegnazione.get(l.id) ?? [],
-                proprietario: l.assignedToId,
-                assignedAt: l.assignedAt,
-                createdAt: l.createdAt,
-            }),
-            vergine: isGdo && eVergineDelGiorno({
+        arr.map(l => {
+            const perVergine = { ...l, ridatoDalBot: ridatiDalBot.has(l.id), passatoDalBot: passatiDalBot.has(l.id) }
+            return {
                 ...l,
-                ridatoDalBot: ridatiDalBot.has(l.id),
-                passatoDalBot: passatiDalBot.has(l.id),
-            }, inizioOggi),
-        }))
+                arrivedAt: oraArrivo({
+                    eventi: eventiAssegnazione.get(l.id) ?? [],
+                    proprietario: l.assignedToId,
+                    assignedAt: l.assignedAt,
+                    createdAt: l.createdAt,
+                }),
+                vergine: isGdo && eVergineDelGiorno(perVergine, inizioOggi),
+                // Gruppo "vergini" della 1ª chiamata (PO 10/11/2026): senza limite di giorno.
+                maiContattato: isGdo && eventiLetti && eVergineMaiContattato(perVergine),
+            }
+        })
 
     /**
      * Chi ci ha cercato va chiamato per primo, e subito dopo chi aveva già detto sì:
@@ -564,8 +565,9 @@ export async function getPipelineLeads() {
     if (isGdo && ctx.companyId === 'fenice') after(() => assegnaBfSenzaGdoAlPiuOgniMinuto(now))
 
     return {
-        // 1ª chiamata (PO 25/10/2026): vergini del giorno in cima appena arrivano,
-        // poi le priorità di prima, poi l'ora di arrivo più recente, `id` come spareggio.
+        // 1ª chiamata (PO 10/11/2026): BF, poi vergini (freschi mai contattati), poi chat
+        // interrotte e "Ti ha cercato", poi il resto; dentro il gruppo le priorità di
+        // prima, l'ora di arrivo più recente, `id` come spareggio (arrivo.ts).
         // Con la scorta accesa solo i lead visibili (PO 29/10/2026).
         firstCall: ordinaPrimaChiamata(withArrivo(withDupFlag(primaVisibile)), prioritaPrima),
         secondCall: bfOnTop(lancioOnTop(withArrivo(withDupFlag(secondCall)))),

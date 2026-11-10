@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    destinatarioAssegnazione, oraArrivo, eVergineDelGiorno, ordinaPrimaChiamata, tempoDaArrivo,
+    destinatarioAssegnazione, oraArrivo, eVergineDelGiorno, eVergineMaiContattato, ordinaPrimaChiamata, tempoDaArrivo,
+    tipoPrimaChiamata,
     type EventoLead,
 } from './arrivo'
 
@@ -153,4 +154,71 @@ test('tempo da arrivo: adesso, minuti, ore, giorni', () => {
 
 test('tempo da arrivo: un orologio del browser indietro non produce tempi negativi', () => {
     assert.equal(tempoDaArrivo(ora + 90_000, ora), 'adesso')
+})
+
+// --------------------------------------------------------- gruppi della 1ª chiamata (PO 10/11/2026)
+
+type RigaTipo = Riga & { funnel?: string | null; maiContattato?: boolean; chiamaPerPrimo?: boolean; tiHaCercato?: boolean }
+const rigaT = (id: string, arrivo: string, p: Partial<RigaTipo> = {}): RigaTipo =>
+    ({ id, arrivedAt: new Date(arrivo), vergine: false, priorita: 0, ...p })
+
+test('tipo: BF, vergine, chat interrotta, ti ha cercato, altro', () => {
+    assert.equal(tipoPrimaChiamata({ vergine: false, funnel: ' black friday', chiamaPerPrimo: true }), 'black_friday')
+    assert.equal(tipoPrimaChiamata({ vergine: false, maiContattato: true }), 'vergine')
+    assert.equal(tipoPrimaChiamata({ vergine: true }), 'vergine', 'senza maiContattato vale il vergine del giorno')
+    assert.equal(tipoPrimaChiamata({ vergine: false, chiamaPerPrimo: true, tiHaCercato: true }), 'chat_interrotta')
+    assert.equal(tipoPrimaChiamata({ vergine: false, tiHaCercato: true }), 'ti_ha_cercato')
+    assert.equal(tipoPrimaChiamata({ vergine: false }), 'altro')
+})
+
+test('ordine PO 10/11: BF, poi vergini, poi chat interrotte, poi il resto, qualunque priorità', () => {
+    const lista = [
+        rigaT('altro', '2026-11-10T13:00:00Z', { priorita: 9999 }),
+        rigaT('stella', '2026-11-10T12:59:00Z', { chiamaPerPrimo: true, priorita: 5000 }),
+        rigaT('vergine-ieri', '2026-11-09T19:00:00Z', { maiContattato: true }),
+        rigaT('bf', '2026-11-01T09:00:00Z', { funnel: 'BLACK FRIDAY' }),
+    ]
+    assert.deepEqual(ordinaPrimaChiamata(lista, (l) => l.priorita).map((l) => l.id), ['bf', 'vergine-ieri', 'stella', 'altro'])
+})
+
+test('ordine PO 10/11: la stella non porta più una chat interrotta sopra un vergine di ieri (scorta spenta)', () => {
+    // Prima la stella (16 punti di priorità) batteva il vergine non del giorno.
+    const lista = [
+        rigaT('stella', '2026-11-10T12:00:00Z', { chiamaPerPrimo: true, priorita: 16 }),
+        rigaT('vergine', '2026-11-08T20:00:00Z', { maiContattato: true, priorita: 0 }),
+    ]
+    assert.deepEqual(ordinaPrimaChiamata(lista, (l) => l.priorita).map((l) => l.id), ['vergine', 'stella'])
+})
+
+test('ordine PO 10/11: "Ti ha cercato" sta con le chat interrotte, sotto i vergini e sopra il resto', () => {
+    const lista = [
+        rigaT('altro', '2026-11-10T13:00:00Z', { priorita: 100 }),
+        rigaT('cercato', '2026-11-01T09:00:00Z', { tiHaCercato: true }),
+        rigaT('vergine', '2026-11-05T09:00:00Z', { maiContattato: true }),
+    ]
+    assert.deepEqual(ordinaPrimaChiamata(lista, (l) => l.priorita).map((l) => l.id), ['vergine', 'cercato', 'altro'])
+})
+
+test('ordine PO 10/11: dentro i vergini quelli del giorno per primi, poi la priorità e l arrivo', () => {
+    const lista = [
+        rigaT('ieri', '2026-11-09T22:00:00Z', { maiContattato: true, priorita: 50 }),
+        rigaT('oggi', '2026-11-10T09:00:00Z', { maiContattato: true, vergine: true }),
+    ]
+    assert.deepEqual(ordinaPrimaChiamata(lista, (l) => l.priorita).map((l) => l.id), ['oggi', 'ieri'])
+})
+
+test('ordine PO 10/11: dentro i BF restano vergini e stelle nell ordine di prima', () => {
+    const lista = [
+        rigaT('bf-ridato', '2026-11-10T13:00:00Z', { funnel: 'BLACK FRIDAY' }),
+        rigaT('bf-vergine', '2026-11-10T08:00:00Z', { funnel: 'BLACK FRIDAY', maiContattato: true, vergine: true }),
+    ]
+    assert.deepEqual(ordinaPrimaChiamata(lista, (l) => l.priorita).map((l) => l.id), ['bf-vergine', 'bf-ridato'])
+})
+
+test('vergine mai contattato: come quello del giorno ma senza la data', () => {
+    const ieri = { ...vergine, createdAt: new Date('2026-10-25T19:58:00+01:00') }
+    assert.equal(eVergineMaiContattato(ieri), true)
+    assert.equal(eVergineDelGiorno(ieri, inizioOggi), false)
+    assert.equal(eVergineMaiContattato({ ...ieri, ridatoDalBot: true }), false)
+    assert.equal(eVergineMaiContattato({ ...ieri, tiHaCercato: true }), false)
 })

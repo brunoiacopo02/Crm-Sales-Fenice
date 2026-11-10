@@ -7,6 +7,7 @@ import {
     sempreVisibile, stimaGiorni, visibileInPrimaChiamata,
     type LeadScorta,
 } from './scorta'
+import { ordinaPrimaChiamata, tipoPrimaChiamata } from './arrivo'
 
 const ORA = new Date('2026-10-30T15:00:00+01:00')
 const oreFa = (h: number) => new Date(ORA.getTime() - h * 3600_000)
@@ -289,4 +290,36 @@ test('Black Friday mai in scorta (PO 09/11/2026): i BF scritti in scorta vanno r
     const pa = primaAssegnazione([bfScorta, ...Array.from({ length: 5 }, () => lead())], ORA, 2)
     assert.ok(pa.visibili.includes(bfScorta.id))
     assert.ok(!pa.scorta.includes(bfScorta.id))
+})
+
+test('pipeline + scorta (PO 10/11): BF, vergini, chat interrotte, resto, con le priorità vere della board', () => {
+    // Stessa priorità di getPipelineLeads con la scorta accesa: ondata x PESO_ONDATA + lancioRank x 8 + priorità scorta.
+    const bf = lead({ funnel: 'BLACK FRIDAY', ultimoMotivo: 'mai_risposto', ultimoInstradato: 'mai_consegnato', passatoDalBot: true, scortaStato: 'visibile' })
+    const ver = vergine({ createdAt: oreFa(30), arrivedAt: oreFa(30), scortaStato: 'visibile' })
+    const st = stella({ arrivedAt: oreFa(1), scortaStato: 'visibile' })
+    const resto = lettoJs({ arrivedAt: oreFa(0.5), scortaStato: 'visibile' })
+    const maiCons = lead({ ultimoMotivo: 'mai_risposto', ultimoInstradato: 'mai_consegnato', passatoDalBot: true, arrivedAt: oreFa(0.2), scortaStato: 'visibile' })
+    const lista = [maiCons, resto, st, ver, bf]
+    const ondata = rangoOndata(lista, ORA)
+    const righe = lista.map(l => ({
+        ...l,
+        vergine: false,
+        maiContattato: eVergine(l, ORA),
+        chiamaPerPrimo: conStella(l),
+        tiHaCercato: l.cercato,
+        prio: (ondata.get(l.id) ?? 0) * PESO_ONDATA + (conStella(l) ? 16 : 0) * 8 + prioritaScorta(l, ORA),
+    }))
+    const ordine = ordinaPrimaChiamata(righe, r => r.prio)
+    assert.deepEqual(ordine.map(r => tipoPrimaChiamata(r)), ['black_friday', 'vergine', 'chat_interrotta', 'altro', 'altro'])
+    assert.deepEqual(ordine.map(r => r.id), [bf.id, ver.id, st.id, resto.id, maiCons.id])
+})
+
+test('scorta (PO 10/11): BF e vergini non finiscono mai in scorta, le chat interrotte escono per prime', () => {
+    assert.equal(sempreVisibile(lead({ funnel: 'BLACK FRIDAY' }), ORA), true)
+    assert.equal(sempreVisibile(vergine(), ORA), true)
+    const st = stella({ scortaStato: 'scorta', arrivedAt: oreFa(90) })
+    const mai = lead({ scortaStato: 'scorta', arrivedAt: oreFa(1) })
+    const ridato = lead({ ultimoMotivo: 'mai_risposto', passatoDalBot: true, scortaStato: 'scorta', arrivedAt: oreFa(1) })
+    const senzaWa = lead({ ultimoMotivo: 'mai_risposto', ultimoInstradato: 'mai_consegnato', passatoDalBot: true, scortaStato: 'scorta', arrivedAt: oreFa(0.5) })
+    assert.deepEqual(ordinaScorta([senzaWa, ridato, mai, st]).map(l => l.id), [st.id, mai.id, ridato.id, senzaWa.id])
 })

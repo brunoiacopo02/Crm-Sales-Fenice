@@ -63,7 +63,11 @@ export function oraArrivo(args: {
  * da callCount 0 e status NEW come un lead nuovo: si distingue solo dagli
  * eventi, per questo arrivano già calcolati in `ridatoDalBot`/`passatoDalBot`.
  */
-export function eVergineDelGiorno(l: {
+export function eVergineDelGiorno(l: PerVergine, inizioGiorno: Date): boolean {
+    return eVergineMaiContattato(l) && ms(l.createdAt) >= inizioGiorno.getTime()
+}
+
+type PerVergine = {
     status: string
     callCount: number
     source: string | null
@@ -72,7 +76,16 @@ export function eVergineDelGiorno(l: {
     ridatoDalBot: boolean
     passatoDalBot: boolean
     tiHaCercato: boolean
-}, inizioGiorno: Date): boolean {
+}
+
+/**
+ * Vergine senza limite di giorno: fresco di ActiveCampaign mai contattato da
+ * nessuno, né GDO né bot. Stessa regola di `eVergine` in scorta.ts (PO
+ * 07/11/2026: "sempre in cima"): un vergine arrivato ieri sera resta un vergine.
+ * Decide il gruppo della 1ª chiamata; il bollino "vergine" della card resta
+ * quello del giorno (eVergineDelGiorno).
+ */
+export function eVergineMaiContattato(l: PerVergine): boolean {
     return l.status === 'NEW'
         && l.callCount === 0
         && l.source === 'activecampaign'
@@ -80,23 +93,56 @@ export function eVergineDelGiorno(l: {
         && !l.ridatoDalBot
         && !l.passatoDalBot
         && !l.tiHaCercato
-        && ms(l.createdAt) >= inizioGiorno.getTime()
 }
 
 /**
- * Ordine della 1ª chiamata: prima i vergini del giorno, poi la priorità che la
- * board dava già (stella, "ti ha cercato", ...), poi l'ora di arrivo più
- * recente, e `id` come spareggio così l'ordine resta fermo fra un caricamento
- * e l'altro (fix del 14/05, lead "spariti").
+ * Tipo di un lead in 1ª chiamata (PO 10/11/2026), nell'ordine in cui stanno:
+ * 1. Black Friday; 2. vergini (freschi mai contattati); 3. chat interrotte
+ * (stella "Chiama per primo") e "Ti ha cercato"; 4. tutto il resto (ridati
+ * mai risposto, WhatsApp mai consegnato, letti, database...).
  */
-export function ordinaPrimaChiamata<T extends { id: string; arrivedAt: Date; vergine: boolean; funnel?: string | null }>(
+export type TipoPrimaChiamata = 'black_friday' | 'vergine' | 'chat_interrotta' | 'ti_ha_cercato' | 'altro'
+
+export interface PerTipo {
+    funnel?: string | null
+    /** Vergine del giorno (bollino della card). */
+    vergine: boolean
+    /** Vergine senza limite di giorno (eVergineMaiContattato). Assente = vale `vergine`. */
+    maiContattato?: boolean
+    /** Stella "Chiama per primo": ultima restituzione dal bot con chat interrotta. */
+    chiamaPerPrimo?: boolean
+    tiHaCercato?: boolean
+}
+
+export function tipoPrimaChiamata(l: PerTipo): TipoPrimaChiamata {
+    if ((l.funnel ?? '').trim().toUpperCase() === 'BLACK FRIDAY') return 'black_friday'
+    if (l.maiContattato ?? l.vergine) return 'vergine'
+    if (l.chiamaPerPrimo) return 'chat_interrotta'
+    if (l.tiHaCercato) return 'ti_ha_cercato'
+    return 'altro'
+}
+
+/** Più alto = più in alto. Chat interrotte e "Ti ha cercato" stanno nello stesso gruppo. */
+const RANGO_TIPO: Record<TipoPrimaChiamata, number> = {
+    black_friday: 3, vergine: 2, chat_interrotta: 1, ti_ha_cercato: 1, altro: 0,
+}
+
+/**
+ * Ordine della 1ª chiamata (PO 10/11/2026, SEMPRE, qualunque cosa arrivi):
+ * prima il gruppo (tipoPrimaChiamata: BF, vergini, chat interrotte, resto),
+ * dentro il gruppo i vergini del giorno, poi la priorità che la board dava
+ * già (ondate della scorta, lancio, ...), poi l'ora di arrivo più recente, e
+ * `id` come spareggio così l'ordine resta fermo fra un caricamento e l'altro
+ * (fix del 14/05, lead "spariti"). Nessuna priorità scavalca il gruppo: la
+ * stella di una chat interrotta non la porta più sopra un vergine.
+ */
+export function ordinaPrimaChiamata<T extends { id: string; arrivedAt: Date } & PerTipo>(
     lista: readonly T[],
     priorita: (l: T) => number,
 ): T[] {
-    // Black Friday sopra tutto, vergini compresi (PO 07/11/2026).
-    const bf = (l: T) => (l.funnel ?? '').trim().toUpperCase() === 'BLACK FRIDAY'
     return [...lista].sort((a, b) => {
-        if (bf(a) !== bf(b)) return bf(a) ? -1 : 1
+        const g = RANGO_TIPO[tipoPrimaChiamata(b)] - RANGO_TIPO[tipoPrimaChiamata(a)]
+        if (g !== 0) return g
         if (a.vergine !== b.vergine) return a.vergine ? -1 : 1
         const p = priorita(b) - priorita(a)
         if (p !== 0) return p
