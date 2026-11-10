@@ -1,7 +1,15 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.14 — 2026-11-07. Cosa cambia rispetto alla 1.13: **cursore composto** su
+> **Versione:** 1.15 — 2026-11-10. Cosa cambia rispetto alla 1.14: campo opzionale
+> **`professione`** nel `BotIntakePayload` (Direzione 1). Lo porta solo il lead AC della
+> campagna brochure ("Campagna di Ret - pdf"), che dal 10/11 entra col funnel
+> `PROFESSIONI`: è lo slug del corso letto dall'`utm_content` dell'inserzione
+> (`"Video 1  smm"` → `social_media_manager`). Assente = corso non noto, Mario lo chiede.
+> Solo aggiunta, nessun payload esistente cambia. Vedi
+> [Campo `professione`](#campo-professione-nuovo-in-v115).
+>
+> **Versione precedente:** 1.14 — 2026-11-07. Cosa cambiava rispetto alla 1.13: **cursore composto** su
 > `POST /api/bot/lead-status` (Direzione 5). Il bot manda `cursor` (ricevuto come
 > `nextCursor`) invece di `since`: ordine totale (updatedAt al microsecondo, leadId), così
 > un update in blocco con più righe della pagina nello stesso istante non ferma più il feed
@@ -264,6 +272,10 @@ interface BotIntakePayload {
     slug:     string;                        // 'webdev-2026-10' per il lancio di ottobre 2026
     ingresso: 'lista' | 'pulsante_webinar';  // come è entrato: lista AC 132, o pulsante WhatsApp la sera della live
   };
+
+  // v1.15 — SOLO sui lead AC della campagna brochure col corso noto (assente = Mario chiede il corso)
+  professione?: 'sviluppatore_web_ai' | 'video_editor' | 'project_manager'
+              | 'graphic_designer' | 'copywriter' | 'social_media_manager';
 }
 
 interface PreviousLeadRef {
@@ -278,6 +290,54 @@ interface PreviousLeadRef {
 > senza normalizzazione (esempi: `"3331234567"`, `"333 123 4567"`, `"+39 333 1234567"`).
 > **Il bot è responsabile della normalizzazione al formato E.164** (es. `+393331234567`)
 > prima di inviare messaggi WhatsApp o effettuare chiamate.
+
+### Campo `professione` (nuovo in v1.15)
+
+Dal 2026-11-10 (CRM `0c4463a`, bot `c109dc7`). Riguarda solo i lead che arrivano da
+ActiveCampaign con la campagna Meta della brochure gratuita.
+
+**Quando c'è.** Il webhook AC (`/api/webhooks/activecampaign`, ramo del lead **nuovo**)
+riconosce la campagna brochure da un utm qualsiasi (`utm_source`, `utm_medium`,
+`utm_campaign`, `utm_content`, `utm_term`) che contenga `brochure` o `pdf` — stessa regola
+della pagina `/marketing-analytics/brochure` (`isLeadBrochureAc`, `src/lib/acIntake/brochure.ts`).
+Il Black Friday vince sempre: un lead BF non è mai brochure. Il lead brochure:
+
+- entra col **funnel `PROFESSIONI`** anche se AC scrive Provenienza `TELEGRAM`
+  (prima del 10/11 il bot gli mandava l'apertura del Telegram e mai la scheda);
+- va **sempre al bot, fuori dal tetto giornaliero**, come i Black Friday (CRM `8203085`);
+- porta `professione` nel payload **solo se** l'`utm_content` nomina un corso.
+
+**Valori.** Uno dei sei slug del catalogo del bot (`lib/professioni.ts`), gli stessi di
+`conversations.professione`. Il CRM li ricava dall'`utm_content` con le stesse parole
+del bot, in quest'ordine (il primo che combacia vince):
+
+| Slug | Parole riconosciute nell'`utm_content` (case-insensitive) |
+|---|---|
+| `social_media_manager` | `social media manager`, `smm` (parola intera) |
+| `project_manager` | `project manager` |
+| `video_editor` | `video editor`, `video-editor`, `montaggio video` |
+| `graphic_designer` | `graphic designer`, `grafica`, `grafico` |
+| `copywriter` | `copywriter`, `copy-writer` |
+| `sviluppatore_web_ai` | `sviluppatore web`, `web developer`, `sviluppatore` |
+
+Esempi: `"Video 1  smm"` → `social_media_manager`; `"Video 2 generale"` → nessun corso,
+campo **assente** (mai `null`, mai stringa vuota).
+
+**Dove passa.** Solo nel push dell'intake del lead nuovo creato dal webhook AC
+(`pushLeadToBot` con `funnel: "PROFESSIONI"`). Il CRM **non** lo salva su una colonna del
+lead: resta nel `metadata` dell'evento di creazione (`brochure: true`, `professione`).
+Quindi **non** lo portano gli altri push (backfill, `/api/admin/bot-push-leads`,
+warm-up, coda marketing, ripush) né l'aggiornamento di un lead già esistente che diventa
+`PROFESSIONI`: su quelli il campo è assente e Mario chiede il corso.
+
+**Cosa fa il bot.** Accetta solo uno slug noto (`lib/bot-contract.ts`, `isSlugProfessione`):
+qualunque altro valore vale "campo assente", mai un errore. Con funnel `PROFESSIONI` apre
+col template neutro (come il Black Friday, non quello del Telegram o delle 10 ore), scrive
+il corso su `conversations.professione` e alla prima risposta del lead manda subito la scheda
+PDF di quel corso (`schedaSubito`, ingresso `inserzione`), senza aspettare la frase del link.
+Senza corso, Mario lo chiede e usa il tag.
+
+**Risposta.** Invariata: il CRM legge solo `duplicato`.
 
 ### Lead del lancio (nuovo in v1.6)
 
