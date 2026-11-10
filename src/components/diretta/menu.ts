@@ -101,6 +101,7 @@ const NOMI: Record<string, string> = {
     "/qualita-lead": "Qualità lead (sondaggi)",
     "/analisi-qualita": "Analisi funnel",
     "/marketing-analytics": "Marketing analytics",
+    "/marketing-analytics/brochure": "Lead della brochure",
     "/team": "Gestione account",
     // PO 09/11/2026: nel gruppo Sales Manager e in Lead e import, non più in Rinascita.
     "/admin/carico-conferme": "Carico Conferme",

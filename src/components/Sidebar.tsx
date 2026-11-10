@@ -227,6 +227,8 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
         if (session?.user?.email === "marketing@fenice.local" || session?.user?.name === "Marketing") {
             navItems = [
                 { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+                // PO 10/11/2026: i lead della brochure, accanto a "Scrivono da Telegram".
+                { name: "Lead della brochure", href: "/marketing-analytics/brochure", icon: FileText },
                 { name: "Qualità Lead", href: "/qualita-lead", icon: ClipboardList },
             ]
         } else {
@@ -302,6 +304,8 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                     label: "Marketing",
                     items: [
                         { name: "Marketing Analytics", href: "/marketing-analytics", icon: Database },
+                        // PO 10/11/2026: i lead della brochure, accanto a "Scrivono da Telegram".
+                        { name: "Lead della brochure", href: "/marketing-analytics/brochure", icon: FileText },
                     ],
                 },
                 {
