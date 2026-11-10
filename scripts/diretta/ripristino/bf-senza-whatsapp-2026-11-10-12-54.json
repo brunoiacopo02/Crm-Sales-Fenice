@@ -1,0 +1,142 @@
+{
+  "nota": "PO 10/11/2026: 6 BF con apertura 63024 dati subito ai GDO in turno. Ripristino: rimettere su ogni lead i campi di \"prima\" (assignedToId del bot, assignedAt, version) e cancellare gli eventi in \"eventi\"; sul bot riaprire le conversazioni (ai_status active, bot_outcome null, handed_off_reason null).",
+  "quando": "2026-11-10T12:54:20.096Z",
+  "piano": [
+    {
+      "conv": 32207,
+      "leadId": "a138bc35-eaac-431b-ab0e-88b42dfb1e5a",
+      "nome": "Mara Montalto Montalto",
+      "gdoId": "a2d174ce-916c-4d02-92f6-e5b7c6ef5adf",
+      "gdo": 115,
+      "bfPrima": 0
+    },
+    {
+      "conv": 32220,
+      "leadId": "34700036-eb37-40b8-a419-aa01fb1a62ee",
+      "nome": "Daniele",
+      "gdoId": "ef3988b2-d15e-4169-88a5-7516e6ddd146",
+      "gdo": 105,
+      "bfPrima": 1
+    },
+    {
+      "conv": 32239,
+      "leadId": "83f0a81b-8863-4324-a102-aa7a612a1309",
+      "nome": "ANNA MANGIONE",
+      "gdoId": "8b36ab29-ad9d-4965-aeed-e06d572b531f",
+      "gdo": 119,
+      "bfPrima": 1
+    },
+    {
+      "conv": 32242,
+      "leadId": "639c53e8-a702-4c6f-a870-fbaadd2abe21",
+      "nome": "Francesca",
+      "gdoId": "a3b7d9da-94b7-4c48-983f-ee42e949c4e5",
+      "gdo": 106,
+      "bfPrima": 3
+    },
+    {
+      "conv": 32259,
+      "leadId": "05652695-1718-440b-ad9c-e4dba3824764",
+      "nome": "Laura",
+      "gdoId": "11cea8c4-3985-4420-bdda-6e753e3fa55e",
+      "gdo": 110,
+      "bfPrima": 3
+    },
+    {
+      "conv": 32297,
+      "leadId": "53d8a9c6-4c44-4f4c-b236-96bc71d63ea2",
+      "nome": "Silvia Riccò",
+      "gdoId": "a2d174ce-916c-4d02-92f6-e5b7c6ef5adf",
+      "gdo": 115,
+      "bfPrima": 1
+    }
+  ],
+  "eventi": [
+    {
+      "leadId": "a138bc35-eaac-431b-ab0e-88b42dfb1e5a",
+      "eventId": "daaf02d1-fd81-4df8-92a5-d5b1920265f8"
+    },
+    {
+      "leadId": "34700036-eb37-40b8-a419-aa01fb1a62ee",
+      "eventId": "81caaeab-44b5-44d1-b6ba-d10de248bf26"
+    },
+    {
+      "leadId": "83f0a81b-8863-4324-a102-aa7a612a1309",
+      "eventId": "5147d824-e2ae-488f-8a3f-1d73623a4f6c"
+    },
+    {
+      "leadId": "639c53e8-a702-4c6f-a870-fbaadd2abe21",
+      "eventId": "a5e054a7-2447-4b37-bc8f-3254d61e7bef"
+    },
+    {
+      "leadId": "05652695-1718-440b-ad9c-e4dba3824764",
+      "eventId": "1d2be2ee-49e5-47f0-9b88-c8463324f514"
+    },
+    {
+      "leadId": "53d8a9c6-4c44-4f4c-b236-96bc71d63ea2",
+      "eventId": "12e0d0bb-2b0d-484b-8c7a-f4e5207989e9"
+    }
+  ],
+  "prima": [
+    {
+      "id": "05652695-1718-440b-ad9c-e4dba3824764",
+      "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538",
+      "assignedAt": "2026-11-10T08:52:39.803Z",
+      "status": "NEW",
+      "callCount": 0,
+      "version": 1,
+      "recallDate": null,
+      "updatedAt": "2026-11-10T08:52:39.803Z"
+    },
+    {
+      "id": "34700036-eb37-40b8-a419-aa01fb1a62ee",
+      "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538",
+      "assignedAt": "2026-11-10T07:36:47.981Z",
+      "status": "NEW",
+      "callCount": 0,
+      "version": 1,
+      "recallDate": null,
+      "updatedAt": "2026-11-10T07:36:47.981Z"
+    },
+    {
+      "id": "53d8a9c6-4c44-4f4c-b236-96bc71d63ea2",
+      "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538",
+      "assignedAt": "2026-11-10T11:28:53.153Z",
+      "status": "NEW",
+      "callCount": 0,
+      "version": 1,
+      "recallDate": null,
+      "updatedAt": "2026-11-10T11:28:53.153Z"
+    },
+    {
+      "id": "639c53e8-a702-4c6f-a870-fbaadd2abe21",
+      "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538",
+      "assignedAt": "2026-11-10T08:13:13.540Z",
+      "status": "NEW",
+      "callCount": 0,
+      "version": 1,
+      "recallDate": null,
+      "updatedAt": "2026-11-10T08:13:13.540Z"
+    },
+    {
+      "id": "83f0a81b-8863-4324-a102-aa7a612a1309",
+      "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538",
+      "assignedAt": "2026-11-10T08:11:59.263Z",
+      "status": "NEW",
+      "callCount": 0,
+      "version": 1,
+      "recallDate": null,
+      "updatedAt": "2026-11-10T08:11:59.263Z"
+    },
+    {
+      "id": "a138bc35-eaac-431b-ab0e-88b42dfb1e5a",
+      "assignedToId": "867dd21a-3236-46a8-b719-d0b97ff90538",
+      "assignedAt": "2026-11-10T07:08:52.110Z",
+      "status": "NEW",
+      "callCount": 0,
+      "version": 1,
+      "recallDate": null,
+      "updatedAt": "2026-11-10T07:08:52.110Z"
+    }
+  ]
+}
