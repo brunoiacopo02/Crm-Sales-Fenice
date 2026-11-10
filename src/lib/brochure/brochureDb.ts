@@ -15,7 +15,7 @@ import { leadEvents, leads, users } from '@/db/schema'
 import { leadVero } from '@/lib/prova/sql'
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import {
-    FUNNEL_PROFESSIONI, calcolaBrochure, inizioRisposte, ingressoBrochure, nomeProfessione, professioneDaFrase, utmDaBrochure,
+    FUNNEL_PROFESSIONI, UTM_BROCHURE_PG, calcolaBrochure, inizioRisposte, ingressoBrochure, nomeProfessione, professioneDaFrase, utmDaBrochure,
     type Brochure, type ChatBrochure, type LeadBrochure,
 } from './brochure'
 
@@ -103,7 +103,7 @@ export async function leggiChatBot(
 
 async function leggi(): Promise<Brochure> {
     const adesso = new Date()
-    const utmBrochure = sql`concat_ws(' ', ${leads.utmSource}, ${leads.utmMedium}, ${leads.utmCampaign}, ${leads.utmContent}, ${leads.utmTerm}) ~* '(brochure|(^|[^a-z])pdf([^a-z]|$))'`
+    const utmBrochure = sql`concat_ws(' ', ${leads.utmSource}, ${leads.utmMedium}, ${leads.utmCampaign}, ${leads.utmContent}, ${leads.utmTerm}) ~* ${UTM_BROCHURE_PG}`
 
     // Prima gli id di chi ha scritto la frase (indice su eventType), poi i lead:
     // con la sottoquery dentro l'OR Postgres scorreva tutta la tabella leads.
@@ -135,7 +135,10 @@ async function leggi(): Promise<Brochure> {
     for (const r of righe) {
         const scrittoIl = comeData(r.scrittoIl)
         const daCampagna = utmDaBrochure([r.utmSource, r.utmMedium, r.utmCampaign, r.utmContent, r.utmTerm])
-        const haScrittoFrase = scrittoIl !== null || (r.funnel ?? '').trim().toUpperCase() === FUNNEL_PROFESSIONI
+        // Dal 10/11/2026 (0c4463a) anche i lead AC della campagna entrano PROFESSIONI: il funnel
+        // vale come "ha scritto la frase" solo per chi non arriva dalla campagna, altrimenti
+        // finirebbero tutti fra "entrambi" e "solo campagna" resterebbe a zero.
+        const haScrittoFrase = scrittoIl !== null || (!daCampagna && (r.funnel ?? '').trim().toUpperCase() === FUNNEL_PROFESSIONI)
         const ingresso = ingressoBrochure({ createdAt: r.createdAt, daCampagna, scrittoIl })
         if (ingresso < INIZIO_BROCHURE) continue
         lista.push({
