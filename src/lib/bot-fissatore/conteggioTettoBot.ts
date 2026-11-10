@@ -1,5 +1,6 @@
 import { sql, type SQL, type Column } from 'drizzle-orm';
 import { BLACK_FRIDAY_FUNNEL } from '@/lib/acIntake/blackFriday';
+import { UTM_BROCHURE_PG } from '@/lib/brochure/brochure';
 
 /**
  * Quanti freschi ha avuto OGGI un account bot, ai fini del tetto giornaliero
@@ -16,6 +17,12 @@ import { BLACK_FRIDAY_FUNNEL } from '@/lib/acIntake/blackFriday';
  * Il `coalesce` tiene dentro i lead col funnel NULL; `upper(trim(..))` e' lo
  * stesso confronto di `decidiConversioneBf`.
  *
+ * Regola del PO (10/11/2026): stessa cosa per i lead della campagna brochure
+ * (la scheda del corso in PDF promessa nell'inserzione). Si riconoscono dagli
+ * utm della campagna pdf, la stessa regola di `isLeadBrochureAc` e della pagina
+ * brochure (`UTM_BROCHURE_PG`), NON dal funnel PROFESSIONI: chi scrive dal link
+ * wa.me della landing resta nel conteggio come prima.
+ *
  * `userId` e' la colonna dell'utente bot della query esterna (users.id);
  * `todayRome` la data 'YYYY-MM-DD' del giorno italiano.
  */
@@ -26,5 +33,6 @@ export function sqlFreschiBotOggiPerTetto(userId: Column | SQL, todayRome: strin
           AND l."companyId" = ${companyId}
           AND l."createdAt" >= (${todayRome} || ' 00:00')::timestamp AT TIME ZONE 'Europe/Rome'
           AND upper(trim(coalesce(l."funnel", ''))) <> ${BLACK_FRIDAY_FUNNEL}
+          AND concat_ws(' ', l."utmSource", l."utmMedium", l."utmCampaign", l."utmContent", l."utmTerm") !~* ${UTM_BROCHURE_PG}
     )`;
 }

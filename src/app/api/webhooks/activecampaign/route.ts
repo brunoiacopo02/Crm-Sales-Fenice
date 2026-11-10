@@ -1079,7 +1079,10 @@ export async function POST(req: NextRequest) {
         // Brochure (PO 10/11/2026): la campagna del PDF ("Campagna di Ret - pdf") entra
         // col funnel PROFESSIONI anche se AC scrive Provenienza TELEGRAM, cosi' il bot le
         // manda l'apertura della scheda e non quella del Telegram. Il Black Friday vince.
-        // Instradamento e tetto del bot restano quelli di sempre (nessun fuori tetto).
+        // Instradamento (PO 10/11/2026, sera): come il Black Friday, sempre al bot e
+        // fuori dal tetto giornaliero (ramo `isBlackFriday || isBrochure` qui sotto e
+        // conteggioTettoBot.ts). Il criterio sono gli utm della campagna pdf, non il
+        // funnel PROFESSIONI.
         const isBrochure = !isBlackFriday && isLeadBrochureAc({ utmSource, utmMedium, utmCampaign, utmContent, utmTerm });
         const professioneBrochure = isBrochure ? professioneDaUtmContent(utmContent) : null;
         const funnel = isBlackFriday ? BLACK_FRIDAY_FUNNEL : isBrochure ? BROCHURE_FUNNEL : provenienza ? provenienza.toUpperCase() : DEFAULT_FUNNEL;
@@ -1494,7 +1497,7 @@ export async function POST(req: NextRequest) {
             // l'unica strada per cui un iscritto al webinar del 5/10 potrebbe
             // finire al venditore.
             let divertedTo: string | null = null;
-            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId && funnel !== LANCIO_FUNNEL && !isBlackFriday) {
+            if (salesPipelineCfg.enabled && salesPipelineCfg.salesUserId && funnel !== LANCIO_FUNNEL && !isBlackFriday && !isBrochure) {
                 // Il tetto e' GIORNALIERO (chiarito dal PO 2026-09-21: "5 lead
                 // nuovi oggi... il limite giornaliero e' quello"), non un totale
                 // da sempre — con un tetto totale, dopo i primi N non sarebbe
@@ -1607,10 +1610,12 @@ export async function POST(req: NextRequest) {
             // percorsi (li legge l'evento ASSIGNED a valle).
             let eligible: { id: string; isBot: boolean }[] = [];
             let fallbackUsed = false;
-            /** Freschi del bot di oggi contati per il tetto (BF esclusi), solo nel ramo bot_tetto. */
+            /** Freschi del bot di oggi contati per il tetto (BF e brochure esclusi), solo nel ramo bot_tetto. */
             let tettoBotConteggio: number | null = null;
             if (!divertedTo) {
-                if (isBlackFriday) {
+                if (isBlackFriday || isBrochure) {
+                    // Brochure (PO 10/11/2026): i lead della campagna pdf seguono la
+                    // stessa regola del Black Friday, sempre al bot sopra il tetto.
                     // Black Friday (PO 07/11/2026): solo il bot, a qualunque ora e
                     // giorno, fuori dal tetto giornaliero e dalla riserva serale dei
                     // GDO. Il tetto esiste per mandare l'ECCEDENZA ai GDO, e questi
@@ -1628,13 +1633,14 @@ export async function POST(req: NextRequest) {
                     // Riserva serale (PO 06/11/2026): in orario GDO il tetto
                     // scende di BOT_RISERVA_FUORI_ORARIO, fuori orario è pieno.
                     const tettoOra = tettoBot === null ? 0 : tettoBotAdesso(now, tettoBot);
-                    // I Black Friday non contano (PO 09/11/2026): sono fuori dal
-                    // tetto e non tolgono posti ai lead normali.
+                    // I Black Friday (PO 09/11/2026) e i lead della campagna brochure
+                    // (PO 10/11/2026) non contano: sono fuori dal tetto e non tolgono
+                    // posti ai lead normali.
                     const freschiBotOggi = sqlFreschiBotOggiPerTetto(users.id, todayRome, FENICE_COMPANY);
                     const conteggi = await tx.select({ id: users.id, n: sql<number>`${freschiBotOggi}`.mapWith(Number) })
                         .from(users).where(and(gdoBase, eq(users.isBot, true)));
                     tettoBotConteggio = conteggi.reduce((s, c) => s + c.n, 0);
-                    console.log(`[tetto-bot] freschi bot oggi senza BF: ${tettoBotConteggio} / tetto adesso ${tettoOra}`);
+                    console.log(`[tetto-bot] freschi bot oggi senza BF e brochure: ${tettoBotConteggio} / tetto adesso ${tettoOra}`);
                     eligible = await selectPool(and(gdoBase, eq(users.isBot, true), sql`${freschiBotOggi} < ${tettoOra}`));
                     if (eligible.length === 0) eligible = await selectSoloGdoSottoTetto();
                     if (eligible.length === 0) eligible = await selectSoloGdoTutti();
@@ -1902,7 +1908,7 @@ export async function POST(req: NextRequest) {
                 // Su un lead dirottato la fascia era stata calcolata ma non
                 // seguita (il giro dei pool non si fa nemmeno): scriverla
                 // racconterebbe una regola che non ha deciso niente.
-                routing: txResult.divertedToSales ? 'sales_pipeline' : isBlackFriday ? 'black_friday_bot' : txResult.routing,
+                routing: txResult.divertedToSales ? 'sales_pipeline' : isBlackFriday ? 'black_friday_bot' : isBrochure ? 'brochure_bot' : txResult.routing,
                 ...(txResult.fallbackUsed ? { routingFallback: true } : {}),
                 ...(txResult.holidayWindow ? { botHolidayWindow: true } : {}),
                 ...(txResult.routing === 'bot_tetto' && tettoBotInfo ? { tettoBot: tettoBotInfo.valore, tettoBotFonte: tettoBotInfo.fonte, ...(txResult.tettoBotConteggio !== null ? { tettoBotConteggioSenzaBf: txResult.tettoBotConteggio } : {}) } : {}),

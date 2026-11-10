@@ -20,8 +20,14 @@ import { toRomeDateStr } from '@/lib/dateUtils'
 
 export const FUNNEL_PROFESSIONI = 'PROFESSIONI'
 
-/** "pdf" come parola o "brochure" in un utm: la campagna che promette la scheda. */
-const UTM_BROCHURE = /brochure|(^|[^a-z])pdf([^a-z]|$)/i
+/**
+ * "pdf" come parola o "brochure" in un utm: la campagna che promette la scheda.
+ * `UTM_BROCHURE_PG` e' la stessa regola per Postgres (`~*`, senza maiuscole), da
+ * applicare a `concat_ws(' ', utm_source, utm_medium, utm_campaign, utm_content, utm_term)`:
+ * la usano la pagina brochure e il tetto del bot (conteggioTettoBot.ts).
+ */
+export const UTM_BROCHURE_PG = '(brochure|(^|[^a-z])pdf([^a-z]|$))'
+const UTM_BROCHURE = new RegExp(UTM_BROCHURE_PG, 'i')
 
 /** Frase precompilata del link wa.me della landing. */
 export const FRASE_SCHEDA = /scheda del corso/i
