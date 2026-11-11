@@ -170,7 +170,9 @@ test('allargato: restano SEMPRE fuori clienti, appuntamenti vicini, richiami, sc
     assert.deepEqual(ent({}, { cliente: true }), { motivo: 'cliente' })
     assert.deepEqual(ent({}, { appuntamentoVicino: true }), { motivo: 'appuntamento_vicino' })
     assert.deepEqual(ent({ assignedToId: 'gdo-1' }, { assegnatoAPersona: true, richiamoFissato: true }), { motivo: 'richiamo' })
-    assert.deepEqual(ent({ status: 'IN_PROGRESS' }, { recallDate: new Date(ORA - 5 * G), ultimoContattoMs: ORA - 30 * G }), { motivo: 'richiamo' })
+    // Un richiamo vecchio su un appuntamento chiuso non blocca (lo blocca solo una scheda aperta).
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 100 * G) }, { recallDate: new Date(ORA - 100 * G), ultimoContattoMs: ORA - 90 * G }), { regola: 'fermo' })
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 40 * G), assignedToId: 'gdo-106' }, { assegnatoAPersona: true, chiamateScheda: 1, ultimoContattoMs: ORA - 30 * G }), { motivo: 'appuntamento_storico_gdo' })
     assert.deepEqual(ent({ status: 'REJECTED' }, { scartoChiuso: true }), { motivo: 'scarto_chiuso' })
     assert.deepEqual(ent({}, { blackFridayAperto: true }), { motivo: 'black_friday' })
     assert.deepEqual(ent({}, { lancioInLavorazione: true }), { motivo: 'lancio' })

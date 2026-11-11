@@ -134,7 +134,7 @@ export const LEAD_MAI_TOCCARE = ['306abd1c']
 
 export type MotivoNonIdoneoAllargato = MotivoNonIdoneo
     | 'mai_toccare' | 'cliente' | 'appuntamento_vicino' | 'richiamo' | 'scarto_chiuso' | 'black_friday' | 'lancio'
-    | 'presenza_storica' | 'gdo_al_lavoro' | 'non_fermo'
+    | 'presenza_storica' | 'appuntamento_storico_gdo' | 'gdo_al_lavoro' | 'non_fermo'
 
 export type RegolaIngresso = 'libero_nuovo' | 'gdo_mai_chiamato' | 'fermo'
 
@@ -167,11 +167,17 @@ export function ingressoAllargato(
     if (l.phoneSuspicious) return { motivo: 'telefono_sospetto' }
     if (p.cliente) return { motivo: 'cliente' }
     if (p.appuntamentoVicino) return { motivo: 'appuntamento_vicino' }
-    if (p.richiamoFissato || l.status !== 'REJECTED' && p.recallDate !== null) return { motivo: 'richiamo' }
+    // Richiamo fissato su una scheda APERTA della persona (un richiamo vecchio su uno scarto o
+    // su un appuntamento chiuso non conta).
+    if (p.richiamoFissato) return { motivo: 'richiamo' }
     if (p.scartoChiuso) return { motivo: 'scarto_chiuso' }
     if (p.blackFridayAperto) return { motivo: 'black_friday' }
     if (p.lancioInLavorazione) return { motivo: 'lancio' }
     if (l.presentedAt !== null) return { motivo: 'presenza_storica' }
+    // Appuntamento (anche vecchio) su una scheda di un GDO: spostarla all'account bot gli
+    // toglierebbe l'appuntamento dai conteggi calcolati sull'assegnatario. Fuori finche'
+    // Bruno non decide (proposta: si', ma solo spostando la chat e non la scheda).
+    if (l.appointmentDate !== null && p.assegnatoAPersona) return { motivo: 'appuntamento_storico_gdo' }
     // Le altre schede della stessa persona le giudicano i controlli "di persona" qui sopra
     // (ultimo contatto, appuntamenti, richiami, clienti): `doppioneOccupato` non serve.
     if (l.tentativiFalliti >= MAX_TENTATIVI_FALLITI) return { motivo: 'troppi_errori' }
