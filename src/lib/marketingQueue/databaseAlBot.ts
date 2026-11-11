@@ -17,6 +17,7 @@ import { db } from '@/db'
 import { leads, leadEvents, marketingQueueEntries, users } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { personKeyOf } from '@/lib/bot-fissatore/personKey'
+import { soloCifreSql, stessoNumeroSql } from './telefonoSql'
 import {
     BATCH_DATABASE_BOT, EVENTI_CONTATTO, EVENTO_DATABASE_BOT, azioneDaPush, ingressoAllargato, leggiConfigDatabaseAlBot, motivoNonIdoneo,
     scartoCheChiude, type CandidatoDatabase, type MotivoNonIdoneoAllargato, type PersonaDatabase, type RegolaIngresso,
@@ -47,6 +48,9 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isBot, true), eq(users.isActive, true),
     )).limit(1)
     if (!bot) return { ok: false, error: 'account bot non trovato' }
+
+    // Una scheda `pl` della stessa persona del lead letto (ultime 10 cifre).
+    const STESSA_PERSONA_PL = stessoNumeroSql(sql.raw('pl.phone'), sql.raw('"leads"."phone"'))
 
     // Il segno vive sulla riga della coda (payload originale del marketing), non sul
     // lead: un lead gia' nel CRM viene solo collegato e il suo funnel non cambia.
@@ -100,40 +104,42 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
                    OR ol.status = 'APPOINTMENT' OR ol."appointmentDate" IS NOT NULL OR ol."presentedAt" IS NOT NULL)
         )`,
         // ── Solo per l'ingresso allargato: la PERSONA (tutte le schede con le stesse 10 cifre). ──
+        // Il confronto dei telefoni passa da telefonoSql.ts: scritto a mano qui, la barra di D
+        // spariva nel template e a Postgres arrivava 'D' (revisione 11/11/2026).
         assegnatoAPersona: sql<boolean>`("leads"."assignedToId" IS NOT NULL AND "leads"."assignedToId" <> ${bot.id})`,
         chiamateScheda: sql<number>`(SELECT COUNT(*)::int FROM "callLogs" cl WHERE cl."leadId" = "leads"."id")`,
         ultimoContatto: sql<string | null>`GREATEST(
             (SELECT MAX(cl."createdAt") FROM "callLogs" cl JOIN leads pl ON pl.id = cl."leadId"
               WHERE pl."companyId" = ${FENICE}
-                AND right(regexp_replace(pl.phone, '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)),
+                AND ${STESSA_PERSONA_PL}),
             (SELECT MAX(pe.timestamp) FROM "leadEvents" pe JOIN leads pl ON pl.id = pe."leadId"
               WHERE pl."companyId" = ${FENICE}
-                AND right(regexp_replace(pl.phone, '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)
+                AND ${STESSA_PERSONA_PL}
                 AND (pe."eventType" IN (${sql.join(EVENTI_CONTATTO.map((e) => sql`${e}`), sql`, `)})
                      OR (pe."eventType" = 'BOT_PUSHED' AND pe.metadata->>'result' IN ('sent','duplicate'))))
         )::text`,
         appuntamentoVicino: sql<boolean>`EXISTS (
             SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
-              AND right(regexp_replace(pl.phone, '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)
+              AND ${STESSA_PERSONA_PL}
               AND pl."appointmentDate" >= now() - interval '14 days'
         )`,
         richiamoFissato: sql<boolean>`EXISTS (
             SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
-              AND right(regexp_replace(pl.phone, '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)
+              AND ${STESSA_PERSONA_PL}
               AND pl.status IN ('NEW','IN_PROGRESS') AND pl."recallDate" IS NOT NULL
         )`,
         cliente: sql<boolean>`(EXISTS (
             SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
-              AND right(regexp_replace(pl.phone, '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)
+              AND ${STESSA_PERSONA_PL}
               AND (pl."salespersonOutcome" ILIKE 'chiuso%' OR pl."discardReason" ILIKE '%gi_ cliente%')
         ) OR EXISTS (
             SELECT 1 FROM "gestionaleContratti" g
-            WHERE length(regexp_replace(coalesce(g."clienteTelefono", ''), '\D', '', 'g')) >= 9
-              AND right(regexp_replace(g."clienteTelefono", '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)
+            WHERE length(${soloCifreSql(sql.raw(`coalesce(g."clienteTelefono", '')`))}) >= 9
+              AND ${stessoNumeroSql(sql.raw('g."clienteTelefono"'), sql.raw('"leads"."phone"'))}
         ))`,
         motiviScartoPersona: sql<string | null>`(
             SELECT string_agg(DISTINCT pl."discardReason", ' | ') FROM leads pl WHERE pl."companyId" = ${FENICE}
-              AND right(regexp_replace(pl.phone, '\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\D', '', 'g'), 10)
+              AND ${STESSA_PERSONA_PL}
               AND pl."discardReason" IS NOT NULL
         )`,
         // Spinte database di questo lead finite con un errore suo (non "non adesso").

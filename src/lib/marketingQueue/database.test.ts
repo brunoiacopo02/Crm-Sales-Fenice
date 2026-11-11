@@ -193,3 +193,15 @@ test('scarti che chiudono per sempre: non interessato, non in target, numero sba
 test('risposta del bot: chat ancora viva o quota riaperture = si salta il lead, il giro continua', () => {
     assert.deepEqual(azioneDaPush({ result: 'not_accepted', motivo: 'database_chat_attiva' }), { tipo: 'riprova', esito: 'chat_attiva', globale: false })
 })
+
+test('risposta del bot: numero della chat da riaprire non disponibile = salta SOLO quel lead, senza bruciarlo', () => {
+    // Revisione 11/11/2026: il bot risponde `database_chat_attiva` (dettaglio
+    // numero_chat_non_disponibile) invece di `database_non_aperto`, che fermava tutta la coda.
+    const a = azioneDaPush({ result: 'not_accepted', motivo: 'database_chat_attiva' })
+    assert.equal(a.tipo, 'riprova')
+    assert.equal(a.tipo === 'riprova' && a.globale, false)
+    // Non e' un rifiuto definitivo: nessun evento DATABASE_BOT, il lead resta candidato.
+    assert.notEqual(a.tipo, 'definitivo')
+    // `database_non_aperto` resta "fermi tutti".
+    assert.deepEqual(azioneDaPush({ result: 'not_accepted', motivo: 'database_non_aperto' }), { tipo: 'riprova', esito: 'database_non_aperto', globale: true })
+})

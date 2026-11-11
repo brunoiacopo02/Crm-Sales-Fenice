@@ -3,8 +3,9 @@
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
 > **Versione:** 1.17 — 2026-11-11 (NON ancora in produzione, due interruttori spenti). Cosa
 > cambia rispetto alla 1.16: campo opzionale **`database: true`** nel `BotIntakePayload` per i
-> lead di DATABASE della coda marketing, e due nuovi `motivo` di `accettato:false`:
-> **`database_non_aperto`** (riprovare più tardi) e **`database_chat_esistente`**
+> lead di DATABASE della coda marketing, e tre nuovi `motivo` di `accettato:false`:
+> **`database_non_aperto`** (riprovare più tardi, vale per tutti), **`database_chat_attiva`**
+> (saltare solo questo lead e riproporlo più avanti) e **`database_chat_esistente`**
 > (definitivo). Solo aggiunta: senza il campo l'intake è identico. Vedi
 > [Lead di database](#lead-di-database-nuovo-in-v117).
 >
@@ -328,6 +329,7 @@ solleciti. "Non mi interessa" = una riga di congedo + `DA_SCARTARE` "non interes
 |---|---|---|
 | `accettato:true` (+ `database.variante`) | apertura partita | lead all'account bot, infornata a senso unico `DATABASE_BOT_202611`, evento `DATABASE_BOT` |
 | `accettato:false`, `motivo:"database_non_aperto"`, `dettaglio` | non adesso (spento, tetto, fascia, nessun template approvato) | lead non toccato, riproposto al giro dopo; il giro si ferma |
+| `accettato:false`, `motivo:"database_chat_attiva"`, `dettaglio` | problema di QUESTO lead: chat ancora viva, quota riaperture piena, o il numero della chat da riaprire oggi non apre (pieno, a riposo, non HIGH, fuori dal giro) | lead non toccato, nessun evento: saltato e riproposto al giro dopo; il giro continua con gli altri |
 | `accettato:false`, `motivo:"database_chat_esistente"` | il numero ha già una chat col bot | definitivo: evento `DATABASE_BOT`, mai riproposto |
 | `accettato:false`, `motivo:"apertura_non_partita"` | chat nata, invio fallito | lead all'account bot (la chat è sua) |
 
