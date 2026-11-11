@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     BATCH_DATABASE_BOT, SCAGLIONE_DATABASE_DEFAULT, GIORNI_CODA_DATABASE_DEFAULT,
-    MAX_TENTATIVI_FALLITI, azioneDaPush, eLeadDatabase, leggiConfigDatabaseAlBot, motivoNonIdoneo, type CandidatoDatabase,
+    MAX_TENTATIVI_FALLITI, GIORNI_FERMO_DEFAULT, ingressoAllargato, scartoCheChiude, type PersonaDatabase, azioneDaPush, eLeadDatabase, leggiConfigDatabaseAlBot, motivoNonIdoneo, type CandidatoDatabase,
 } from './database'
 import { scegliLeadEsistente } from './payload'
 import { ripresaVaAlGdo } from '@/lib/bot-fissatore/ripresaChat'
@@ -120,4 +120,74 @@ test('infornata database: a senso unico, ma NON tolta dai KPI ne\' trattata da c
     assert.ok(BATCH_SENSO_UNICO.includes(BATCH_DATABASE_BOT))
     assert.ok(!BATCH_ESCLUSI_DAI_KPI.includes(BATCH_DATABASE_BOT))
     assert.ok(!BATCH_FREDDI.includes(BATCH_DATABASE_BOT))
+})
+
+// ── Ingresso allargato (proposta PO 11/11/2026: fermo da 14 giorni, GDO mai chiamati) ──
+const ORA = Date.parse('2026-11-11T17:00:00+01:00')
+const G = 24 * 3600_000
+function persona(p: Partial<PersonaDatabase> = {}): PersonaDatabase {
+    return {
+        ultimoContattoMs: ORA - 30 * G, chiamateScheda: 0, callCount: 0, recallDate: null, appuntamentoVicino: false,
+        cliente: false, richiamoFissato: false, scartoChiuso: false, assegnatoAPersona: false,
+        blackFridayAperto: false, lancioInLavorazione: false, ...p,
+    }
+}
+const ent = (l: Partial<CandidatoDatabase>, p: Partial<PersonaDatabase> = {}) =>
+    ingressoAllargato(c(l), persona(p), { nowMs: ORA, giorniFermo: 14 })
+
+test('allargato: config spenta di default, giorni_fermo 14 di default e modificabile', () => {
+    assert.equal(leggiConfigDatabaseAlBot({}).allargato, false)
+    assert.equal(leggiConfigDatabaseAlBot({ MKT_DATABASE_ALLARGATO: 'on' }).allargato, true)
+    assert.equal(leggiConfigDatabaseAlBot({}).giorniFermo, GIORNI_FERMO_DEFAULT)
+    assert.equal(GIORNI_FERMO_DEFAULT, 14)
+    assert.equal(leggiConfigDatabaseAlBot({ MKT_DATABASE_GIORNI_FERMO: '21' }).giorniFermo, 21)
+})
+
+test('allargato: lead di un GDO con 0 chiamate e nessun richiamo va al bot SUBITO, anche se appena assegnato', () => {
+    assert.deepEqual(ent({ assignedToId: 'gdo-105' }, { assegnatoAPersona: true, ultimoContattoMs: ORA - G }), { regola: 'gdo_mai_chiamato' })
+    assert.deepEqual(ent({ assignedToId: 'gdo-105', status: 'IN_PROGRESS' }, { assegnatoAPersona: true, ultimoContattoMs: null }), { regola: 'gdo_mai_chiamato' })
+})
+
+test('allargato: un GDO che lo sta lavorando (chiamate, contatto recente) lo tiene; fermo da 14 giorni no', () => {
+    const lavorato = { assignedToId: 'gdo-105', status: 'IN_PROGRESS' }
+    assert.deepEqual(ent(lavorato, { assegnatoAPersona: true, chiamateScheda: 2, callCount: 2, ultimoContattoMs: ORA - 3 * G }), { motivo: 'gdo_al_lavoro' })
+    assert.deepEqual(ent(lavorato, { assegnatoAPersona: true, chiamateScheda: 2, callCount: 2, ultimoContattoMs: ORA - 20 * G }), { regola: 'fermo' })
+})
+
+test('allargato: scartati, esitati e gia scritti dal bot entrano solo se fermi', () => {
+    const scartato = { status: 'REJECTED', assignedToId: 'gdo-112' }
+    assert.deepEqual(ent(scartato, { assegnatoAPersona: true, chiamateScheda: 4, ultimoContattoMs: ORA - 15 * G }), { regola: 'fermo' })
+    assert.deepEqual(ent(scartato, { assegnatoAPersona: true, chiamateScheda: 4, ultimoContattoMs: ORA - 13 * G }), { motivo: 'non_fermo' })
+    assert.deepEqual(ent({ toccatoDalBot: true }, { ultimoContattoMs: ORA - 40 * G }), { regola: 'fermo' })
+    assert.deepEqual(ent({ toccatoDalBot: true }, { ultimoContattoMs: ORA - 2 * G }), { motivo: 'non_fermo' })
+    // Libero, NEW, mai scritto dal bot: entra come prima, senza attendere.
+    assert.deepEqual(ent({}, { ultimoContattoMs: ORA - G }), { regola: 'libero_nuovo' })
+    // Esitato dal venditore ("Sparito", senza presenza) e fermo: entra.
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 40 * G) }, { ultimoContattoMs: ORA - 30 * G }), { regola: 'fermo' })
+})
+
+test('allargato: restano SEMPRE fuori clienti, appuntamenti vicini, richiami, scarti che chiudono, BF e lancio aperti, presenze', () => {
+    assert.deepEqual(ent({}, { cliente: true }), { motivo: 'cliente' })
+    assert.deepEqual(ent({}, { appuntamentoVicino: true }), { motivo: 'appuntamento_vicino' })
+    assert.deepEqual(ent({ assignedToId: 'gdo-1' }, { assegnatoAPersona: true, richiamoFissato: true }), { motivo: 'richiamo' })
+    assert.deepEqual(ent({ status: 'IN_PROGRESS' }, { recallDate: new Date(ORA - 5 * G), ultimoContattoMs: ORA - 30 * G }), { motivo: 'richiamo' })
+    assert.deepEqual(ent({ status: 'REJECTED' }, { scartoChiuso: true }), { motivo: 'scarto_chiuso' })
+    assert.deepEqual(ent({}, { blackFridayAperto: true }), { motivo: 'black_friday' })
+    assert.deepEqual(ent({}, { lancioInLavorazione: true }), { motivo: 'lancio' })
+    assert.deepEqual(ent({ status: 'APPOINTMENT', presentedAt: new Date(ORA - 60 * G) }, { ultimoContattoMs: ORA - 60 * G }), { motivo: 'presenza_storica' })
+    assert.deepEqual(ent({ id: '306abd1c-qualcosa' }), { motivo: 'mai_toccare' })
+    assert.deepEqual(ent({ giaGestito: true }), { motivo: 'gia_gestito' })
+})
+
+test('scarti che chiudono per sempre: non interessato, non in target, numero sbagliato/inesistente, gia cliente', () => {
+    for (const m of ['non interessato', 'Non interessata', 'non in target', 'numero inesistente', 'numero sbagliato', 'doppione - persona già cliente']) {
+        assert.equal(scartoCheChiude(m), true, m)
+    }
+    for (const m of ['irreperibile (4 tentativi vuoti)', 'solo informazioni', 'non ha potere decisionale', null]) {
+        assert.equal(scartoCheChiude(m), false, String(m))
+    }
+})
+
+test('risposta del bot: chat ancora viva o quota riaperture = si salta il lead, il giro continua', () => {
+    assert.deepEqual(azioneDaPush({ result: 'not_accepted', motivo: 'database_chat_attiva' }), { tipo: 'riprova', esito: 'chat_attiva', globale: false })
 })

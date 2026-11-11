@@ -35,7 +35,17 @@ export interface ConfigDatabaseAlBot {
     scaglione: number
     /** Da quanti giorni di coda si pescano i lead non ancora aperti. */
     giorniCoda: number
+    /**
+     * Ingresso ALLARGATO (proposta PO 11/11/2026, `MKT_DATABASE_ALLARGATO=on`): oltre ai
+     * lead liberi mai scritti dal bot entrano i lead FERMI (nessun contatto da
+     * `giorniFermo` giorni) e i lead dei GDO mai chiamati. Spento = regola di prima.
+     */
+    allargato: boolean
+    /** `MKT_DATABASE_GIORNI_FERMO` (default 14): giorni senza nessun contatto per dire "fermo". */
+    giorniFermo: number
 }
+
+export const GIORNI_FERMO_DEFAULT = 14
 
 const ON_VALUES = new Set(['on', '1', 'true', 'acceso'])
 
@@ -52,6 +62,8 @@ export function leggiConfigDatabaseAlBot(env: Record<string, string | undefined>
         attivo: ON_VALUES.has(env.MKT_DATABASE_BOT?.trim().toLowerCase() ?? ''),
         scaglione: intero(env, 'MKT_DATABASE_BOT_BATCH', SCAGLIONE_DATABASE_DEFAULT, 50),
         giorniCoda: intero(env, 'MKT_DATABASE_BOT_GIORNI', GIORNI_CODA_DATABASE_DEFAULT, 60),
+        allargato: ON_VALUES.has(env.MKT_DATABASE_ALLARGATO?.trim().toLowerCase() ?? ''),
+        giorniFermo: intero(env, 'MKT_DATABASE_GIORNI_FERMO', GIORNI_FERMO_DEFAULT, 365),
     }
 }
 
@@ -76,6 +88,106 @@ export interface CandidatoDatabase {
 
 /** Dopo tanti errori dello stesso lead si smette di riprovarlo: non blocca la coda. */
 export const MAX_TENTATIVI_FALLITI = 3
+
+/**
+ * Cio' che serve all'ingresso allargato, letto su TUTTE le schede della persona (stesse
+ * ultime 10 cifre del telefono): la persona e' ferma solo se e' ferma ovunque.
+ */
+export interface PersonaDatabase {
+    /** Ultimo contatto di qualunque tipo: chiamata, messaggio del/al bot, esito, restituzione (ms). */
+    ultimoContattoMs: number | null
+    /** Chiamate registrate su QUESTA scheda (callLogs). */
+    chiamateScheda: number
+    callCount: number
+    recallDate: Date | null
+    /** Una scheda della persona ha un appuntamento futuro o degli ultimi 14 giorni. */
+    appuntamentoVicino: boolean
+    /** Cliente: esito venditore "Chiuso", nel gestionale contratti, o scartato come "gia' cliente". */
+    cliente: boolean
+    /** Una scheda della persona ha un richiamo fissato nel futuro. */
+    richiamoFissato: boolean
+    /** Scarto che chiude per sempre su una scheda della persona: non interessato, non in target, numero sbagliato. */
+    scartoChiuso: boolean
+    /** L'assegnatario e' una persona (non l'account bot). */
+    assegnatoAPersona: boolean
+    /** Funnel Black Friday con la scheda ancora aperta. */
+    blackFridayAperto: boolean
+    /** Lead del lancio non archiviato con la scheda ancora aperta. */
+    lancioInLavorazione: boolean
+}
+
+/**
+ * Gli eventi che contano come "contatto" o "cambio di esito" per dire se la persona e'
+ * ferma (oltre alle chiamate in `callLogs`). Non contano le mosse amministrative
+ * (ASSIGNED, REASSIGNED_ADMIN, IMPORTED, TOLTO_AL_BOT, coda marketing...).
+ */
+export const EVENTI_CONTATTO = [
+    'REASSIGNED_FROM_BOT', 'BOT_NOTE', 'BOT_REPORT', 'BOT_CALL_ATTEMPT', 'AGENDA_SENT', 'AGENDA_DELIVERED',
+    'INBOUND_MESSAGE', 'BOT_CONTACT_REQUEST', 'BOT_APPOINTMENT_RESCHEDULED', 'BOT_DISDETTA_SCARTO', 'BOT_DISDETTA_NON_SCARTATA',
+    'BOT_ESITO_IGNORATO', 'BOT_VERIFICA_INVIATA', 'BOT_VERIFICA_RISPOSTA', 'LANCIO_INTAKE',
+    'conferme_no_answer', 'conferme_outcome_set', 'conferme_auto_discarded_3nr', 'conferme_call_logged', 'conferme_recall_scheduled',
+    'salesperson_outcome_set', 'negotiation_started', 'appointment_forced', 'LEAD_RIAPERTO',
+] as const
+
+/** Mai, in nessun modo (PO): Enrico Marchioretto. */
+export const LEAD_MAI_TOCCARE = ['306abd1c']
+
+export type MotivoNonIdoneoAllargato = MotivoNonIdoneo
+    | 'mai_toccare' | 'cliente' | 'appuntamento_vicino' | 'richiamo' | 'scarto_chiuso' | 'black_friday' | 'lancio'
+    | 'presenza_storica' | 'gdo_al_lavoro' | 'non_fermo'
+
+export type RegolaIngresso = 'libero_nuovo' | 'gdo_mai_chiamato' | 'fermo'
+
+/** Gli scarti che chiudono per sempre (PO 11/11/2026). Confronto senza maiuscole, per parola. */
+export function scartoCheChiude(motivo: string | null | undefined): boolean {
+    const m = (motivo ?? '').toLowerCase()
+    return /non interessat|non in target|numero (sbagliato|errato|inesistente)|inesistente|gi[aà] cliente|non contattare|opt.?out/.test(m)
+}
+
+/**
+ * Ingresso allargato (proposta del PO dell'11/11/2026, soglie da confermare).
+ *
+ * Entra, oltre a chi entrava gia' (libero, NEW, mai scritto dal bot):
+ *  - `gdo_mai_chiamato`: scheda aperta di un GDO con 0 chiamate e nessun richiamo, SUBITO;
+ *    la scheda passa all'account bot (infornata a senso unico) e il GDO la perde;
+ *  - `fermo`: la persona non ha avuto NESSUN contatto da `giorniFermo` giorni (chiamata,
+ *    messaggio, esito), qualunque sia lo stato: scartato, esitato, libero, gia' scritto
+ *    dal bot. La chat col bot la giudica poi il bot (ferma da `giorni_fermo`).
+ * Resta sempre fuori: cliente, appuntamento futuro o recente, richiamo fissato, scarto
+ * che chiude (non interessato, non in target, numero sbagliato), Black Friday e lancio
+ * aperti, un GDO che lo sta lavorando (chiamate e non fermo), presenza gia' registrata
+ * su questa scheda (spostarla cancellerebbe numeri gia' pagati ai GDO: vedi outcome route).
+ */
+export function ingressoAllargato(
+    l: CandidatoDatabase, p: PersonaDatabase, i: { nowMs: number; giorniFermo: number },
+): { regola: RegolaIngresso } | { motivo: MotivoNonIdoneoAllargato } {
+    if (LEAD_MAI_TOCCARE.some((x) => l.id.startsWith(x))) return { motivo: 'mai_toccare' }
+    if (l.isTest) return { motivo: 'test' }
+    if (l.giaGestito) return { motivo: 'gia_gestito' }
+    if (l.phoneSuspicious) return { motivo: 'telefono_sospetto' }
+    if (p.cliente) return { motivo: 'cliente' }
+    if (p.appuntamentoVicino) return { motivo: 'appuntamento_vicino' }
+    if (p.richiamoFissato || l.status !== 'REJECTED' && p.recallDate !== null) return { motivo: 'richiamo' }
+    if (p.scartoChiuso) return { motivo: 'scarto_chiuso' }
+    if (p.blackFridayAperto) return { motivo: 'black_friday' }
+    if (p.lancioInLavorazione) return { motivo: 'lancio' }
+    if (l.presentedAt !== null) return { motivo: 'presenza_storica' }
+    // Le altre schede della stessa persona le giudicano i controlli "di persona" qui sopra
+    // (ultimo contatto, appuntamenti, richiami, clienti): `doppioneOccupato` non serve.
+    if (l.tentativiFalliti >= MAX_TENTATIVI_FALLITI) return { motivo: 'troppi_errori' }
+    if (l.intakeBatch !== null && l.intakeBatch !== BATCH_DATABASE_BOT && l.intakeBatch !== 'DB_LISTA133_20260915') return { motivo: 'batch_diverso' }
+
+    const aperto = l.status === 'NEW' || l.status === 'IN_PROGRESS'
+    // Di un GDO, aperto, mai chiamato: al bot subito.
+    if (p.assegnatoAPersona && aperto && p.chiamateScheda === 0 && p.callCount === 0) return { regola: 'gdo_mai_chiamato' }
+    // Libero, NEW, mai scritto dal bot: la regola di prima.
+    if (!l.assignedToId && l.status === 'NEW' && !l.toccatoDalBot && l.appointmentDate === null) return { regola: 'libero_nuovo' }
+    // Tutto il resto entra solo se la persona e' ferma.
+    const soglia = i.nowMs - i.giorniFermo * 24 * 3600_000
+    const fermo = p.ultimoContattoMs === null || p.ultimoContattoMs <= soglia
+    if (!fermo) return { motivo: p.assegnatoAPersona && aperto ? 'gdo_al_lavoro' : 'non_fermo' }
+    return { regola: 'fermo' }
+}
 
 export type MotivoNonIdoneo =
     | 'test' | 'telefono_sospetto' | 'di_qualcuno' | 'appuntamento' | 'stato' | 'batch_diverso' | 'toccato_dal_bot' | 'gia_gestito'
@@ -129,6 +241,8 @@ export function azioneDaPush(r: { result: string; motivo?: string }): AzioneData
         // senza chat. Il giro si ferma: il bot e' lento per tutti.
         case 'network_error': return { tipo: 'riprova', esito: 'timeout', globale: true }
         case 'not_accepted':
+            // Chat ancora viva o quota delle riaperture piena: riprova questo lead piu' avanti.
+            if (r.motivo === 'database_chat_attiva') return { tipo: 'riprova', esito: 'chat_attiva', globale: false }
             if (r.motivo === 'database_chat_esistente') return { tipo: 'definitivo', esito: 'chat_esistente' }
             if (r.motivo === 'telefono_non_valido') return { tipo: 'definitivo', esito: 'telefono_non_valido' }
             // La chat e' nata e l'invio e' fallito: e' del bot, che la chiude da se'.
