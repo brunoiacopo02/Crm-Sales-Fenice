@@ -60,6 +60,7 @@ import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
 import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
 import { inizioRiusoScarto } from "@/lib/acIntake/scartoRiusato";
+import { bfOltreListaBloccata } from "@/lib/acIntake/bfOltreListaBloccata";
 // UTM: id dei custom field e lettura, condivisi col sync di recupero del lancio
 // (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
@@ -222,7 +223,9 @@ const BLOCKED_LIST_IDS = new Set(
  * Liste bloccate SENZA ECCEZIONI (PO 09/11/2026: "bloccare categoricamente
  * tutti i lead che arrivano dalla lista 137"). A differenza di BLOCKED_LIST_IDS
  * non le scavalcano né la lista Black Friday né il lancio: il controllo è il
- * primo del webhook. Stanno anche in BLOCKED_LIST_IDS per i percorsi che
+ * primo del webhook. Unica eccezione (PO 11/11/2026): chi si iscrive DAVVERO al
+ * Black Friday (lista BF + segno BF nei campi, evento non dalla 137), vedi
+ * bfOltreBloccoSenzaEccezioni. Stanno anche in BLOCKED_LIST_IDS per i percorsi che
  * leggono solo quelle (retry, pool).
  */
 const HARD_BLOCKED_LIST_IDS: ReadonlySet<string> = new Set(['137']);
@@ -292,6 +295,39 @@ async function leggiListeContatto(contactId: string): Promise<{ ids: Set<string>
     } catch (e) {
         console.error(`[AC webhook] getContactActiveListIds error for contact ${contactId}:`, e);
         return { ids, ok: false };
+    }
+}
+
+/**
+ * Il contatto e' in una lista bloccata senza eccezioni (137) ma si e' iscritto
+ * davvero al Black Friday? Regola in lib/acIntake/bfOltreListaBloccata. I campi
+ * del contatto si leggono da AC solo dopo i controlli che non costano chiamate;
+ * se AC non risponde il contatto resta fuori (si chiude, non si apre).
+ */
+async function bfOltreBloccoSenzaEccezioni(
+    contactId: string,
+    eventType: string,
+    triggerListId: string | null,
+    listaBloccata: string,
+    listeAttive: ReadonlySet<string>,
+): Promise<{ passa: true } | { passa: false; motivo: string }> {
+    const senzaCampi = bfOltreListaBloccata({
+        eventType, triggerListId, listaBloccata,
+        listeBloccateSenzaEccezioni: HARD_BLOCKED_LIST_IDS,
+        listeBlackFriday: await getBlackFridayListIds(),
+        listeAttive,
+        segnoBfNeiCampi: true,
+    });
+    if (!senzaCampi.passa) return senzaCampi;
+    try {
+        const fv = await acGet(`/contacts/${contactId}/fieldValues`);
+        const fieldValues = Array.isArray(fv?.fieldValues) ? fv.fieldValues : [];
+        const provenienza = (readFieldLocal(fieldValues, PROVENIENZA_FIELD_ID) || '').trim();
+        const segno = isLeadBlackFridayAc({ provenienza, ...segniBlackFridayDaCampi(fieldValues) });
+        return segno ? { passa: true } : { passa: false, motivo: 'senza_segno_bf' };
+    } catch (e) {
+        console.error(`[AC webhook] campi del contatto ${contactId} non leggibili (eccezione BF sulla lista bloccata):`, e);
+        return { passa: false, motivo: 'campi_non_leggibili' };
     }
 }
 
@@ -673,9 +709,18 @@ export async function POST(req: NextRequest) {
         }
         const hardBlocked = blockedListOf(letturaHard.ids, HARD_BLOCKED_LIST_IDS);
         if (hardBlocked) {
-            console.log(`[AC webhook] skip contact ${contactId} — lista bloccata senza eccezioni (iscrizione) ${hardBlocked}`);
-            await recordBlockedListSkip(contactId, hardBlocked, rawPayload);
-            return NextResponse.json({ skipped: 'blocked_list', listId: hardBlocked, acContactId: contactId, via: 'membership_hard' });
+            // Iscritti VERI al Black Friday che stanno anche nella 137 (PO 11/11/2026):
+            // passano solo se l'evento non viene dalla 137, il contatto e' nella lista
+            // BF e i suoi campi portano il segno BF (lib/acIntake/bfOltreListaBloccata).
+            // Il subscribe alla 137 (caricamento di massa) e' gia' uscito sopra, quindi
+            // la lettura dei campi su AC qui costa solo per chi ha un evento diverso.
+            const bfOltre = await bfOltreBloccoSenzaEccezioni(contactId, eventType, triggerListId, hardBlocked, letturaHard.ids);
+            if (!bfOltre.passa) {
+                console.log(`[AC webhook] skip contact ${contactId} — lista bloccata senza eccezioni (iscrizione) ${hardBlocked} (${bfOltre.motivo})`);
+                await recordBlockedListSkip(contactId, hardBlocked, rawPayload);
+                return NextResponse.json({ skipped: 'blocked_list', listId: hardBlocked, acContactId: contactId, via: 'membership_hard' });
+            }
+            console.log(`[AC webhook] contatto ${contactId} nella lista ${hardBlocked} ma iscritto ora al Black Friday: entra`);
         }
 
         // ===== RAMO LANCIO (spec 2026-09-14 §4.1) — PRIMA delle liste bloccate =====
