@@ -59,6 +59,7 @@ import crypto from "crypto";
 import { logLeadEvent } from "@/lib/eventLogger";
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize";
 import { leggiBurstConfig, decidiBurst } from "@/lib/acIntake/burstGuard";
+import { inizioRiusoScarto } from "@/lib/acIntake/scartoRiusato";
 // UTM: id dei custom field e lettura, condivisi col sync di recupero del lancio
 // (src/lib/acIntake/utmFields.ts). Prima vivevano qui e il sync non poteva riusarli.
 import { UTM_FIELD_IDS, readFieldLocal, readUtmFields } from "@/lib/acIntake/utmFields";
@@ -369,6 +370,9 @@ async function recordDedupedSkip(
             eq(acIntakeFailures.acContactId, contactId),
             isNull(acIntakeFailures.resolvedAt),
             like(acIntakeFailures.reason, likeMotivo),
+            // Solo righe recenti (PO 11/11/2026): una riga vecchia di settimane non
+            // deve nascondere il blocco di oggi (vedi lib/acIntake/scartoRiusato).
+            gte(acIntakeFailures.createdAt, inizioRiusoScarto(new Date())),
         )).limit(1);
     if (existing) {
         await db.update(acIntakeFailures)
