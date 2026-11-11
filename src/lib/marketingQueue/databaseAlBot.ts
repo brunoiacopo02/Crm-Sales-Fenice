@@ -17,9 +17,10 @@ import { db } from '@/db'
 import { leads, leadEvents, marketingQueueEntries, users } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { personKeyOf } from '@/lib/bot-fissatore/personKey'
+import { soloCifreSql, stessoNumeroSql } from './telefonoSql'
 import {
-    BATCH_DATABASE_BOT, EVENTO_DATABASE_BOT, azioneDaPush, leggiConfigDatabaseAlBot, motivoNonIdoneo,
-    type CandidatoDatabase, type MotivoNonIdoneo,
+    BATCH_DATABASE_BOT, EVENTI_CONTATTO, EVENTO_DATABASE_BOT, azioneDaPush, ingressoAllargato, leggiConfigDatabaseAlBot, motivoNonIdoneo,
+    scartoCheChiude, type CandidatoDatabase, type MotivoNonIdoneoAllargato, type PersonaDatabase, type RegolaIngresso,
 } from './database'
 
 const FENICE = 'fenice'
@@ -31,7 +32,8 @@ export type EsitoGiroDatabase =
         ok: true
         motivo: 'ok' | 'nessun_candidato' | 'fermato'
         pescati: number
-        nonIdonei: Partial<Record<MotivoNonIdoneo, number>>
+        nonIdonei: Partial<Record<MotivoNonIdoneoAllargato, number>>
+        perRegola: Partial<Record<RegolaIngresso, number>>
         spinti: number
         assegnati: number
         definitivi: number
@@ -46,6 +48,9 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isBot, true), eq(users.isActive, true),
     )).limit(1)
     if (!bot) return { ok: false, error: 'account bot non trovato' }
+
+    // Una scheda `pl` della stessa persona del lead letto (ultime 10 cifre).
+    const STESSA_PERSONA_PL = stessoNumeroSql(sql.raw('pl.phone'), sql.raw('"leads"."phone"'))
 
     // Il segno vive sulla riga della coda (payload originale del marketing), non sul
     // lead: un lead gia' nel CRM viene solo collegato e il suo funnel non cambia.
@@ -64,6 +69,12 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         phoneSuspicious: leads.phoneSuspicious,
         isTest: leads.isTest,
         intakeBatch: leads.intakeBatch,
+        version: leads.version,
+        callCount: leads.callCount,
+        recallDate: leads.recallDate,
+        discardReason: leads.discardReason,
+        launchBucket: leads.launchBucket,
+        lancioPool: leads.lancioPool,
         queueDate: marketingQueueEntries.queueDate,
         posizione: marketingQueueEntries.posizione,
         // Telefono confrontato sulle ultime 10 cifre (PO 11/11/2026: `+39 333...` e
@@ -91,6 +102,45 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
               AND right(regexp_replace(ol.phone, '\\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\\D', '', 'g'), 10)
               AND ((ol."assignedToId" IS NOT NULL AND ol."assignedToId" <> ${bot.id})
                    OR ol.status = 'APPOINTMENT' OR ol."appointmentDate" IS NOT NULL OR ol."presentedAt" IS NOT NULL)
+        )`,
+        // ── Solo per l'ingresso allargato: la PERSONA (tutte le schede con le stesse 10 cifre). ──
+        // Il confronto dei telefoni passa da telefonoSql.ts: scritto a mano qui, la barra di D
+        // spariva nel template e a Postgres arrivava 'D' (revisione 11/11/2026).
+        assegnatoAPersona: sql<boolean>`("leads"."assignedToId" IS NOT NULL AND "leads"."assignedToId" <> ${bot.id})`,
+        chiamateScheda: sql<number>`(SELECT COUNT(*)::int FROM "callLogs" cl WHERE cl."leadId" = "leads"."id")`,
+        ultimoContatto: sql<string | null>`GREATEST(
+            (SELECT MAX(cl."createdAt") FROM "callLogs" cl JOIN leads pl ON pl.id = cl."leadId"
+              WHERE pl."companyId" = ${FENICE}
+                AND ${STESSA_PERSONA_PL}),
+            (SELECT MAX(pe.timestamp) FROM "leadEvents" pe JOIN leads pl ON pl.id = pe."leadId"
+              WHERE pl."companyId" = ${FENICE}
+                AND ${STESSA_PERSONA_PL}
+                AND (pe."eventType" IN (${sql.join(EVENTI_CONTATTO.map((e) => sql`${e}`), sql`, `)})
+                     OR (pe."eventType" = 'BOT_PUSHED' AND pe.metadata->>'result' IN ('sent','duplicate'))))
+        )::text`,
+        appuntamentoVicino: sql<boolean>`EXISTS (
+            SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
+              AND ${STESSA_PERSONA_PL}
+              AND pl."appointmentDate" >= now() - interval '14 days'
+        )`,
+        richiamoFissato: sql<boolean>`EXISTS (
+            SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
+              AND ${STESSA_PERSONA_PL}
+              AND pl.status IN ('NEW','IN_PROGRESS') AND pl."recallDate" IS NOT NULL
+        )`,
+        cliente: sql<boolean>`(EXISTS (
+            SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
+              AND ${STESSA_PERSONA_PL}
+              AND (pl."salespersonOutcome" ILIKE 'chiuso%' OR pl."discardReason" ILIKE '%gi_ cliente%')
+        ) OR EXISTS (
+            SELECT 1 FROM "gestionaleContratti" g
+            WHERE length(${soloCifreSql(sql.raw(`coalesce(g."clienteTelefono", '')`))}) >= 9
+              AND ${stessoNumeroSql(sql.raw('g."clienteTelefono"'), sql.raw('"leads"."phone"'))}
+        ))`,
+        motiviScartoPersona: sql<string | null>`(
+            SELECT string_agg(DISTINCT pl."discardReason", ' | ') FROM leads pl WHERE pl."companyId" = ${FENICE}
+              AND ${STESSA_PERSONA_PL}
+              AND pl."discardReason" IS NOT NULL
         )`,
         // Spinte database di questo lead finite con un errore suo (non "non adesso").
         tentativiFalliti: sql<number>`(
@@ -120,8 +170,10 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         return true
     })
 
-    const nonIdonei: Partial<Record<MotivoNonIdoneo, number>> = {}
-    const idonei: typeof lista = []
+    const nonIdonei: Partial<Record<MotivoNonIdoneoAllargato, number>> = {}
+    const perRegola: Partial<Record<RegolaIngresso, number>> = {}
+    const idonei: Array<(typeof lista)[number] & { regola: RegolaIngresso }> = []
+    const nowMs = Date.now()
     for (const r of lista) {
         const c: CandidatoDatabase = {
             id: r.id,
@@ -137,14 +189,35 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
             doppioneOccupato: Boolean(r.doppioneOccupato),
             tentativiFalliti: Number(r.tentativiFalliti) || 0,
         }
-        const m = motivoNonIdoneo(c)
-        if (m) nonIdonei[m] = (nonIdonei[m] ?? 0) + 1
-        else idonei.push(r)
+        if (!config.allargato) {
+            const m = motivoNonIdoneo(c)
+            if (m) nonIdonei[m] = (nonIdonei[m] ?? 0) + 1
+            else { idonei.push({ ...r, regola: 'libero_nuovo' }); perRegola.libero_nuovo = (perRegola.libero_nuovo ?? 0) + 1 }
+            continue
+        }
+        const aperto = r.status === 'NEW' || r.status === 'IN_PROGRESS'
+        const ultimo = r.ultimoContatto ? Date.parse(r.ultimoContatto) : NaN
+        const persona: PersonaDatabase = {
+            ultimoContattoMs: Number.isNaN(ultimo) ? null : ultimo,
+            chiamateScheda: Number(r.chiamateScheda) || 0,
+            callCount: r.callCount ?? 0,
+            recallDate: r.recallDate,
+            appuntamentoVicino: Boolean(r.appuntamentoVicino),
+            cliente: Boolean(r.cliente),
+            richiamoFissato: Boolean(r.richiamoFissato),
+            scartoChiuso: (r.motiviScartoPersona ?? '').split(' | ').some(scartoCheChiude),
+            assegnatoAPersona: Boolean(r.assegnatoAPersona),
+            blackFridayAperto: aperto && /black ?friday/i.test(r.funnel ?? ''),
+            lancioInLavorazione: aperto && (r.launchBucket ?? '').startsWith('LANCIO') && r.lancioPool !== 'ARCHIVIATO',
+        }
+        const esito = ingressoAllargato(c, persona, { nowMs, giorniFermo: config.giorniFermo })
+        if ('motivo' in esito) nonIdonei[esito.motivo] = (nonIdonei[esito.motivo] ?? 0) + 1
+        else { idonei.push({ ...r, regola: esito.regola }); perRegola[esito.regola] = (perRegola[esito.regola] ?? 0) + 1 }
     }
 
     // Un rifiuto definitivo per motivo di idoneita' NON si scrive: il lead puo'
     // tornare idoneo (un GDO lo libera) finche' resta nella finestra della coda.
-    const base = { pescati: lista.length, nonIdonei }
+    const base = { pescati: lista.length, nonIdonei, perRegola }
     if (idonei.length === 0) {
         return { ok: true, motivo: 'nessun_candidato', ...base, spinti: 0, assegnati: 0, definitivi: 0 }
     }
@@ -178,9 +251,11 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
             continue
         }
 
-        // Il bot l'ha preso: all'account bot, nell'infornata a senso unico. Il
-        // guardiano `assignedToId IS NULL` non ruba un lead preso a mano nel frattempo;
-        // un'infornata gia' presente (lista 133, gia' a senso unico) non si sovrascrive.
+        // Il bot l'ha preso: all'account bot, nell'infornata a senso unico. Lo stato e lo
+        // storico della scheda NON si toccano (uno scartato resta scartato: i suoi esiti
+        // successivi del bot li ignora esitoSuScartato.ts, l'APPUNTAMENTO passa). Il
+        // guardiano e' la `version` letta: un lead toccato da qualcuno nel frattempo (un GDO
+        // che lo chiama) non si sposta. Un'infornata gia' presente non si sovrascrive.
         const preso = await db.transaction(async (tx) => {
             const agg = await tx.update(leads)
                 .set({
@@ -190,18 +265,23 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
                     updatedAt: now,
                     version: sql`${leads.version} + 1`,
                 })
-                .where(and(eq(leads.id, leadId), isNull(leads.assignedToId), eq(leads.status, 'NEW')))
+                .where(config.allargato
+                    ? and(eq(leads.id, leadId), eq(leads.version, r.version))
+                    : and(eq(leads.id, leadId), isNull(leads.assignedToId), eq(leads.status, 'NEW')))
                 .returning({ id: leads.id })
             const ok = agg.length > 0
             await tx.insert(leadEvents).values([
                 ...(ok ? [{
                     id: crypto.randomUUID(), leadId, eventType: 'ASSIGNED', userId: bot.id, timestamp: now,
-                    metadata: { via: 'database_bot', source: 'marketing', assignedToUser: bot.id, motivo: 'PO 10/11/2026: lead di database al bot, senso unico' },
+                    metadata: {
+                        via: 'database_bot', source: 'marketing', assignedToUser: bot.id, regola: r.regola,
+                        daAssegnatario: r.assignedToId, statoPrima: r.status, motivo: 'PO 10-11/11/2026: lead di database al bot, senso unico',
+                    },
                     companyId: FENICE,
                 }] : []),
                 {
                     id: crypto.randomUUID(), leadId, eventType: EVENTO_DATABASE_BOT, userId: null, timestamp: now,
-                    metadata: { esito: azione.esito, assegnato: ok, intakeBatchPrima: r.intakeBatch },
+                    metadata: { esito: azione.esito, assegnato: ok, regola: r.regola, intakeBatchPrima: r.intakeBatch, discardReasonPrima: r.discardReason },
                     companyId: FENICE,
                 },
             ])
