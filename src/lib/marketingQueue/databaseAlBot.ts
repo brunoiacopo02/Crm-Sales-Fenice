@@ -16,6 +16,7 @@ import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { leads, leadEvents, marketingQueueEntries, users } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
+import { personKeyOf } from '@/lib/bot-fissatore/personKey'
 import {
     BATCH_DATABASE_BOT, EVENTO_DATABASE_BOT, azioneDaPush, leggiConfigDatabaseAlBot, motivoNonIdoneo,
     type CandidatoDatabase, type MotivoNonIdoneo,
@@ -65,14 +66,37 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         intakeBatch: leads.intakeBatch,
         queueDate: marketingQueueEntries.queueDate,
         posizione: marketingQueueEntries.posizione,
+        // Telefono confrontato sulle ultime 10 cifre (PO 11/11/2026: `+39 333...` e
+        // `333...` sono la stessa persona), con l'espressione dell'indice
+        // leads_company_phonekey_idx. Le spinte di QUESTO lead non contano: un suo
+        // push database finito in timeout si riprova (il bot risponde "duplicato").
         toccatoDalBot: sql<boolean>`EXISTS (
             SELECT 1 FROM leads al JOIN "leadEvents" ae ON ae."leadId" = al.id
-            WHERE al.phone = "leads"."phone"
+            WHERE al."companyId" = ${FENICE}
+              AND right(regexp_replace(al.phone, '\\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\\D', '', 'g'), 10)
               AND (ae."eventType" IN ('REASSIGNED_FROM_BOT','BOT_CALL_ATTEMPT','BOT_NOTE','BOT_REPORT')
-                   OR (ae."eventType" = 'BOT_PUSHED' AND ae.metadata->>'result' IN ('sent','duplicate','network_error')))
+                   OR (ae."eventType" = 'BOT_PUSHED' AND al.id <> "leads"."id" AND ae.metadata->>'result' IN ('sent','duplicate','network_error')))
         )`,
+        // Gia' gestito dal giro database, su questa scheda o su un'altra con lo stesso numero.
         giaGestito: sql<boolean>`EXISTS (
-            SELECT 1 FROM "leadEvents" ge WHERE ge."leadId" = "leads"."id" AND ge."eventType" = ${EVENTO_DATABASE_BOT}
+            SELECT 1 FROM leads gl JOIN "leadEvents" ge ON ge."leadId" = gl.id
+            WHERE gl."companyId" = ${FENICE}
+              AND right(regexp_replace(gl.phone, '\\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\\D', '', 'g'), 10)
+              AND ge."eventType" = ${EVENTO_DATABASE_BOT}
+        )`,
+        // Un'altra scheda con lo stesso numero e' in mano a una persona o ha un appuntamento.
+        doppioneOccupato: sql<boolean>`EXISTS (
+            SELECT 1 FROM leads ol
+            WHERE ol."companyId" = ${FENICE} AND ol.id <> "leads"."id"
+              AND right(regexp_replace(ol.phone, '\\D', '', 'g'), 10) = right(regexp_replace("leads"."phone", '\\D', '', 'g'), 10)
+              AND ((ol."assignedToId" IS NOT NULL AND ol."assignedToId" <> ${bot.id})
+                   OR ol.status = 'APPOINTMENT' OR ol."appointmentDate" IS NOT NULL OR ol."presentedAt" IS NOT NULL)
+        )`,
+        // Spinte database di questo lead finite con un errore suo (non "non adesso").
+        tentativiFalliti: sql<number>`(
+            SELECT COUNT(*)::int FROM "leadEvents" fe
+            WHERE fe."leadId" = "leads"."id" AND fe."eventType" = 'BOT_PUSHED'
+              AND (fe.metadata->>'motivo' = 'arruolamento_fallito' OR fe.metadata->>'result' = 'http_error')
         )`,
     }).from(marketingQueueEntries)
         .innerJoin(leads, eq(leads.id, marketingQueueEntries.leadId))
@@ -86,9 +110,15 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         .orderBy(desc(marketingQueueEntries.queueDate), asc(marketingQueueEntries.posizione))
         .limit(500)
 
-    // Lo stesso lead in piu' code: conta la riga piu' recente.
+    // Lo stesso lead in piu' code, o due schede con lo stesso numero: conta la riga
+    // piu' recente (una persona, una sola spinta per giro).
     const visti = new Set<string>()
-    const lista = righe.filter((r) => (visti.has(r.id) ? false : (visti.add(r.id), true)))
+    const lista = righe.filter((r) => {
+        const k = personKeyOf(r.phone) ?? r.id
+        if (visti.has(r.id) || visti.has(k)) return false
+        visti.add(r.id); visti.add(k)
+        return true
+    })
 
     const nonIdonei: Partial<Record<MotivoNonIdoneo, number>> = {}
     const idonei: typeof lista = []
@@ -104,6 +134,8 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
             intakeBatch: r.intakeBatch,
             toccatoDalBot: Boolean(r.toccatoDalBot),
             giaGestito: Boolean(r.giaGestito),
+            doppioneOccupato: Boolean(r.doppioneOccupato),
+            tentativiFalliti: Number(r.tentativiFalliti) || 0,
         }
         const m = motivoNonIdoneo(c)
         if (m) nonIdonei[m] = (nonIdonei[m] ?? 0) + 1
@@ -128,6 +160,9 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         const azione = azioneDaPush({ result: esito.result, motivo: 'motivo' in esito ? esito.motivo : undefined })
 
         if (azione.tipo === 'riprova') {
+            // "Non adesso" vale per tutti: il giro si ferma. Un errore di QUESTO lead
+            // no: si passa al prossimo (dopo 3 errori il lead esce da solo dai candidati).
+            if (!azione.globale) continue
             console.log(`[database-al-bot] fermato su ${leadId}: ${azione.esito}`)
             return { ok: true, motivo: 'fermato', ...base, spinti, assegnati, definitivi, fermatoPer: azione.esito }
         }

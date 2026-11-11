@@ -8,6 +8,7 @@
 //   passano. Una riga sporca non deve bloccare la coda di tutti.
 
 import { normalizePhoneStrict } from '@/lib/phoneNormalize'
+import { personKeyOf } from '@/lib/bot-fissatore/personKey'
 
 export const MAX_LEADS_PER_CODA = 500
 
@@ -131,14 +132,20 @@ export type CandidatoEsistente = {
  * telefono o stessa email) sceglie quello da riusare: prima chi è già legato a
  * questo contatto marketing, poi per telefono, poi per email; a parità il più
  * recente. Null = nessuno, il lead va creato.
+ *
+ * `perChiave` (solo lead di database, PO 11/11/2026): il telefono vale anche se
+ * scritto diverso (`+39 333...` contro `333...`), confrontando le ultime 10 cifre
+ * come `personKeyOf`. Senza, il confronto resta quello esatto di sempre.
  */
 export function scegliLeadEsistente<T extends CandidatoEsistente>(
-    cerca: { marketingContactId: string; phone: string; email: string | null },
+    cerca: { marketingContactId: string; phone: string; email: string | null; perChiave?: boolean },
     candidati: T[],
 ): T | null {
+    const chiave = cerca.perChiave ? personKeyOf(cerca.phone) : null
     const rango = (c: T): number => {
         if (c.marketingContactId === cerca.marketingContactId) return 0
         if (c.phone === cerca.phone) return 1
+        if (chiave && personKeyOf(c.phone) === chiave) return 1
         if (cerca.email && c.email && c.email.toLowerCase() === cerca.email) return 2
         return 9
     }

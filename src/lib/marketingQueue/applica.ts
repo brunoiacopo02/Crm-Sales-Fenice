@@ -15,6 +15,8 @@ import { and, eq, inArray, or, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { companies, leadEvents, leads, marketingQueueEntries } from '@/db/schema'
 import { scegliLeadEsistente, type CandidatoEsistente, type ParsedQueueLead, type Scartato } from './payload'
+import { eLeadDatabase } from './database'
+import { personKeyOf } from '@/lib/bot-fissatore/personKey'
 
 export const MARKETING_QUEUE_BUCKET = 'MKT_CODA'
 
@@ -80,6 +82,11 @@ export async function applicaCodaMarketing(input: {
         const mkIds = nuovi.map(l => l.marketingContactId)
         const match = [inArray(leads.marketingContactId, mkIds), inArray(leads.phone, phones)]
         if (emails.length) match.push(inArray(sql`lower(${leads.email})`, emails))
+        // Lead di database (PO 11/11/2026): il telefono si confronta anche sulle ultime
+        // 10 cifre, cosi' `+39 333...` ritrova la scheda salvata come `333...` invece di
+        // crearne un doppione. Stessa espressione dell'indice leads_company_phonekey_idx.
+        const chiaviDb = [...new Set(nuovi.filter(l => eLeadDatabase(l.raw)).map(l => personKeyOf(l.phone)).filter((k): k is string => !!k))]
+        if (chiaviDb.length) match.push(inArray(sql`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10)`, chiaviDb))
         const candidati: CandidatoEsistente[] = await tx
             .select({ id: leads.id, marketingContactId: leads.marketingContactId, phone: leads.phone, email: leads.email, createdAt: leads.createdAt })
             .from(leads)
@@ -92,7 +99,7 @@ export async function applicaCodaMarketing(input: {
         const eventi: Array<typeof leadEvents.$inferInsert> = []
 
         for (const l of nuovi) {
-            const esistente = scegliLeadEsistente(l, candidati)
+            const esistente = scegliLeadEsistente({ ...l, perChiave: eLeadDatabase(l.raw) }, candidati)
             let leadId: string
             let esito: EsitoRiga
             if (esistente) {

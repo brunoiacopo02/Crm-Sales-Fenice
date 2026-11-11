@@ -66,12 +66,20 @@ export interface CandidatoDatabase {
     intakeBatch: string | null
     /** Il bot ha gia' avuto questo NUMERO (push andato a segno, nota, esito, restituzione). */
     toccatoDalBot: boolean
-    /** Questo lead ha gia' un esito del giro database (aperto o rifiuto definitivo). */
+    /** Questo numero ha gia' un esito del giro database (aperto o rifiuto definitivo), su qualunque scheda. */
     giaGestito: boolean
+    /** Un'altra scheda con lo stesso numero (ultime 10 cifre) e' di una persona o ha un appuntamento. */
+    doppioneOccupato: boolean
+    /** Spinte database finite con un errore di questo lead (arruolamento fallito, errore HTTP). */
+    tentativiFalliti: number
 }
+
+/** Dopo tanti errori dello stesso lead si smette di riprovarlo: non blocca la coda. */
+export const MAX_TENTATIVI_FALLITI = 3
 
 export type MotivoNonIdoneo =
     | 'test' | 'telefono_sospetto' | 'di_qualcuno' | 'appuntamento' | 'stato' | 'batch_diverso' | 'toccato_dal_bot' | 'gia_gestito'
+    | 'doppione_occupato' | 'troppi_errori'
 
 /**
  * Un lead di database della coda si puo' dare al bot? Prima versione prudente
@@ -90,33 +98,44 @@ export function motivoNonIdoneo(l: CandidatoDatabase): MotivoNonIdoneo | null {
     if (l.status !== 'NEW') return 'stato'
     if (l.intakeBatch !== null && l.intakeBatch !== BATCH_DATABASE_BOT && l.intakeBatch !== 'DB_LISTA133_20260915') return 'batch_diverso'
     if (l.toccatoDalBot) return 'toccato_dal_bot'
+    if (l.doppioneOccupato) return 'doppione_occupato'
+    if (l.tentativiFalliti >= MAX_TENTATIVI_FALLITI) return 'troppi_errori'
     return null
 }
 
 /**
  * Cosa fa il CRM con la risposta del bot a un push database.
- * - `assegna`: il bot l'ha preso (o forse si': timeout) → il lead passa all'account
- *   bot a senso unico, e non si ripropone;
+ * - `assegna`: il bot l'ha preso → il lead passa all'account bot a senso unico, e
+ *   non si ripropone;
  * - `definitivo`: il bot non lo aprira' mai (chat esistente, numero non valido) →
  *   resta dov'e', segnato, e non si ripropone;
- * - `riprova`: non adesso (interruttore, tetti, fascia, errore) → resta in coda e
- *   il giro si ferma: gli altri lead avrebbero la stessa risposta.
+ * - `riprova`: non adesso (interruttore, tetti, fascia, timeout) → resta in coda e
+ *   il giro si ferma; un errore del solo lead (arruolamento fallito, HTTP) lo salta.
  */
-export type AzioneDatabase = { tipo: 'assegna'; esito: string } | { tipo: 'definitivo'; esito: string } | { tipo: 'riprova'; esito: string }
+export type AzioneDatabase =
+    | { tipo: 'assegna'; esito: string }
+    | { tipo: 'definitivo'; esito: string }
+    /** `globale` = vale per tutti i lead (si ferma il giro); altrimenti si salta solo questo. */
+    | { tipo: 'riprova'; esito: string; globale: boolean }
 
 export function azioneDaPush(r: { result: string; motivo?: string }): AzioneDatabase {
     switch (r.result) {
         case 'sent': return { tipo: 'assegna', esito: 'aperto' }
         case 'duplicate': return { tipo: 'assegna', esito: 'aperto_duplicato' }
-        // Un timeout non dice se l'apertura sia partita: MAI riproporlo (46 doppie
-        // aperture del 09/09). Se la chat c'e', il bot lo lavora come suo.
-        case 'network_error': return { tipo: 'assegna', esito: 'esito_incerto' }
+        // Un timeout non dice se l'apertura sia partita. Per questi lead si RIPROVA:
+        // il bot scrive il segno sulla chat PRIMA dell'invio, quindi al secondo push
+        // risponde "duplicato" senza mandare niente (e il lead passa al bot), oppure
+        // apre se la prima volta non era partito nulla. Mai lasciarlo appeso al bot
+        // senza chat. Il giro si ferma: il bot e' lento per tutti.
+        case 'network_error': return { tipo: 'riprova', esito: 'timeout', globale: true }
         case 'not_accepted':
             if (r.motivo === 'database_chat_esistente') return { tipo: 'definitivo', esito: 'chat_esistente' }
             if (r.motivo === 'telefono_non_valido') return { tipo: 'definitivo', esito: 'telefono_non_valido' }
             // La chat e' nata e l'invio e' fallito: e' del bot, che la chiude da se'.
             if (r.motivo === 'apertura_non_partita') return { tipo: 'assegna', esito: 'apertura_non_partita' }
-            return { tipo: 'riprova', esito: r.motivo ?? 'rifiutato' }
-        default: return { tipo: 'riprova', esito: r.result }
+            if (r.motivo === 'arruolamento_fallito') return { tipo: 'riprova', esito: r.motivo, globale: false }
+            return { tipo: 'riprova', esito: r.motivo ?? 'rifiutato', globale: true }
+        case 'http_error': return { tipo: 'riprova', esito: r.result, globale: false }
+        default: return { tipo: 'riprova', esito: r.result, globale: true }
     }
 }

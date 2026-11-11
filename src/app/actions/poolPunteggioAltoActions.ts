@@ -75,6 +75,9 @@ function nelPool(companyId: string) {
         isNull(leads.appointmentDate),
         isNull(leads.presentedAt),
         isNull(leads.reservedSalespersonId),
+        // Lead di DATABASE della coda (PO 10-11/11/2026): sono del bot, a senso unico, e
+        // non si danno ai GDO nemmeno a mano da qui (le eccezioni le fa Bruno lead per lead).
+        sql`not exists (select 1 from "marketingQueueEntries" mq where mq."leadId" = "leads"."id" and mq.payload->'database' = 'true'::jsonb)`,
         // Già nel pool "Lead accantonati" (tornato dal bot e messo da parte): si dà da lì.
         sql`not exists (select 1 from "leadEvents" e where e."leadId" = "leads"."id" and e."eventType" = ${EVENTO_RIDATO_PARCHEGGIATO})`,
         // "Ti ha cercato" aperto: la richiesta si smista dalla sua coda.
