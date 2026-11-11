@@ -1,7 +1,14 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.16 — 2026-11-10. Cosa cambia rispetto alla 1.15: nuovo `motivo` di
+> **Versione:** 1.17 — 2026-11-11 (NON ancora in produzione, due interruttori spenti). Cosa
+> cambia rispetto alla 1.16: campo opzionale **`database: true`** nel `BotIntakePayload` per i
+> lead di DATABASE della coda marketing, e due nuovi `motivo` di `accettato:false`:
+> **`database_non_aperto`** (riprovare più tardi) e **`database_chat_esistente`**
+> (definitivo). Solo aggiunta: senza il campo l'intake è identico. Vedi
+> [Lead di database](#lead-di-database-nuovo-in-v117).
+>
+> **Versione precedente:** 1.16 — 2026-11-10. Cosa cambiava rispetto alla 1.15: nuovo `motivo` di
 > `accettato:false` nella risposta dell'intake, **`chat_con_appuntamento`**: il numero ha
 > già una chat con un APPUNTAMENTO del bot sotto un **altro** `leadId`. Il bot non prende il
 > lead nuovo (non tocca la chat) e il CRM lo dà subito ai GDO con la nota del motivo.
@@ -282,6 +289,9 @@ interface BotIntakePayload {
   // v1.15 — SOLO sui lead AC della campagna brochure col corso noto (assente = Mario chiede il corso)
   professione?: 'sviluppatore_web_ai' | 'video_editor' | 'project_manager'
               | 'graphic_designer' | 'copywriter' | 'social_media_manager';
+
+  // v1.17 — SOLO sui lead di database della coda marketing (assente = lead ordinario)
+  database?: true;
 }
 
 interface PreviousLeadRef {
@@ -296,6 +306,34 @@ interface PreviousLeadRef {
 > senza normalizzazione (esempi: `"3331234567"`, `"333 123 4567"`, `"+39 333 1234567"`).
 > **Il bot è responsabile della normalizzazione al formato E.164** (es. `+393331234567`)
 > prima di inviare messaggi WhatsApp o effettuare chiamate.
+
+### Lead di database (nuovo in v1.17)
+
+Decisione del PO del 2026-11-10. Il marketing segna `"database": true` sul singolo lead
+della sua coda (`POST /api/webhooks/marketing-leads`). Il CRM (`src/lib/marketingQueue/
+databaseAlBot.ts`, dentro il cron `marketing-coda-bot`, interruttore `MKT_DATABASE_BOT=on`,
+spento di default) spinge al bot i lead segnati, liberi (NEW, di nessuno, senza
+appuntamento, mai avuti dal bot) con `database: true`. Questi lead **non** passano mai
+dalla coda ordinaria (`codaMarketing`).
+
+**Bot** (interruttore `app_settings.database_bot`, spento se assente): apre con una delle
+5 aperture database (`fenice_apertura_database_{bf,a,b,c,d}_v1`, MARKETING, firmate
+Marta), una sola volta, solo a un numero che non ha già una chat col bot, dentro
+`tetti_numeri` e i tetti database (30 al giorno, 6 per numero). Niente touch, nudge o
+solleciti. "Non mi interessa" = una riga di congedo + `DA_SCARTARE` "non interessato".
+
+**Risposta dell'intake** (oltre a quelle di sempre):
+
+| Risposta | Significato | Cosa fa il CRM |
+|---|---|---|
+| `accettato:true` (+ `database.variante`) | apertura partita | lead all'account bot, infornata a senso unico `DATABASE_BOT_202611`, evento `DATABASE_BOT` |
+| `accettato:false`, `motivo:"database_non_aperto"`, `dettaglio` | non adesso (spento, tetto, fascia, nessun template approvato) | lead non toccato, riproposto al giro dopo; il giro si ferma |
+| `accettato:false`, `motivo:"database_chat_esistente"` | il numero ha già una chat col bot | definitivo: evento `DATABASE_BOT`, mai riproposto |
+| `accettato:false`, `motivo:"apertura_non_partita"` | chat nata, invio fallito | lead all'account bot (la chat è sua) |
+
+**Nessun ritorno ai GDO.** I `NON_RISPOSTO`/`INTERROTTO` su questi lead trovano l'infornata
+a senso unico e chiudono il lead come `REJECTED` (`reassign.ts`), ripescabile in blocco. Un
+rifiuto dell'intake su un lead di database non passa da `gestisciRifiutoBot`.
 
 ### Campo `professione` (nuovo in v1.15)
 

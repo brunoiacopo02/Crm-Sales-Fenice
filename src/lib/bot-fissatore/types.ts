@@ -73,4 +73,9 @@ export interface BotIntakePayload {
      * Slug del bot (`social_media_manager`, ...). Assente = Mario lo chiede.
      */
     professione?: string;
+    /**
+     * Lead di DATABASE della coda marketing (contratto v1.17, PO 10/11/2026): il bot lo
+     * apre con le aperture database e lo lavora da solo. Solo `true`; assente = ordinario.
+     */
+    database?: boolean;
 }

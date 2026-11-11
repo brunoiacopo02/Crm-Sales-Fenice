@@ -5,6 +5,7 @@ import { db } from '@/db'
 import { leads, users, leadEvents } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { MARKETING_QUEUE_BUCKET } from '@/lib/marketingQueue/applica'
+import { eseguiDatabaseAlBot } from '@/lib/marketingQueue/databaseAlBot'
 import { leggiConfigCodaAlBot, pianificaCodaAlBot, funnelPerIlBot, finestraCodaAlBot, type CandidatoCoda } from '@/lib/marketingQueue/alBot'
 
 export const dynamic = 'force-dynamic'
@@ -66,6 +67,13 @@ export async function eseguiCodaAlBot(adesso: Date = new Date()) {
         eq(leads.isTest, false),
         isNull(leads.assignedToId),
         eq(leads.status, 'NEW'),
+        // Lead di DATABASE (`"database": true` nella coda, PO 10/11/2026): mai per
+        // questa strada (apertura di Mario, ritorno ai GDO). Li spinge solo
+        // eseguiDatabaseAlBot, col suo interruttore; spento, restano fermi.
+        sql`NOT EXISTS (
+            SELECT 1 FROM "marketingQueueEntries" mq
+            WHERE mq."leadId" = "leads"."id" AND mq.payload->'database' = 'true'::jsonb
+        )`,
     ))
         // I più recenti per primi: il segnale del marketing è più fresco.
         .orderBy(sql`${leads.createdAt} DESC`, asc(leads.id))
@@ -160,5 +168,14 @@ export async function GET(req: Request) {
     }
     if (!secret) return NextResponse.json({ error: 'CRON_SECRET non impostata' }, { status: 500 })
     const esito = await eseguiCodaAlBot()
-    return NextResponse.json(esito, { status: esito.ok ? 200 : 500 })
+    // Lead di database (PO 10/11/2026): giro a parte, SPENTO salvo MKT_DATABASE_BOT=on.
+    // Un suo errore non tocca l'esito della coda ordinaria.
+    let database: Awaited<ReturnType<typeof eseguiDatabaseAlBot>> | { ok: false; error: string }
+    try {
+        database = await eseguiDatabaseAlBot()
+    } catch (e) {
+        console.error('[database-al-bot] giro fallito', e)
+        database = { ok: false, error: e instanceof Error ? e.message : 'errore' }
+    }
+    return NextResponse.json({ ...esito, database }, { status: esito.ok ? 200 : 500 })
 }

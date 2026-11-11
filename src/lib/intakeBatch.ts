@@ -32,7 +32,11 @@ export const BATCH_ESCLUSI_DAI_KPI: readonly string[] = ['DB_LISTA133_20260915']
  * Chi non risponde a un messaggio WhatsApp non vale una chiamata a mano, e
  * restituirli riempirebbe la pipeline dei GDO di gente già dimostratasi fredda.
  */
-export const BATCH_SENSO_UNICO: readonly string[] = ['DB_LISTA133_20260915'];
+// `DATABASE_BOT_202611`: i lead di database della coda marketing dati al bot
+// (PO 10/11/2026, src/lib/marketingQueue/database.ts): il bot li lavora da solo,
+// nessuno torna ai GDO. NON e' nelle altre due liste: sono lead gia' contati
+// quando sono entrati, e lo restano.
+export const BATCH_SENSO_UNICO: readonly string[] = ['DB_LISTA133_20260915', 'DATABASE_BOT_202611'];
 
 /**
  * Infornate che valgono come CODA FREDDA nel ribilanciamento serale dei pool:

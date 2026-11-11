@@ -265,6 +265,12 @@ export async function pushLeadToBot(payload: BotIntakePayload): Promise<PushResu
                 // 200 anche quando scarta (`accettato:false`): fino al 29/10 lo leggevamo
                 // come `sent` e il lead restava fermo sul bot per sempre. Ora non resta lì.
                 const rifiuto = rifiutoDalCorpo(okBody);
+                if (rifiuto && payload.database === true) {
+                    // Lead di database (contratto v1.17): il rifiuto lo gestisce il giro
+                    // database (src/lib/marketingQueue/databaseAlBot.ts), MAI ridato ai GDO.
+                    meta = { result: 'not_accepted', status: res.status, motivo: rifiuto.motivo, urlHost, tentativi };
+                    break;
+                }
                 if (rifiuto) {
                     let gestione: EsitoRifiuto | 'errore';
                     try {
