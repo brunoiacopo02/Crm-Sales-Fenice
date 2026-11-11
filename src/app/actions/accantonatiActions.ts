@@ -23,6 +23,7 @@ import { contaNeiKpiSql } from "@/lib/intakeBatch"
 import { gdoAssegnabili, type GdoAssegnabile } from "@/lib/diretta/gdoAssegnabili"
 import { EVENTO_RIDATO_PARCHEGGIATO } from "@/lib/bot-fissatore/iaVocale"
 import { LANCIO_BUCKET, LANCIO_FUNNEL } from "@/lib/lancio/intake"
+import { nonToltoAlBotSql } from "@/lib/toltiAlBot"
 import { MAX_ACCANTONATI_PER_VOLTA, quantiDaAssegnare, raggruppaMotivi } from "@/lib/diretta/accantonati"
 
 /** Quanti dei più recenti si mostrano nella card. */
@@ -60,6 +61,8 @@ function accantonato(companyId: string) {
         isNull(leads.lancioPool),
         isNull(leads.humanTestCohort),
         contaNeiKpiSql(),
+        // Tolti al bot per decisione PO (evento TOLTO_AL_BOT): mai più a un GDO.
+        nonToltoAlBotSql(),
         sql`exists (select 1 from "leadEvents" e where e."leadId" = ${leads.id} and e."eventType" = ${EVENTO_RIDATO_PARCHEGGIATO})`,
         // "Ti ha cercato" aperto: la richiesta si smista dalla sua coda.
         sql`not exists (select 1 from "botContactRequests" r where r."leadId" = ${leads.id} and r."status" <> 'closed')`,
