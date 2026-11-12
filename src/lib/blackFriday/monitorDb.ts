@@ -19,7 +19,7 @@ import { contaNeiKpiSql } from '@/lib/intakeBatch'
 import { readGamificationTargets } from '@/lib/diretta/settings'
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import {
-    BF_FUNNEL, CAMBIO_FUNNEL_BF, EVENTO_BF_CONVERTITO, calcolaMonitorBf, ingressoBf, stadiSm,
+    BF_FUNNEL, CAMBIO_FUNNEL_BF, EVENTO_BF_CONVERTITO, attribuisciChiusureAltrove, calcolaMonitorBf, chiavePersona, ingressoBf, stadiSm,
     type AltriFunnelSm, type BotFunnelChat, type BotLeadBf, type DatiBotBf, type MonitorBf,
 } from './monitor'
 
@@ -99,8 +99,10 @@ export async function leggiDatiBot(
  * periodo, lead dei pool solo se assegnati, contaNeiKpiSql, funnel non TEST né
  * vuoto (getLeadSplitByFunnel / leadOverviewForCompany); stadi = stageHits sui
  * lead con almeno una data di stadio nel periodo (getCrmFunnelCounts).
+ * Torna una funzione: `chiusureAlBf` = schede la cui chiusura è contata nel
+ * Black Friday (vendite per persona, PO 12/11/2026), che qui non si conta due volte.
  */
-async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<AltriFunnelSm> {
+async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<(chiusureAlBf: Set<string>) => AltriFunnelSm> {
     const nonBf = and(
         sql`UPPER(COALESCE(${leads.funnel}, '')) NOT IN ('TEST', '')`,
         sql`UPPER(COALESCE(${leads.funnel}, '')) <> ${BF_FUNNEL}`,
@@ -114,6 +116,7 @@ async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<AltriFunnel
             contaNeiKpiSql(),
         )),
         db.select({
+            id: leads.id,
             appointmentDate: leads.appointmentDate, appointmentCreatedAt: leads.appointmentCreatedAt,
             confirmationsOutcome: leads.confirmationsOutcome, confirmationsTimestamp: leads.confirmationsTimestamp,
             salespersonOutcome: leads.salespersonOutcome, salespersonOutcomeAt: leads.salespersonOutcomeAt,
@@ -129,7 +132,10 @@ async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<AltriFunnel
             ),
         )),
     ])
-    return { lead: Number(conteggio[0]?.c ?? 0), stadi: stadiSm(righe, inizio, adesso) }
+    return chiusureAlBf => ({
+        lead: Number(conteggio[0]?.c ?? 0),
+        stadi: stadiSm(righe.map(r => (chiusureAlBf.has(r.id) ? { ...r, salespersonOutcome: null } : r)), inizio, adesso),
+    })
 }
 
 /**
@@ -168,7 +174,7 @@ async function leggi(): Promise<MonitorBf> {
         .where(and(eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isTest, false), isNotNull(users.gdoCode)))
     const idGdo = gdo.map(g => g.id)
 
-    const [righeLead, eventi, chiamate, carichi, attivita, funnelBot, turni, altriSm] = await Promise.all([
+    const [righeLead, eventi, chiamate, carichi, attivita, funnelBot, turni, altriFunnel, chiusiDal] = await Promise.all([
         db.select({
             id: leads.id, createdAt: leads.createdAt, utmSource: leads.utmSource, status: leads.status,
             assignedToId: leads.assignedToId, appointmentDate: leads.appointmentDate,
@@ -234,6 +240,17 @@ async function leggi(): Promise<MonitorBf> {
             console.error('[monitor black friday] altri funnel', e)
             return null
         }),
+
+        // Vendite per persona (PO 12/11/2026): tutte le chiusure dal 7/11, poche decine
+        // di righe. Il confronto dei telefoni si fa dopo, in memoria, sulle ultime 10
+        // cifre: nessuna regexp sui telefoni in SQL (già andata in timeout altrove).
+        db.select({
+            id: leads.id, phone: leads.phone, at: leads.salespersonOutcomeAt,
+            closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct,
+        }).from(leads).where(and(
+            eq(leads.companyId, FENICE), leadVero(),
+            eq(leads.salespersonOutcome, 'Chiuso'), gte(leads.salespersonOutcomeAt, INIZIO_BF),
+        )),
     ])
 
     // Data di ingresso BF: la conversione per chi è diventato BF dopo (ingressoBf).
@@ -244,18 +261,27 @@ async function leggi(): Promise<MonitorBf> {
     }))
     const bot = await leggiDatiBot(leadIn)
 
+    // Il telefono serve solo al bot per trovare la chat e, ridotto a chiave persona,
+    // ad agganciare le chiusure su altre schede: non entra nella cache della pagina.
+    const leadsBf = leadIn.map(l => ({
+        id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, status: l.status, assignedToId: l.assignedToId,
+        appointmentDate: l.appointmentDate, confirmationsOutcome: l.confirmationsOutcome,
+        confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
+        salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct,
+        appointmentCreatedAt: l.appointmentCreatedAt, confirmationsTimestamp: l.confirmationsTimestamp,
+        salespersonOutcomeAt: l.salespersonOutcomeAt, persona: chiavePersona(l.phone),
+    }))
+    const chiusureAltrove = chiusiDal.flatMap(c => (c.at ? [{
+        leadId: c.id, persona: chiavePersona(c.phone), at: c.at, closeAmountEur: c.closeAmountEur, closeProduct: c.closeProduct,
+    }] : []))
+    // Le chiusure passate al Black Friday escono dagli altri funnel: una vendita, un posto solo.
+    const alBf = new Set(attribuisciChiusureAltrove(leadsBf, chiusureAltrove).attribuite.map(a => a.leadChiusuraId))
+
     return calcolaMonitorBf({
         adesso,
         inizio: INIZIO_BF,
-        // Il telefono serve solo al bot per trovare la chat: non entra nei conti né nella cache della pagina.
-        leads: leadIn.map(l => ({
-            id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, status: l.status, assignedToId: l.assignedToId,
-            appointmentDate: l.appointmentDate, confirmationsOutcome: l.confirmationsOutcome,
-            confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
-            salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct,
-            appointmentCreatedAt: l.appointmentCreatedAt, confirmationsTimestamp: l.confirmationsTimestamp,
-            salespersonOutcomeAt: l.salespersonOutcomeAt,
-        })),
+        leads: leadsBf,
+        chiusureAltrove,
         eventi: eventi.map(e => ({ ...e, manuale: Boolean(e.manuale) })),
         chiamate,
         gdo: gdo.map(g => ({ id: g.id, codice: g.gdoCode, nome: nomeGdo(g), attivo: g.isActive, bot: g.isBot })),
@@ -264,7 +290,7 @@ async function leggi(): Promise<MonitorBf> {
         funnelBot: funnelBot.map(f => ({ ...f, etaMediaOre: Number(f.etaMediaOre) })),
         bot,
         turni,
-        altriSm,
+        altriSm: altriFunnel ? altriFunnel(alBf) : null,
     })
 }
 

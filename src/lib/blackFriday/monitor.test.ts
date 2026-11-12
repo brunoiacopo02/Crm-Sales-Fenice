@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT_TARGETS } from '@/lib/diretta/config'
 import {
-    CAMBIO_FUNNEL_BF, calcolaMonitorBf, canaleDi, cascataSm, eConversioneBf, giorniDal, ingressoBf, oreDiTurno, pct, sigleNumero, stadiSm,
+    CAMBIO_FUNNEL_BF, attribuisciChiusureAltrove, calcolaMonitorBf, canaleDi, chiavePersona, cascataSm, eConversioneBf, giorniDal, ingressoBf, oreDiTurno, pct, sigleNumero, stadiSm,
     type BotLeadBf, type DatiBotBf, type InputMonitorBf, type LeadBf,
 } from './monitor'
 
@@ -404,6 +404,69 @@ test('salesManager: BF totale e per giorno di ingresso, altri funnel accanto', (
     assert.equal(r.salesManager.altri!.pctFissaggio, 10)
     assert.equal(r.salesManager.altri!.pctPresenze, 50)
     assert.equal(r.salesManager.altri!.pctChiusure, 33.3)
+})
+
+test('chiavePersona: ultime 10 cifre, null se il numero è corto o manca', () => {
+    assert.equal(chiavePersona('+39 334 297-6382'), '3342976382')
+    assert.equal(chiavePersona('3342976382'), '3342976382')
+    assert.equal(chiavePersona('12345'), null)
+    assert.equal(chiavePersona(null), null)
+})
+
+test('vendite per persona: la chiusura su un\'altra scheda dopo l\'iscrizione al BF conta, una volta sola', () => {
+    const chiusa = { status: 'APPOINTMENT', appointmentDate: new Date('2026-11-08T09:00:00Z'), presentedAt: new Date('2026-11-08T09:05:00Z'), salespersonOutcome: 'Chiuso', salespersonOutcomeAt: new Date('2026-11-08T10:00:00Z') }
+    const input = base({
+        adesso: new Date('2026-11-12T18:00:00Z'),
+        leads: [
+            // Moretti: due schede BF dall'email, chiuse come doppione; ha firmato sulla scheda vecchia.
+            lead({ id: 'moretti1', createdAt: new Date('2026-11-11T09:00:00Z'), utmSource: 'Email', status: 'REJECTED', persona: '3342976382' }),
+            lead({ id: 'moretti2', createdAt: new Date('2026-11-12T09:00:00Z'), utmSource: 'Email', status: 'REJECTED', persona: '3342976382' }),
+            // Enrico: una scheda BF chiusa e una seconda scheda BF doppia.
+            lead({ id: 'enrico1', ...chiusa, closeAmountEur: 2079, closeProduct: 'gold', persona: '3408712569' }),
+            lead({ id: 'enrico2', createdAt: new Date('2026-11-09T10:00:00Z'), status: 'REJECTED', persona: '3408712569' }),
+            // Già cliente: ha firmato sulla scheda vecchia PRIMA di iscriversi al BF.
+            lead({ id: 'cliente', createdAt: new Date('2026-11-10T10:00:00Z'), utmSource: 'Email', persona: '3330000001' }),
+            // Chiusa sulla scheda BF, e con un'altra chiusura su una scheda vecchia: resta una.
+            lead({ id: 'doppia', ...chiusa, closeAmountEur: 1390, closeProduct: 'advance', persona: '3330000002' }),
+            // Senza telefono valido: non si aggancia a niente.
+            lead({ id: 'corto', persona: null }),
+        ],
+        chiusureAltrove: [
+            { leadId: 'vecchia-moretti', persona: '3342976382', at: new Date('2026-11-12T15:15:00Z'), closeAmountEur: 2890, closeProduct: 'exclusive' },
+            { leadId: 'vecchia-cliente', persona: '3330000001', at: new Date('2026-11-09T10:00:00Z'), closeAmountEur: 2079, closeProduct: 'gold' },
+            { leadId: 'vecchia-doppia', persona: '3330000002', at: new Date('2026-11-11T10:00:00Z'), closeAmountEur: 999, closeProduct: 'gold' },
+            { leadId: 'estraneo', persona: '3339999999', at: new Date('2026-11-11T10:00:00Z'), closeAmountEur: 5000, closeProduct: 'gold' },
+            { leadId: 'senza-numero', persona: null, at: new Date('2026-11-11T10:00:00Z'), closeAmountEur: 5000, closeProduct: 'gold' },
+            // Una scheda del monitor non è "un'altra scheda": non si conta due volte.
+            { leadId: 'enrico1', persona: '3408712569', at: new Date('2026-11-08T10:00:00Z'), closeAmountEur: 2079, closeProduct: 'gold' },
+        ],
+    })
+    const { leads, attribuite } = attribuisciChiusureAltrove(input.leads, input.chiusureAltrove!)
+    assert.deepEqual(attribuite.map(a => [a.leadBfId, a.leadChiusuraId, a.closeAmountEur, a.closeProduct]), [['moretti1', 'vecchia-moretti', 2890, 'exclusive']])
+    assert.equal(leads.find(l => l.id === 'moretti1')!.salespersonOutcome, 'Chiuso')
+    assert.equal(leads.find(l => l.id === 'moretti2')!.salespersonOutcome, null)
+    assert.equal(leads.find(l => l.id === 'cliente')!.salespersonOutcome, null)
+
+    const r = calcolaMonitorBf(input)
+    assert.equal(r.imbuto.totale.entrati, 7)
+    assert.equal(r.imbuto.totale.chiusi, 3)                    // Moretti, Enrico, doppia
+    assert.equal(r.imbuto.totale.euroChiusi, 2890 + 2079 + 1390)
+    // Moretti nel giorno di ingresso della sua prima scheda BF, col suo canale.
+    assert.equal(r.imbuto.giorni.find(g => g.giorno === '2026-11-11')!.dati.chiusi, 1)
+    assert.equal(r.imbuto.giorni.find(g => g.giorno === '2026-11-12')!.dati.chiusi, 0)
+    assert.deepEqual(r.canali.map(c => [c.chiave, c.chiusi]), [['meta', 2], ['email', 1]])
+    assert.equal(r.salesManager.bf.chiusi, 3)
+    assert.equal(r.salesManager.bf.euro, 2890 + 2079 + 1390)
+    assert.equal(r.controlli.ok, true)
+})
+
+test('vendite per persona: una chiusura nello stesso istante dell\'iscrizione conta; senza chiusure i lead non cambiano', () => {
+    const quando = new Date('2026-11-11T09:00:00Z')
+    const leads = [lead({ id: 'a', createdAt: quando, persona: '3331112223' })]
+    assert.equal(attribuisciChiusureAltrove(leads, [{ leadId: 'v', persona: '3331112223', at: quando, closeAmountEur: 100, closeProduct: null }]).attribuite.length, 1)
+    assert.equal(attribuisciChiusureAltrove(leads, [{ leadId: 'v', persona: '3331112223', at: new Date(quando.getTime() - 1), closeAmountEur: 100, closeProduct: null }]).attribuite.length, 0)
+    assert.equal(attribuisciChiusureAltrove(leads, []).leads, leads)
+    assert.equal(calcolaMonitorBf(base({ leads })).imbuto.totale.chiusi, 0)
 })
 
 test('eConversioneBf: BF_CONVERTITO e AC_UPDATED col cambio di funnel a BLACK FRIDAY', () => {
