@@ -8,6 +8,9 @@ import { AtRiskTable } from "@/components/gestionale/AtRiskTable"
 import { formatEur, formatDate } from "@/components/gestionale/format"
 import { loadGuadagniMese } from "@/lib/venditore/obiettiviDb"
 import { GuadagnoVenditoreCard } from "@/components/gestionale/GuadagnoVenditore"
+import { loadBonusIncassiMese } from "@/lib/gestionale/bonusIncassiDb"
+import { calcolaBonusIncassi } from "@/lib/gestionale/bonusIncassi"
+import { BonusIncassiCard } from "@/components/gestionale/BonusIncassi"
 
 export const dynamic = "force-dynamic"
 
@@ -30,8 +33,15 @@ export default async function MieiIncassiPage({ searchParams }: { searchParams: 
     const mese = pickMonth((await searchParams).mese, current)
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Rome" })
     // Il venditore vede SOLO il proprio guadagno (soloUserId = chi e' loggato).
-    const [view, lastOk, guadagni] = await Promise.all([loadSellerMonth(user.id, mese, today), loadLastOkAt(), loadGuadagniMese(mese, { soloUserId: user.id })])
+    const [view, lastOk, guadagni, bonusIncassi] = await Promise.all([
+        loadSellerMonth(user.id, mese, today),
+        loadLastOkAt(),
+        loadGuadagniMese(mese, { soloUserId: user.id }),
+        loadBonusIncassiMese(mese, { soloUserId: user.id }),
+    ])
     const mioGuadagno = guadagni[0]
+    // Solo lettura: a che punto e' col bonus sugli incassi dello stesso mese. Non cambia la commissione qui sopra.
+    const mioBonusIncassi = bonusIncassi[0]?.bonus ?? calcolaBonusIncassi(mese, [], [])
     const s = view.summary
 
     return (
@@ -47,6 +57,8 @@ export default async function MieiIncassiPage({ searchParams }: { searchParams: 
             </div>
 
             {mioGuadagno && <GuadagnoVenditoreCard g={mioGuadagno} />}
+
+            {lastOk && <BonusIncassiCard b={mioBonusIncassi} meseChiuso={mese < current} />}
 
             {!view.hasData ? (
                 <div className="rounded-xl border border-ash-200 bg-white p-8 text-center text-ash-500">
