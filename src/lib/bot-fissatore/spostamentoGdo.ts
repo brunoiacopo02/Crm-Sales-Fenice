@@ -14,10 +14,21 @@
  * bot), con le stesse regole e la stessa nota. `origine` le distingue negli eventi: la
  * misura dello spostamento sui lead GDO (4/11, 11/11) non deve mescolarle.
  *
- * Quando NON si sposta (e il bot ripiega sulla nota di sempre):
- * - non c'è un appuntamento, o la call è già passata (per quelle c'è il rifissaggio);
- * - le Conferme l'hanno già lavorato: confermato (c'è un venditore in calendario,
- *   l'incidente del 25/09), scartato, autofissato, parcheggiato da rifissare;
+ * «IL BOT SPOSTA SEMPRE» (PO 12/11/2026; corpo e risposte dell'esito SPOSTAMENTO invariati). Dal 29/10 al 12/11: 43
+ * spostamenti veri → 26% di confermati sugli esitati; 46 lead rimasti con la sola nota
+ * («SPOSTAMENTO CHIESTO») → 0 presenti. Sui dati del bot il ramo più grosso della sola
+ * nota era il lead già SCARTATO dalle Conferme (quasi sempre dopo le tre chiamate senza
+ * risposta) che in chat chiede un altro giorno: il CRM rispondeva 409 `scartato`. Poi la
+ * call già PASSATA (409 `call_passata`). Da adesso:
+ * - lo scartato dalle Conferme si sposta e lo scarto si riapre (`riapreScarto`), con lo
+ *   stesso CONFERME_DISCARD_RESET del rifissaggio in chat sui lead del bot: non è una
+ *   policy nuova, è quella del 20/10 portata anche qui;
+ * - la call passata da non più di `SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI` giorni si sposta.
+ *
+ * Quando ancora NON si sposta (e il bot ripiega sulla nota di sempre):
+ * - non c'è un appuntamento, o la call è passata da più di 7 giorni;
+ * - le Conferme l'hanno confermato (c'è un venditore in calendario, l'incidente del
+ *   25/09), autofissato, o parcheggiato da rifissare;
  * - si è già presentato o il venditore ha già un esito;
  * - il bot l'ha già spostato una volta: si sposta una volta sola.
  */
@@ -57,7 +68,6 @@ export type MotivoRifiutoSpostamento =
     | 'senza_appuntamento'
     | 'call_passata'
     | 'confermato'
-    | 'scartato'
     | 'esito_conferme'
     | 'parcheggiato'
     | 'gia_presentato'
@@ -92,17 +102,27 @@ function minutiRoma(at: Date): number {
     return h * 60 + m;
 }
 
+/** Una call passata da più di così non si sposta più: è un lead vecchio, già lavorato. */
+export const SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI = 7;
+const CALL_PASSATA_MAX_MS = SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI * 24 * 60 * 60 * 1000;
+
+/** Lo spostamento riapre uno scarto delle Conferme? (PO 12/11/2026) */
+export function riapreScarto(lead: Pick<SpostamentoLead, 'confirmationsOutcome'>): boolean {
+    return lead.confirmationsOutcome === 'scartato';
+}
+
 /** Il lead si può spostare dal bot? Non guarda la data nuova. */
 export function checkLeadSpostabile(lead: SpostamentoLead, giaSpostato: boolean, now: Date): SpostamentoCheck {
     if (lead.status !== 'APPOINTMENT' || !lead.appointmentDate) return { ok: false, motivo: 'senza_appuntamento' };
-    if (lead.appointmentDate.getTime() <= now.getTime()) return { ok: false, motivo: 'call_passata' };
+    // Passata da poco si sposta (PO 12/11/2026): il lead l'ha saltata e chiede un altro giorno.
+    if (lead.appointmentDate.getTime() < now.getTime() - CALL_PASSATA_MAX_MS) return { ok: false, motivo: 'call_passata' };
     if (lead.presentedAt || lead.salespersonOutcome) return { ok: false, motivo: 'gia_presentato' };
     // Confermato vuol dire un venditore già in calendario: lo sposta chi l'ha confermato.
     if (lead.confirmationsOutcome === 'confermato' || lead.salespersonUserId || lead.salespersonAssigned) {
         return { ok: false, motivo: 'confermato' };
     }
-    if (lead.confirmationsOutcome === 'scartato') return { ok: false, motivo: 'scartato' };
-    if (lead.confirmationsOutcome) return { ok: false, motivo: 'esito_conferme' };
+    // Scartato dalle Conferme: si sposta e lo scarto si riapre (vedi `riapreScarto`).
+    if (lead.confirmationsOutcome && !riapreScarto(lead)) return { ok: false, motivo: 'esito_conferme' };
     if (lead.confNeedsReschedule) return { ok: false, motivo: 'parcheggiato' };
     if (giaSpostato) return { ok: false, motivo: 'gia_spostato' };
     return { ok: true };

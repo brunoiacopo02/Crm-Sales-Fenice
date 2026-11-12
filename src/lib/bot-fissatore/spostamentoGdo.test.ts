@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    checkDataSpostamento, checkLeadSpostabile, giorniSpostamento, notaSpostamento, origineSpostamento, type SpostamentoLead,
+    checkDataSpostamento, checkLeadSpostabile, giorniSpostamento, notaSpostamento, origineSpostamento, riapreScarto, type SpostamentoLead,
 } from './spostamentoGdo';
 
 // mer 28/10/2026 15:00 Roma (CET dal 25/10, UTC+1)
@@ -43,12 +43,12 @@ test('lead: tutti i rifiuti', () => {
     const casi: [Partial<SpostamentoLead>, boolean, string][] = [
         [{ status: 'IN_PROGRESS' }, false, 'senza_appuntamento'],
         [{ appointmentDate: null }, false, 'senza_appuntamento'],
-        [{ appointmentDate: new Date('2026-10-28T10:00:00Z') }, false, 'call_passata'],
+        // passata da più di 7 giorni (mer 21/10 alle 14:59 di Roma)
+        [{ appointmentDate: new Date('2026-10-21T12:59:00Z') }, false, 'call_passata'],
         [{ presentedAt: new Date() }, false, 'gia_presentato'],
         [{ salespersonOutcome: 'Chiuso' }, false, 'gia_presentato'],
         [{ confirmationsOutcome: 'confermato' }, false, 'confermato'],
         [{ salespersonUserId: 'u1' }, false, 'confermato'],
-        [{ confirmationsOutcome: 'scartato' }, false, 'scartato'],
         [{ confirmationsOutcome: 'autofissato' }, false, 'esito_conferme'],
         [{ confNeedsReschedule: true }, false, 'parcheggiato'],
         [{}, true, 'gia_spostato'],
@@ -89,4 +89,28 @@ test('data: si legge in ora di Roma, non UTC', () => {
 test('nota: da e a in ora di Roma', () => {
     const n = notaSpostamento(CALL_GIO_18, new Date('2026-10-30T17:00:00+01:00'));
     assert.match(n, /^Spostato dal bot: da gio 29\/10 alle 18:00 a ven 30\/10 alle 17:00\./);
+});
+
+test('il bot sposta sempre (PO 12/11/2026): lo scartato dalle Conferme si sposta e lo scarto si riapre', () => {
+    const scartato = lead({ confirmationsOutcome: 'scartato' });
+    assert.deepEqual(checkLeadSpostabile(scartato, false, MER_15), { ok: true });
+    assert.equal(riapreScarto(scartato), true);
+    assert.equal(riapreScarto(lead()), false);
+    // Una volta sola vale anche per lo scartato; e il confermato resta di chi l'ha confermato.
+    assert.deepEqual(checkLeadSpostabile(scartato, true, MER_15), { ok: false, motivo: 'gia_spostato' });
+    assert.deepEqual(checkLeadSpostabile(lead({ confirmationsOutcome: 'scartato', salespersonUserId: 'u1' }), false, MER_15), { ok: false, motivo: 'confermato' });
+    assert.deepEqual(checkLeadSpostabile(lead({ confirmationsOutcome: 'scartato', presentedAt: new Date() }), false, MER_15), { ok: false, motivo: 'gia_presentato' });
+    assert.equal(riapreScarto(lead({ confirmationsOutcome: 'confermato' })), false);
+});
+
+test('il bot sposta sempre (PO 12/11/2026): la call passata da non più di 7 giorni si sposta', () => {
+    // saltata tre ore fa
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-28T11:00:00Z') }), false, MER_15), { ok: true });
+    // saltata ieri, e intanto scartata per le tre chiamate senza risposta
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-27T17:00:00Z'), confirmationsOutcome: 'scartato' }), false, MER_15), { ok: true });
+    // esattamente 7 giorni fa: ancora sì; un minuto in più: no
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-21T14:00:00Z') }), false, MER_15), { ok: true });
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-21T13:59:00Z') }), false, MER_15), { ok: false, motivo: 'call_passata' });
+    // la data nuova resta nel futuro e nella finestra: quella regola non cambia
+    assert.deepEqual(checkDataSpostamento(new Date('2026-10-30T17:00:00+01:00'), new Date('2026-10-27T17:00:00Z'), MER_15), { ok: true });
 });

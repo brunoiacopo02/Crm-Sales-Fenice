@@ -17,7 +17,7 @@ import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit';
 import { isSelfBooked } from '@/lib/salesPipeline/sentinel';
 import { readSalesPipelineConfig } from '@/app/actions/salesPipelineConfigActions';
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
-import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento, origineSpostamento } from '@/lib/bot-fissatore/spostamentoGdo';
+import { SPOSTAMENTO_TRIGGER, checkDataSpostamento, checkLeadSpostabile, notaSpostamento, origineSpostamento, riapreScarto } from '@/lib/bot-fissatore/spostamentoGdo';
 import { DISDETTA_VERIFICATA_REASON, buildDisdettaVerificataNote, valutaScartoDisdetta } from '@/lib/bot-fissatore/disdettaVerificata';
 import { enqueueMarketingWebhook } from '@/lib/marketing-webhooks/enqueue';
 import { ignoraEsitoSuScartato } from '@/lib/bot-fissatore/esitoSuScartato';
@@ -403,10 +403,18 @@ export async function POST(req: NextRequest) {
 
         const previous = lead.appointmentDate!;
         const newSlot = date!;
+        // «Il bot sposta sempre» (PO 12/11/2026): lo scartato dalle Conferme che in chat
+        // sceglie un altro giorno si sposta e lo scarto si riapre, con lo stesso
+        // CONFERME_DISCARD_RESET del rifissaggio più sotto (lead del bot, dal 20/10). Senza
+        // il reset il lead cambierebbe data restando fuori dalla board "da lavorare".
+        const reopensDiscard = riapreScarto(lead);
         // Lucchetto ottimistico su versione e data vecchia: se nel frattempo le Conferme
-        // hanno spostato o esitato il lead, non si scrive sopra al loro lavoro.
+        // hanno spostato o esitato il lead, non si scrive sopra al loro lavoro. L'esito
+        // delle Conferme deve essere ancora quello letto sopra: nessuno, oppure lo scarto
+        // che stiamo riaprendo.
         const updated = await db.update(leads)
             .set({
+                ...(reopensDiscard ? CONFERME_DISCARD_RESET : {}),
                 appointmentDate: newSlot,
                 ...appointmentMoveStamp(previous, newSlot, now),
                 version: lead.version + 1,
@@ -417,14 +425,34 @@ export async function POST(req: NextRequest) {
                 eq(leads.companyId, 'fenice'),
                 eq(leads.version, lead.version),
                 eq(leads.appointmentDate, previous),
-                isNull(leads.confirmationsOutcome),
+                reopensDiscard ? eq(leads.confirmationsOutcome, 'scartato') : isNull(leads.confirmationsOutcome),
             ))
             .returning({ id: leads.id });
         if (updated.length === 0) {
             return NextResponse.json({ error: 'spostamento_rifiutato', motivo: 'conflitto' }, { status: 409 });
         }
 
-        const testoNota = notaSpostamento(previous, newSlot, note);
+        const testoNota = notaSpostamento(
+            previous,
+            newSlot,
+            [
+                reopensDiscard
+                    ? `Era stato scartato dalle Conferme${lead.confirmationsDiscardReason ? ` (${lead.confirmationsDiscardReason})` : ''}: lo scarto è riaperto, il lead è di nuovo da lavorare.`
+                    : null,
+                note,
+            ].filter(Boolean).join(' ') || null,
+        );
+        if (reopensDiscard) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(),
+                leadId,
+                eventType: 'conferme_scarto_reset',
+                userId: actorUserId,
+                timestamp: now,
+                metadata: { previousDiscardReason: lead.confirmationsDiscardReason, trigger: SPOSTAMENTO_TRIGGER },
+                companyId: 'fenice',
+            }).catch((e) => console.error('[bot-fissatore] SPOSTAMENTO scarto_reset event err', e));
+        }
         await db.insert(leadEvents).values([
             {
                 id: crypto.randomUUID(),
@@ -432,7 +460,12 @@ export async function POST(req: NextRequest) {
                 eventType: 'BOT_APPOINTMENT_RESCHEDULED',
                 userId: actorUserId,
                 timestamp: now,
-                metadata: { from: previous.toISOString(), to: newSlot.toISOString(), trigger: SPOSTAMENTO_TRIGGER, origine, note: note ?? null },
+                metadata: {
+                    from: previous.toISOString(), to: newSlot.toISOString(), trigger: SPOSTAMENTO_TRIGGER, origine, note: note ?? null,
+                    // Per la misura: quanti spostamenti arrivano da uno scarto o da una call già passata.
+                    ...(reopensDiscard ? { riapreScarto: true } : {}),
+                    ...(previous.getTime() <= now.getTime() ? { callPassata: true } : {}),
+                },
                 companyId: 'fenice',
             },
             {
@@ -458,7 +491,8 @@ export async function POST(req: NextRequest) {
                 id: crypto.randomUUID(),
                 recipientUserId: u.id,
                 type: 'bot_appuntamento_spostato',
-                title: '🔄 Spostato dal bot',
+                // Come nel rifissaggio: un recuperato dopo lo scarto si deve capire dal titolo.
+                title: reopensDiscard ? '🎣 Recuperato: era scartato, il bot l\'ha spostato' : '🔄 Spostato dal bot',
                 body: `${lead.name}: ${testoNota}`,
                 metadata: { leadId },
                 status: 'unread',
