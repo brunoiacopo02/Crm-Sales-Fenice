@@ -26,7 +26,7 @@
  * - la call passata da non più di `SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI` giorni si sposta.
  *
  * Quando ancora NON si sposta (e il bot ripiega sulla nota di sempre):
- * - non c'è un appuntamento, o la call è passata da più di 7 giorni;
+ * - non c'è un appuntamento, o la call è passata da più di 60 giorni;
  * - le Conferme l'hanno confermato (c'è un venditore in calendario, l'incidente del
  *   25/09), autofissato, o parcheggiato da rifissare;
  * - si è già presentato o il venditore ha già un esito;
@@ -102,8 +102,15 @@ function minutiRoma(at: Date): number {
     return h * 60 + m;
 }
 
-/** Una call passata da più di così non si sposta più: è un lead vecchio, già lavorato. */
-export const SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI = 7;
+/**
+ * Una call passata da più di così non si sposta più: è un lead vecchio, già lavorato.
+ * 60 giorni e non 7 per il caso «in questi giorni non posso, riscrivo io» (PO 12/11/2026,
+ * chat 25906: voleva la settimana del 23/11, tre settimane dopo): il bot non sposta, gli
+ * dice di riscrivere quando sa la data e lo sposta in quel momento, anche a call ormai
+ * passata. La soglia stretta la tiene il bot (`lib/gdo-spostamento.ts`): 7 giorni di
+ * norma, 60 solo se il lead doveva riscrivere; lui sa quale dei due casi è, qui no.
+ */
+export const SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI = 60;
 const CALL_PASSATA_MAX_MS = SPOSTAMENTO_CALL_PASSATA_MAX_GIORNI * 24 * 60 * 60 * 1000;
 
 /** Lo spostamento riapre uno scarto delle Conferme? (PO 12/11/2026) */

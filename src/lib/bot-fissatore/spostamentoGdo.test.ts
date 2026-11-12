@@ -43,8 +43,8 @@ test('lead: tutti i rifiuti', () => {
     const casi: [Partial<SpostamentoLead>, boolean, string][] = [
         [{ status: 'IN_PROGRESS' }, false, 'senza_appuntamento'],
         [{ appointmentDate: null }, false, 'senza_appuntamento'],
-        // passata da più di 7 giorni (mer 21/10 alle 14:59 di Roma)
-        [{ appointmentDate: new Date('2026-10-21T12:59:00Z') }, false, 'call_passata'],
+        // passata da più di 60 giorni
+        [{ appointmentDate: new Date('2026-08-29T13:59:00Z') }, false, 'call_passata'],
         [{ presentedAt: new Date() }, false, 'gia_presentato'],
         [{ salespersonOutcome: 'Chiuso' }, false, 'gia_presentato'],
         [{ confirmationsOutcome: 'confermato' }, false, 'confermato'],
@@ -103,14 +103,16 @@ test('il bot sposta sempre (PO 12/11/2026): lo scartato dalle Conferme si sposta
     assert.equal(riapreScarto(lead({ confirmationsOutcome: 'confermato' })), false);
 });
 
-test('il bot sposta sempre (PO 12/11/2026): la call passata da non più di 7 giorni si sposta', () => {
+test('il bot sposta sempre (PO 12/11/2026): la call passata si sposta (tetto 60 giorni; i 7 giorni di norma li applica il bot)', () => {
     // saltata tre ore fa
     assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-28T11:00:00Z') }), false, MER_15), { ok: true });
     // saltata ieri, e intanto scartata per le tre chiamate senza risposta
     assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-27T17:00:00Z'), confirmationsOutcome: 'scartato' }), false, MER_15), { ok: true });
-    // esattamente 7 giorni fa: ancora sì; un minuto in più: no
-    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-21T14:00:00Z') }), false, MER_15), { ok: true });
-    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-21T13:59:00Z') }), false, MER_15), { ok: false, motivo: 'call_passata' });
+    // chat 25906: «riscrivo io», riscrive tre settimane dopo la call vecchia
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-10-07T10:00:00Z') }), false, MER_15), { ok: true });
+    // esattamente 60 giorni fa: ancora sì; un minuto in più: no
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-08-29T14:00:00Z') }), false, MER_15), { ok: true });
+    assert.deepEqual(checkLeadSpostabile(lead({ appointmentDate: new Date('2026-08-29T13:59:00Z') }), false, MER_15), { ok: false, motivo: 'call_passata' });
     // la data nuova resta nel futuro e nella finestra: quella regola non cambia
     assert.deepEqual(checkDataSpostamento(new Date('2026-10-30T17:00:00+01:00'), new Date('2026-10-27T17:00:00Z'), MER_15), { ok: true });
 });
