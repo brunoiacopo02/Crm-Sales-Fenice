@@ -242,3 +242,15 @@ test('risposta del bot: numero della chat da riaprire non disponibile = salta SO
     // `database_non_aperto` resta "fermi tutti".
     assert.deepEqual(azioneDaPush({ result: 'not_accepted', motivo: 'database_non_aperto' }), { tipo: 'riprova', esito: 'database_non_aperto', globale: true })
 })
+
+test("allargato: il lead in attesa «riscrivo io» (PO 12/11/2026) entra come gli altri quando la call vecchia è passata", () => {
+    // Scheda APPOINTMENT di un GDO, call vecchia ormai passata, ultimo contatto (la nota del
+    // bot «IL LEAD RISCRIVE LUI», o lo scarto dopo tre chiamate) piu' vecchio di giorniFermo.
+    const inAttesa = { status: 'APPOINTMENT', assignedToId: 'gdo-1', appointmentDate: new Date(ORA - 10 * G), toccatoDalBot: true }
+    assert.deepEqual(ent(inAttesa, { assegnatoAPersona: true, ultimoContattoMs: ORA - 10 * G, callCount: 2, chiamateScheda: 2 }), { regola: 'fermo', sposta: false })
+    // Finche' la call vecchia e' ancora futura, o il contatto e' fresco, resta fuori come chiunque altro.
+    assert.deepEqual(ent(inAttesa, { assegnatoAPersona: true, appuntamentoFuturo: true }), { motivo: 'appuntamento_futuro' })
+    assert.deepEqual(ent(inAttesa, { assegnatoAPersona: true, ultimoContattoMs: ORA - 2 * G }), { motivo: 'non_fermo' })
+    // Niente richiamo: l'attesa non scrive nessuna recallDate.
+    assert.deepEqual(ent(inAttesa, { assegnatoAPersona: true, ultimoContattoMs: ORA - 10 * G, richiamoFissato: false }), { regola: 'fermo', sposta: false })
+})
