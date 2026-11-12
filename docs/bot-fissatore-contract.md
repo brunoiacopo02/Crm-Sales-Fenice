@@ -1,8 +1,15 @@
 # Bot Fissatore — Contratto di Integrazione
 
 > **Destinatari:** team esterno del bot WhatsApp/telefonico.
-> **Versione:** 1.17 — 2026-11-11 (NON ancora in produzione, due interruttori spenti). Cosa
-> cambia rispetto alla 1.16: campo opzionale **`database: true`** nel `BotIntakePayload` per i
+> **Versione:** 1.18 — 2026-11-12 (NON ancora in produzione). Cosa cambia rispetto alla 1.17:
+> campo opzionale **`aperturaBf: "richiesta"`** nella risposta dell'intake, solo insieme a
+> `accettato:false` + `motivo: chat_con_appuntamento` e solo per un lead `BLACK FRIDAY`: il bot
+> manda comunque l'apertura Black Friday perché l'appuntamento dell'altro lead era stato
+> fissato **prima** dell'arrivo di questo lead al bot (PO 12/11/2026). Solo aggiunta: senza il
+> campo tutto è come nella 1.16. Vedi [Risposta attesa](#risposta-attesa).
+>
+> **Versione precedente:** 1.17 — 2026-11-11 (NON ancora in produzione, due interruttori spenti). Cosa
+> cambiava rispetto alla 1.16: campo opzionale **`database: true`** nel `BotIntakePayload` per i
 > lead di DATABASE della coda marketing, e tre nuovi `motivo` di `accettato:false`:
 > **`database_non_aperto`** (riprovare più tardi, vale per tutti), **`database_chat_attiva`**
 > (saltare solo questo lead e riproporlo più avanti) e **`database_chat_esistente`**
@@ -476,6 +483,30 @@ completato (no retry automatico).
 > ha già un appuntamento fissato su un altro lead (videocall del …)»). La chat del bot
 > resta com'era: niente esito, `crm_lead_id`, funnel o apertura. Il ritento dello stesso
 > push risponde allo stesso modo e il CRM non fa nulla (il lead non è più del bot).
+
+> **`aperturaBf: "richiesta"` (nuovo in v1.18, PO 12/11/2026).** Decisione del PO: «Va fatta
+> l'apertura se l'appuntamento è stato preso prima che il lead arrivasse al bot, se no no».
+> Vale solo per un lead `BLACK FRIDAY` rifiutato con `chat_con_appuntamento`. Decide il bot
+> (`fenice-enroll.ts`, `aperturaBfConAppuntamentoDiAltroLead`), con due date sue:
+> - **quando è stato fissato l'appuntamento** = `conversations.bot_outcome_at` della chat (il
+>   momento in cui il bot ha registrato l'APPUNTAMENTO; non la data della call);
+> - **quando il lead è arrivato al bot** = il primo intake di quel `leadId` (la riga
+>   `bot_intake` più vecchia), cioè il push stesso se è la prima volta; se il CRM rimanda un
+>   lead già arrivato, conta il primo arrivo.
+>
+> Appuntamento fissato **prima** dell'arrivo → il bot scrive la richiesta
+> (`bf_apertura_su_appuntamento`) e il cron `bf-aperture` manda UNA apertura Black Friday,
+> con le sue regole di sempre (una sola per chat, non a chi sta scrivendo, non su chat
+> passate a una persona, fermate a mano o postino di un GDO; fascia 07-23). Fissato dopo,
+> nello stesso istante, o date che non si sanno → niente apertura, corpo identico alla v1.16.
+> In tutti e due i casi la risposta resta `accettato:false` + `chat_con_appuntamento` e il
+> lead va ai GDO: sulla chat cambia solo `crm_funnel`; esito, data della call, `crm_lead_id`
+> e promemoria restano quelli del lead che ha l'appuntamento. Il campo `aperturaBf` dice solo
+> che l'apertura è stata chiesta, e il CRM lo scrive nella nota del ridato («… Il bot gli
+> manda su WhatsApp solo il primo messaggio del Black Friday, la richiesta nuova non la
+> lavora: chiamare a voce.»). Retrocompatibile nei due sensi: un CRM che non conosce il campo
+> lo ignora (nota della v1.16), un bot che non lo manda lascia tutto com'è. Qualunque valore
+> diverso da `"richiesta"` vale come assente.
 
 > **Campo `apertura` (nuovo in v1.7, informativo).** Il bot può rispondere anche con
 > `apertura: "saltata_chat_in_corso"` quando il lead che gli abbiamo appena pushato ha

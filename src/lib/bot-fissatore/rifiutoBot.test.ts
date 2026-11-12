@@ -61,3 +61,33 @@ test('chat_con_appuntamento: rifiuto letto con la data, nota chiara, al giro dei
     assert.match(notaRifiuto('chat_con_appuntamento'), /altro lead\. La richiesta nuova/)
     assert.equal(instradamentoRidato('rifiutato_dal_bot', n, null, 'BLACK FRIDAY'), 'giro_gdo')
 })
+
+// Contratto v1.18 (PO 12/11/2026): appuntamento dell'altro lead fissato PRIMA dell'arrivo
+// del lead Black Friday al bot → il bot manda comunque l'apertura BF e lo dice nel corpo.
+test('chat_con_appuntamento + aperturaBf: stessa strada (giro dei GDO), la nota dice che il messaggio BF parte', () => {
+    const r = rifiutoDalCorpo('{"ok":true,"accettato":false,"motivo":"chat_con_appuntamento","conversationId":19041,"leadIdAppuntamento":"7a3a0600","appuntamento":"2026-10-10T07:00:00+00:00","aperturaBf":"richiesta"}')
+    assert.deepEqual(r, { motivo: 'chat_con_appuntamento', appuntamento: '2026-10-10T07:00:00+00:00', leadIdAppuntamento: '7a3a0600', aperturaBf: 'richiesta' })
+    assert.equal(rifiutoDaRidare(r!.motivo), true)
+    const n = notaRifiuto(r!.motivo, { appuntamento: r!.appuntamento, aperturaBf: r!.aperturaBf })
+    assert.match(n, /^Doppione: questo numero ha già un appuntamento fissato su un altro lead/)
+    assert.match(n, /10 ottobre/)
+    assert.match(n, /09:00/)
+    assert.match(n, /primo messaggio del Black Friday/)
+    assert.match(n, /chiamare a voce/i)
+    assert.doesNotMatch(n, /non l'ha lavorata nessuno/)
+    assert.equal(instradamentoRidato('rifiutato_dal_bot', n, null, 'BLACK FRIDAY'), 'giro_gdo')
+    // Senza la data della call la nota resta leggibile.
+    assert.match(notaRifiuto('chat_con_appuntamento', { aperturaBf: 'richiesta' }), /altro lead\. Il bot gli manda/)
+})
+
+test('aperturaBf: senza il campo (bot v1.16) o con un valore che non conosciamo → nota di prima', () => {
+    const base = '{"ok":true,"accettato":false,"motivo":"chat_con_appuntamento","leadIdAppuntamento":"3d6c3213"'
+    for (const coda of ['}', ',"aperturaBf":"no"}', ',"aperturaBf":true}', ',"aperturaBf":null}', ',"aperturaBf":"RICHIESTA"}']) {
+        const r = rifiutoDalCorpo(base + coda)
+        const nota = notaRifiuto(r!.motivo, { aperturaBf: r!.aperturaBf })
+        assert.deepEqual(r, { motivo: 'chat_con_appuntamento', leadIdAppuntamento: '3d6c3213' })
+        assert.match(nota, /non l'ha lavorata nessuno/)
+    }
+    // Il campo non cambia niente sugli altri motivi.
+    assert.match(notaRifiuto('telefono_non_valido', { aperturaBf: 'richiesta' }), /^Il bot non ha preso il lead: numero non raggiungibile/)
+})

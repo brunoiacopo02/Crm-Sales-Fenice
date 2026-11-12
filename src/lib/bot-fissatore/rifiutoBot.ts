@@ -24,9 +24,17 @@
 export const MOTIVO_CHAT_CON_APPUNTAMENTO = 'chat_con_appuntamento'
 const MOTIVI_DA_RIDARE = new Set(['telefono_non_valido', 'arruolamento_fallito', MOTIVO_CHAT_CON_APPUNTAMENTO])
 
-export type CorpoIntake = { accettato?: unknown; motivo?: unknown; duplicato?: unknown; appuntamento?: unknown; leadIdAppuntamento?: unknown }
+export type CorpoIntake = { accettato?: unknown; motivo?: unknown; duplicato?: unknown; appuntamento?: unknown; leadIdAppuntamento?: unknown; aperturaBf?: unknown }
 
-export type RifiutoBot = { motivo: string; appuntamento?: string; leadIdAppuntamento?: string }
+/**
+ * `aperturaBf: 'richiesta'` (contratto v1.18, PO 12/11/2026: "Va fatta l'apertura se
+ * l'appuntamento è stato preso prima che il lead arrivasse al bot, se no no"): solo con
+ * `chat_con_appuntamento` su un lead Black Friday. Il bot ha deciso (bot `fenice-enroll.ts`
+ * `aperturaBfConAppuntamentoDiAltroLead`) che l'appuntamento dell'altro lead era stato
+ * fissato prima dell'arrivo di questo, quindi manda comunque l'apertura Black Friday su
+ * WhatsApp. Per il CRM non cambia la strada (il lead va ai GDO), cambia solo la nota.
+ */
+export type RifiutoBot = { motivo: string; appuntamento?: string; leadIdAppuntamento?: string; aperturaBf?: 'richiesta' }
 
 /** Il corpo di una risposta 2xx dell'intake dice che il lead NON è stato preso? */
 export function rifiutoDalCorpo(bodyText: string | null): RifiutoBot | null {
@@ -38,6 +46,8 @@ export function rifiutoDalCorpo(bodyText: string | null): RifiutoBot | null {
         motivo: typeof c.motivo === 'string' ? c.motivo : 'sconosciuto',
         ...(typeof c.appuntamento === 'string' && c.appuntamento ? { appuntamento: c.appuntamento } : {}),
         ...(typeof c.leadIdAppuntamento === 'string' && c.leadIdAppuntamento ? { leadIdAppuntamento: c.leadIdAppuntamento } : {}),
+        // Solo il valore che conosciamo: qualunque altra cosa vale "nessuna apertura".
+        ...(c.aperturaBf === 'richiesta' ? { aperturaBf: 'richiesta' as const } : {}),
     }
 }
 
@@ -66,12 +76,17 @@ export function numeroNonChiamabile(phone: string | null | undefined): boolean {
 }
 
 /** Nota che finisce nel ridato al GDO e nella timeline del lead. */
-export function notaRifiuto(motivo: string, dettagli: { appuntamento?: string } = {}): string {
+export function notaRifiuto(motivo: string, dettagli: { appuntamento?: string; aperturaBf?: 'richiesta' } = {}): string {
     if (motivo === MOTIVO_CHAT_CON_APPUNTAMENTO) {
         const ms = dettagli.appuntamento ? Date.parse(dettagli.appuntamento) : NaN
         const quando = Number.isNaN(ms) ? '' : ` (videocall del ${new Date(ms).toLocaleString('it-IT', {
             timeZone: 'Europe/Rome', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
         })})`
+        // v1.18: il bot gli manda comunque l'apertura Black Friday (appuntamento preso prima
+        // dell'arrivo del lead). Il GDO deve saperlo prima di chiamare.
+        if (dettagli.aperturaBf === 'richiesta') {
+            return `Doppione: questo numero ha già un appuntamento fissato su un altro lead${quando}. Il bot gli manda su WhatsApp solo il primo messaggio del Black Friday, la richiesta nuova non la lavora: chiamare a voce.`
+        }
         return `Doppione: questo numero ha già un appuntamento fissato su un altro lead${quando}. La richiesta nuova non l'ha lavorata nessuno: chiamare a voce.`
     }
     return motivo === 'telefono_non_valido'
