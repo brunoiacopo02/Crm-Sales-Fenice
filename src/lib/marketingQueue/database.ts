@@ -21,9 +21,33 @@ export const BATCH_DATABASE_BOT = 'DATABASE_BOT_202611'
 /** Evento sul lead: una riga per ogni esito definitivo del giro database. */
 export const EVENTO_DATABASE_BOT = 'DATABASE_BOT'
 
-/** Il segno del marketing sul lead della coda: solo `true` (booleano) vale. */
+/**
+ * I campi del lead della coda in cui il marketing puo' scrivere la provenienza. Quello
+ * che arriva oggi e' `funnel_origine` (vedi payload.ts); gli altri sono coperti perche'
+ * il marketing non ha ancora detto quale usera'.
+ */
+export const CAMPI_PROVENIENZA_CODA = ['funnel_origine', 'provenienza', 'funnel', 'source'] as const
+
+/**
+ * Lead di database della coda marketing: `"database": true` (booleano), oppure la
+ * PROVENIENZA uguale a "database" senza distinzione di maiuscole (PO 12/11/2026: "d'ora
+ * in poi il marketing li manda con la provenienza database").
+ * La stessa regola in SQL e' `segnoDatabaseSql`: vanno tenute uguali.
+ */
 export function eLeadDatabase(raw: unknown): boolean {
-    return !!raw && typeof raw === 'object' && !Array.isArray(raw) && (raw as Record<string, unknown>).database === true
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
+    const o = raw as Record<string, unknown>
+    if (o.database === true) return true
+    return CAMPI_PROVENIENZA_CODA.some((k) => typeof o[k] === 'string' && (o[k] as string).trim().toLowerCase() === 'database')
+}
+
+/**
+ * `eLeadDatabase` in SQL, sul payload della riga di coda (`payload` = l'espressione della
+ * colonna jsonb, es. `mq.payload`). Testo puro: chi lo usa lo passa a `sql.raw`.
+ */
+export function segnoDatabaseSql(payload: string): string {
+    const campi = CAMPI_PROVENIENZA_CODA.map((k) => `lower(btrim(coalesce(${payload}->>'${k}', '')))`).join(', ')
+    return `(${payload}->'database' = 'true'::jsonb OR 'database' IN (${campi}))`
 }
 
 export const SCAGLIONE_DATABASE_DEFAULT = 10
@@ -36,12 +60,12 @@ export interface ConfigDatabaseAlBot {
     /** Da quanti giorni di coda si pescano i lead non ancora aperti. */
     giorniCoda: number
     /**
-     * Ingresso ALLARGATO (proposta PO 11/11/2026, `MKT_DATABASE_ALLARGATO=on`): oltre ai
-     * lead liberi mai scritti dal bot entrano i lead FERMI (nessun contatto da
-     * `giorniFermo` giorni) e i lead dei GDO mai chiamati. Spento = regola di prima.
+     * Ingresso ALLARGATO (`MKT_DATABASE_ALLARGATO=on`; regola del PO del 12/11/2026, vedi
+     * `ingressoAllargato`): entrano TUTTI i lead di database della coda, tranne poche
+     * esclusioni. Spento = regola prudente di prima (solo liberi mai scritti dal bot).
      */
     allargato: boolean
-    /** `MKT_DATABASE_GIORNI_FERMO` (default 14): giorni senza nessun contatto per dire "fermo". */
+    /** `MKT_DATABASE_GIORNI_FERMO` (default 14): un contatto piu' recente di cosi' = persona "viva", non si forza. */
     giorniFermo: number
 }
 
@@ -100,20 +124,16 @@ export interface PersonaDatabase {
     chiamateScheda: number
     callCount: number
     recallDate: Date | null
-    /** Una scheda della persona ha un appuntamento futuro o degli ultimi 14 giorni. */
-    appuntamentoVicino: boolean
-    /** Cliente: esito venditore "Chiuso", nel gestionale contratti, o scartato come "gia' cliente". */
-    cliente: boolean
-    /** Una scheda della persona ha un richiamo fissato nel futuro. */
+    /** Una scheda della persona ha un appuntamento FUTURO. */
+    appuntamentoFuturo: boolean
+    /** Una scheda APERTA della persona ha un richiamo fissato nel futuro. */
     richiamoFissato: boolean
-    /** Scarto che chiude per sempre su una scheda della persona: non interessato, non in target, numero sbagliato. */
+    /** Su una scheda della persona: numero sbagliato/inesistente o richiesta di non essere contattato. */
     scartoChiuso: boolean
     /** L'assegnatario e' una persona (non l'account bot). */
     assegnatoAPersona: boolean
     /** Funnel Black Friday con la scheda ancora aperta. */
     blackFridayAperto: boolean
-    /** Lead del lancio non archiviato con la scheda ancora aperta. */
-    lancioInLavorazione: boolean
 }
 
 /**
@@ -133,66 +153,96 @@ export const EVENTI_CONTATTO = [
 export const LEAD_MAI_TOCCARE = ['306abd1c']
 
 export type MotivoNonIdoneoAllargato = MotivoNonIdoneo
-    | 'mai_toccare' | 'cliente' | 'appuntamento_vicino' | 'richiamo' | 'scarto_chiuso' | 'black_friday' | 'lancio'
-    | 'presenza_storica' | 'appuntamento_storico_gdo' | 'gdo_al_lavoro' | 'non_fermo'
+    | 'mai_toccare' | 'appuntamento_futuro' | 'richiamo' | 'scarto_chiuso' | 'black_friday' | 'gdo_al_lavoro' | 'non_fermo'
 
 export type RegolaIngresso = 'libero_nuovo' | 'gdo_mai_chiamato' | 'fermo'
 
-/** Gli scarti che chiudono per sempre (PO 11/11/2026). Confronto senza maiuscole, per parola. */
+/**
+ * Gli scarti che tengono FUORI anche dal giro "a tutti" (PO 12/11/2026): il numero non
+ * e' della persona (sbagliato, errato, inesistente) o la persona ha chiesto di non essere
+ * piu' contattata. "Non interessato", "non in target", "gia' cliente", irreperibile NON
+ * chiudono piu': "sono lead scartati un mese fa, se hanno dimostrato interesse anche ora
+ * potrebbero essere buoni". Confronto senza maiuscole.
+ */
 export function scartoCheChiude(motivo: string | null | undefined): boolean {
-    const m = (motivo ?? '').toLowerCase()
-    return /non interessat|non in target|numero (sbagliato|errato|inesistente)|inesistente|gi[aà] cliente|non contattare|opt.?out/.test(m)
+    return scartoNumeroNonValido(motivo) || scartoNonContattare(motivo)
+}
+
+/** Lo scarto dice che il numero non e' della persona: sbagliato, errato, inesistente. */
+export function scartoNumeroNonValido(motivo: string | null | undefined): boolean {
+    return /numero (sbagliato|errato|inesistente)|inesistente/.test((motivo ?? '').toLowerCase())
+}
+
+/** Lo scarto dice che la persona ha chiesto di non essere piu' contattata. */
+export function scartoNonContattare(motivo: string | null | undefined): boolean {
+    return /non (ri)?contattare|non vuole (pi[uù] )?essere (ri)?contattat|opt.?out/.test((motivo ?? '').toLowerCase())
 }
 
 /**
- * Ingresso allargato (proposta del PO dell'11/11/2026, soglie da confermare).
+ * `scartoChiuso` della persona. "Non contattare" vale su qualunque sua scheda. "Numero
+ * inesistente" vale se e' lo scarto della scheda in coda; se sta solo su un'ALTRA scheda
+ * (di solito un doppione chiuso cosi') vale soltanto quando niente prova che il numero e'
+ * buono: il bot non l'ha mai avuto e la scheda non ha appuntamenti ne' presenze. Il
+ * 12/11/2026 tre persone con una chat vera col bot o una presenza avevano un doppione
+ * scartato "numero inesistente".
+ */
+export function scartoChiusoPersona(i: { scartoScheda: string | null | undefined; scartiPersona: readonly string[]; numeroProvato: boolean }): boolean {
+    if (i.scartiPersona.some(scartoNonContattare)) return true
+    if (scartoNumeroNonValido(i.scartoScheda)) return true
+    return !i.numeroProvato && i.scartiPersona.some(scartoNumeroNonValido)
+}
+
+export type EsitoIngresso =
+    /** `sposta` = la scheda passa all'account bot (infornata a senso unico); falso = si apre solo la chat. */
+    | { regola: RegolaIngresso; sposta: boolean }
+    | { motivo: MotivoNonIdoneoAllargato }
+
+/**
+ * Ingresso allargato: la regola del PO del 12/11/2026 ("dobbiamo scrivere a tutti").
  *
- * Entra, oltre a chi entrava gia' (libero, NEW, mai scritto dal bot):
- *  - `gdo_mai_chiamato`: scheda aperta di un GDO con 0 chiamate e nessun richiamo, SUBITO;
- *    la scheda passa all'account bot (infornata a senso unico) e il GDO la perde;
- *  - `fermo`: la persona non ha avuto NESSUN contatto da `giorniFermo` giorni (chiamata,
- *    messaggio, esito), qualunque sia lo stato: scartato, esitato, libero, gia' scritto
- *    dal bot. La chat col bot la giudica poi il bot (ferma da `giorni_fermo`).
- * Resta sempre fuori: cliente, appuntamento futuro o recente, richiamo fissato, scarto
- * che chiude (non interessato, non in target, numero sbagliato), Black Friday e lancio
- * aperti, un GDO che lo sta lavorando (chiamate e non fermo), presenza gia' registrata
- * su questa scheda (spostarla cancellerebbe numeri gia' pagati ai GDO: vedi outcome route).
+ * Entrano TUTTI i lead di database messi in coda dal marketing: scartati (non interessato,
+ * non in target, irreperibili), gia' clienti, appuntamenti passati, presenze storiche,
+ * lead del lancio, lead dei GDO fermi. Restano fuori SOLO:
+ *  - Enrico Marchioretto, i lead di test, il telefono sospetto;
+ *  - numero sbagliato/inesistente e chi ha chiesto di non essere contattato (`scartoChiuso`);
+ *  - chi ha un appuntamento FUTURO, o un richiamo futuro su una scheda aperta;
+ *  - chi e' "vivo": un contatto (chiamata, messaggio da/per il bot, esito) negli ultimi
+ *    `giorniFermo` giorni: non si forza, si conta e si riporta (`non_fermo`, `gdo_al_lavoro`);
+ *  - Black Friday con la scheda aperta (ha gia' la sua apertura BF) e chi il giro database
+ *    l'ha gia' avuto. La chat (viva, opt-out, apertura BF gia' ricevuta) la giudica il bot.
+ *
+ * `sposta`: la scheda passa all'account bot solo se questo non toglie numeri a un GDO. Le
+ * metriche per GDO sono calcolate sull'assegnatario attuale (vedi /api/bot/outcome): con
+ * un appuntamento o una presenza addosso, o se e' lo scarto di un GDO, la scheda NON si
+ * sposta e si apre solo la chat. Un nuovo APPUNTAMENTO del bot lo gestisce poi la route
+ * degli esiti con le sue regole di sempre.
  */
 export function ingressoAllargato(
     l: CandidatoDatabase, p: PersonaDatabase, i: { nowMs: number; giorniFermo: number },
-): { regola: RegolaIngresso } | { motivo: MotivoNonIdoneoAllargato } {
+): EsitoIngresso {
     if (LEAD_MAI_TOCCARE.some((x) => l.id.startsWith(x))) return { motivo: 'mai_toccare' }
     if (l.isTest) return { motivo: 'test' }
     if (l.giaGestito) return { motivo: 'gia_gestito' }
     if (l.phoneSuspicious) return { motivo: 'telefono_sospetto' }
-    if (p.cliente) return { motivo: 'cliente' }
-    if (p.appuntamentoVicino) return { motivo: 'appuntamento_vicino' }
-    // Richiamo fissato su una scheda APERTA della persona (un richiamo vecchio su uno scarto o
-    // su un appuntamento chiuso non conta).
-    if (p.richiamoFissato) return { motivo: 'richiamo' }
     if (p.scartoChiuso) return { motivo: 'scarto_chiuso' }
+    if (p.appuntamentoFuturo) return { motivo: 'appuntamento_futuro' }
+    if (p.richiamoFissato) return { motivo: 'richiamo' }
     if (p.blackFridayAperto) return { motivo: 'black_friday' }
-    if (p.lancioInLavorazione) return { motivo: 'lancio' }
-    if (l.presentedAt !== null) return { motivo: 'presenza_storica' }
-    // Appuntamento (anche vecchio) su una scheda di un GDO: spostarla all'account bot gli
-    // toglierebbe l'appuntamento dai conteggi calcolati sull'assegnatario. Fuori finche'
-    // Bruno non decide (proposta: si', ma solo spostando la chat e non la scheda).
-    if (l.appointmentDate !== null && p.assegnatoAPersona) return { motivo: 'appuntamento_storico_gdo' }
-    // Le altre schede della stessa persona le giudicano i controlli "di persona" qui sopra
-    // (ultimo contatto, appuntamenti, richiami, clienti): `doppioneOccupato` non serve.
     if (l.tentativiFalliti >= MAX_TENTATIVI_FALLITI) return { motivo: 'troppi_errori' }
     if (l.intakeBatch !== null && l.intakeBatch !== BATCH_DATABASE_BOT && l.intakeBatch !== 'DB_LISTA133_20260915') return { motivo: 'batch_diverso' }
 
     const aperto = l.status === 'NEW' || l.status === 'IN_PROGRESS'
+    const storico = l.status === 'APPOINTMENT' || l.appointmentDate !== null || l.presentedAt !== null
+    const sposta = !storico && !(p.assegnatoAPersona && !aperto)
     // Di un GDO, aperto, mai chiamato: al bot subito.
-    if (p.assegnatoAPersona && aperto && p.chiamateScheda === 0 && p.callCount === 0) return { regola: 'gdo_mai_chiamato' }
+    if (p.assegnatoAPersona && aperto && p.chiamateScheda === 0 && p.callCount === 0) return { regola: 'gdo_mai_chiamato', sposta }
     // Libero, NEW, mai scritto dal bot: la regola di prima.
-    if (!l.assignedToId && l.status === 'NEW' && !l.toccatoDalBot && l.appointmentDate === null) return { regola: 'libero_nuovo' }
-    // Tutto il resto entra solo se la persona e' ferma.
+    if (!l.assignedToId && l.status === 'NEW' && !l.toccatoDalBot && l.appointmentDate === null) return { regola: 'libero_nuovo', sposta }
+    // Tutto il resto entra se la persona non e' "viva" adesso.
     const soglia = i.nowMs - i.giorniFermo * 24 * 3600_000
     const fermo = p.ultimoContattoMs === null || p.ultimoContattoMs <= soglia
     if (!fermo) return { motivo: p.assegnatoAPersona && aperto ? 'gdo_al_lavoro' : 'non_fermo' }
-    return { regola: 'fermo' }
+    return { regola: 'fermo', sposta }
 }
 
 export type MotivoNonIdoneo =
@@ -223,8 +273,8 @@ export function motivoNonIdoneo(l: CandidatoDatabase): MotivoNonIdoneo | null {
 
 /**
  * Cosa fa il CRM con la risposta del bot a un push database.
- * - `assegna`: il bot l'ha preso → il lead passa all'account bot a senso unico, e
- *   non si ripropone;
+ * - `assegna`: il bot l'ha preso → il lead passa all'account bot a senso unico (salvo
+ *   `sposta: false` dell'ingresso allargato: resta dov'e', solo segnato), e non si ripropone;
  * - `definitivo`: il bot non lo aprira' mai (chat esistente, numero non valido) →
  *   resta dov'e', segnato, e non si ripropone;
  * - `riprova`: non adesso (interruttore, tetti, fascia, timeout) → resta in coda e

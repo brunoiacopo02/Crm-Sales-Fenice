@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     BATCH_DATABASE_BOT, SCAGLIONE_DATABASE_DEFAULT, GIORNI_CODA_DATABASE_DEFAULT,
-    MAX_TENTATIVI_FALLITI, GIORNI_FERMO_DEFAULT, ingressoAllargato, scartoCheChiude, type PersonaDatabase, azioneDaPush, eLeadDatabase, leggiConfigDatabaseAlBot, motivoNonIdoneo, type CandidatoDatabase,
+    MAX_TENTATIVI_FALLITI, GIORNI_FERMO_DEFAULT, ingressoAllargato, scartoCheChiude, scartoChiusoPersona, segnoDatabaseSql, CAMPI_PROVENIENZA_CODA, type PersonaDatabase, azioneDaPush, eLeadDatabase, leggiConfigDatabaseAlBot, motivoNonIdoneo, type CandidatoDatabase,
 } from './database'
 import { scegliLeadEsistente } from './payload'
 import { ripresaVaAlGdo } from '@/lib/bot-fissatore/ripresaChat'
@@ -16,11 +16,23 @@ function c(p: Partial<CandidatoDatabase> = {}): CandidatoDatabase {
     }
 }
 
-test('segno del marketing: solo database === true (booleano) sul singolo lead', () => {
+test('segno del marketing: database === true (booleano) oppure provenienza "database" (PO 12/11/2026)', () => {
     assert.equal(eLeadDatabase({ database: true }), true)
     assert.equal(eLeadDatabase({ database: 'true' }), false)
     assert.equal(eLeadDatabase({ database: 1 }), false)
-    assert.equal(eLeadDatabase({ funnel_origine: 'database' }), false, 'il funnel di origine NON basta: e\' gia\' usato per i lead ordinari')
+    // La provenienza: oggi arriva in `funnel_origine` (payload.ts); coperti anche gli altri nomi.
+    for (const campo of ['funnel_origine', 'provenienza', 'funnel', 'source']) {
+        assert.equal(eLeadDatabase({ [campo]: 'database' }), true, campo)
+        assert.equal(eLeadDatabase({ [campo]: ' DataBase ' }), true, `${campo} maiuscole e spazi`)
+        assert.equal(eLeadDatabase({ [campo]: 'corso10ore' }), false, campo)
+        assert.equal(eLeadDatabase({ [campo]: 'database luglio' }), false, `${campo}: solo l'uguaglianza`)
+    }
+    assert.equal(eLeadDatabase({ funnel_origine: 'org', database: true }), true)
+    assert.equal(eLeadDatabase({ motivo_chiamata: 'database' }), false)
+    // La stessa regola in SQL, sugli stessi campi.
+    const q = segnoDatabaseSql('mq.payload')
+    assert.ok(q.includes(`mq.payload->'database' = 'true'::jsonb`))
+    for (const campo of CAMPI_PROVENIENZA_CODA) assert.ok(q.includes(`lower(btrim(coalesce(mq.payload->>'${campo}', '')))`), campo)
     assert.equal(eLeadDatabase({}), false)
     assert.equal(eLeadDatabase(null), false)
     assert.equal(eLeadDatabase([true]), false)
@@ -122,72 +134,97 @@ test('infornata database: a senso unico, ma NON tolta dai KPI ne\' trattata da c
     assert.ok(!BATCH_FREDDI.includes(BATCH_DATABASE_BOT))
 })
 
-// ── Ingresso allargato (proposta PO 11/11/2026: fermo da 14 giorni, GDO mai chiamati) ──
-const ORA = Date.parse('2026-11-11T17:00:00+01:00')
+// ── Ingresso allargato: la regola del PO del 12/11/2026 ("dobbiamo scrivere a tutti") ──
+const ORA = Date.parse('2026-11-12T19:00:00+01:00')
 const G = 24 * 3600_000
 function persona(p: Partial<PersonaDatabase> = {}): PersonaDatabase {
     return {
-        ultimoContattoMs: ORA - 30 * G, chiamateScheda: 0, callCount: 0, recallDate: null, appuntamentoVicino: false,
-        cliente: false, richiamoFissato: false, scartoChiuso: false, assegnatoAPersona: false,
-        blackFridayAperto: false, lancioInLavorazione: false, ...p,
+        ultimoContattoMs: ORA - 30 * G, chiamateScheda: 0, callCount: 0, recallDate: null, appuntamentoFuturo: false,
+        richiamoFissato: false, scartoChiuso: false, assegnatoAPersona: false, blackFridayAperto: false, ...p,
     }
 }
 const ent = (l: Partial<CandidatoDatabase>, p: Partial<PersonaDatabase> = {}) =>
-    ingressoAllargato(c(l), persona(p), { nowMs: ORA, giorniFermo: 14 })
+    ingressoAllargato(c(l), persona(p), { nowMs: ORA, giorniFermo: 7 })
 
 test('allargato: config spenta di default, giorni_fermo 14 di default e modificabile', () => {
     assert.equal(leggiConfigDatabaseAlBot({}).allargato, false)
     assert.equal(leggiConfigDatabaseAlBot({ MKT_DATABASE_ALLARGATO: 'on' }).allargato, true)
     assert.equal(leggiConfigDatabaseAlBot({}).giorniFermo, GIORNI_FERMO_DEFAULT)
     assert.equal(GIORNI_FERMO_DEFAULT, 14)
-    assert.equal(leggiConfigDatabaseAlBot({ MKT_DATABASE_GIORNI_FERMO: '21' }).giorniFermo, 21)
+    assert.equal(leggiConfigDatabaseAlBot({ MKT_DATABASE_GIORNI_FERMO: '7' }).giorniFermo, 7)
 })
 
-test('allargato: lead di un GDO con 0 chiamate e nessun richiamo va al bot SUBITO, anche se appena assegnato', () => {
-    assert.deepEqual(ent({ assignedToId: 'gdo-105' }, { assegnatoAPersona: true, ultimoContattoMs: ORA - G }), { regola: 'gdo_mai_chiamato' })
-    assert.deepEqual(ent({ assignedToId: 'gdo-105', status: 'IN_PROGRESS' }, { assegnatoAPersona: true, ultimoContattoMs: null }), { regola: 'gdo_mai_chiamato' })
+test('allargato: lead di un GDO aperto con 0 chiamate va al bot SUBITO e la scheda si sposta', () => {
+    assert.deepEqual(ent({ assignedToId: 'gdo-105' }, { assegnatoAPersona: true, ultimoContattoMs: ORA - G }), { regola: 'gdo_mai_chiamato', sposta: true })
+    assert.deepEqual(ent({ assignedToId: 'gdo-105', status: 'IN_PROGRESS' }, { assegnatoAPersona: true, ultimoContattoMs: null }), { regola: 'gdo_mai_chiamato', sposta: true })
 })
 
-test('allargato: un GDO che lo sta lavorando (chiamate, contatto recente) lo tiene; fermo da 14 giorni no', () => {
+test('allargato: un GDO che lo sta lavorando lo tiene (si riporta, non si forza); fermo entra', () => {
     const lavorato = { assignedToId: 'gdo-105', status: 'IN_PROGRESS' }
     assert.deepEqual(ent(lavorato, { assegnatoAPersona: true, chiamateScheda: 2, callCount: 2, ultimoContattoMs: ORA - 3 * G }), { motivo: 'gdo_al_lavoro' })
-    assert.deepEqual(ent(lavorato, { assegnatoAPersona: true, chiamateScheda: 2, callCount: 2, ultimoContattoMs: ORA - 20 * G }), { regola: 'fermo' })
+    assert.deepEqual(ent(lavorato, { assegnatoAPersona: true, chiamateScheda: 2, callCount: 2, ultimoContattoMs: ORA - 20 * G }), { regola: 'fermo', sposta: true })
 })
 
-test('allargato: scartati, esitati e gia scritti dal bot entrano solo se fermi', () => {
-    const scartato = { status: 'REJECTED', assignedToId: 'gdo-112' }
-    assert.deepEqual(ent(scartato, { assegnatoAPersona: true, chiamateScheda: 4, ultimoContattoMs: ORA - 15 * G }), { regola: 'fermo' })
-    assert.deepEqual(ent(scartato, { assegnatoAPersona: true, chiamateScheda: 4, ultimoContattoMs: ORA - 13 * G }), { motivo: 'non_fermo' })
-    assert.deepEqual(ent({ toccatoDalBot: true }, { ultimoContattoMs: ORA - 40 * G }), { regola: 'fermo' })
-    assert.deepEqual(ent({ toccatoDalBot: true }, { ultimoContattoMs: ORA - 2 * G }), { motivo: 'non_fermo' })
+test('allargato: entrano TUTTI gli scartati (non interessato, non in target, irreperibili), i clienti, il lancio', () => {
+    // `scartoChiuso` e' falso per questi motivi (vedi il test di scartoCheChiude): entrano.
+    assert.deepEqual(ent({ status: 'REJECTED' }, {}), { regola: 'fermo', sposta: true })
+    assert.deepEqual(ent({ status: 'REJECTED', toccatoDalBot: true, intakeBatch: 'DB_LISTA133_20260915' }, {}), { regola: 'fermo', sposta: true })
+    // Lancio archiviato, libero, gia' scritto dal bot.
+    assert.deepEqual(ent({ status: 'IN_PROGRESS', toccatoDalBot: true }, { callCount: 1, chiamateScheda: 1 }), { regola: 'fermo', sposta: true })
     // Libero, NEW, mai scritto dal bot: entra come prima, senza attendere.
-    assert.deepEqual(ent({}, { ultimoContattoMs: ORA - G }), { regola: 'libero_nuovo' })
-    // Esitato dal venditore ("Sparito", senza presenza) e fermo: entra.
-    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 40 * G) }, { ultimoContattoMs: ORA - 30 * G }), { regola: 'fermo' })
+    assert.deepEqual(ent({}, { ultimoContattoMs: ORA - G }), { regola: 'libero_nuovo', sposta: true })
 })
 
-test('allargato: restano SEMPRE fuori clienti, appuntamenti vicini, richiami, scarti che chiudono, BF e lancio aperti, presenze', () => {
-    assert.deepEqual(ent({}, { cliente: true }), { motivo: 'cliente' })
-    assert.deepEqual(ent({}, { appuntamentoVicino: true }), { motivo: 'appuntamento_vicino' })
-    assert.deepEqual(ent({ assignedToId: 'gdo-1' }, { assegnatoAPersona: true, richiamoFissato: true }), { motivo: 'richiamo' })
-    // Un richiamo vecchio su un appuntamento chiuso non blocca (lo blocca solo una scheda aperta).
-    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 100 * G) }, { recallDate: new Date(ORA - 100 * G), ultimoContattoMs: ORA - 90 * G }), { regola: 'fermo' })
-    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 40 * G), assignedToId: 'gdo-106' }, { assegnatoAPersona: true, chiamateScheda: 1, ultimoContattoMs: ORA - 30 * G }), { motivo: 'appuntamento_storico_gdo' })
-    assert.deepEqual(ent({ status: 'REJECTED' }, { scartoChiuso: true }), { motivo: 'scarto_chiuso' })
-    assert.deepEqual(ent({}, { blackFridayAperto: true }), { motivo: 'black_friday' })
-    assert.deepEqual(ent({}, { lancioInLavorazione: true }), { motivo: 'lancio' })
-    assert.deepEqual(ent({ status: 'APPOINTMENT', presentedAt: new Date(ORA - 60 * G) }, { ultimoContattoMs: ORA - 60 * G }), { motivo: 'presenza_storica' })
+test('allargato: la scheda NON si sposta se toglierebbe numeri a un GDO (appuntamento, presenza, suo scarto): si apre solo la chat', () => {
+    // Scarto di un GDO: resta suo.
+    assert.deepEqual(ent({ status: 'REJECTED', assignedToId: 'gdo-112' }, { assegnatoAPersona: true, chiamateScheda: 4 }), { regola: 'fermo', sposta: false })
+    // Appuntamento passato di un GDO, senza presenza.
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 40 * G), assignedToId: 'gdo-106' }, { assegnatoAPersona: true, chiamateScheda: 1 }), { regola: 'fermo', sposta: false })
+    // Presenza storica (anche cliente "Chiuso"): dentro, scheda ferma.
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 60 * G), presentedAt: new Date(ORA - 60 * G), assignedToId: 'gdo-112' }, { assegnatoAPersona: true, ultimoContattoMs: ORA - 60 * G }), { regola: 'fermo', sposta: false })
+    // Presenza senza data di appuntamento: comunque ferma.
+    assert.deepEqual(ent({ status: 'APPOINTMENT', presentedAt: new Date(ORA - 60 * G), assignedToId: 'gdo-112' }, { assegnatoAPersona: true }), { regola: 'fermo', sposta: false })
+    // Appuntamento vecchio gia' dell'account bot: non c'e' niente da spostare.
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 35 * G), assignedToId: 'bot' }, {}), { regola: 'fermo', sposta: false })
+})
+
+test('allargato: restano fuori SOLO Marchioretto, test, telefono sospetto, numero sbagliato o non contattare, appuntamento futuro, vivi, BF aperto, gia gestiti', () => {
     assert.deepEqual(ent({ id: '306abd1c-qualcosa' }), { motivo: 'mai_toccare' })
+    assert.deepEqual(ent({ isTest: true }), { motivo: 'test' })
+    assert.deepEqual(ent({ phoneSuspicious: true }), { motivo: 'telefono_sospetto' })
+    assert.deepEqual(ent({ status: 'REJECTED' }, { scartoChiuso: true }), { motivo: 'scarto_chiuso' })
+    assert.deepEqual(ent({ status: 'REJECTED' }, { appuntamentoFuturo: true }), { motivo: 'appuntamento_futuro' })
+    assert.deepEqual(ent({ assignedToId: 'gdo-1' }, { assegnatoAPersona: true, richiamoFissato: true }), { motivo: 'richiamo' })
+    assert.deepEqual(ent({}, { blackFridayAperto: true }), { motivo: 'black_friday' })
     assert.deepEqual(ent({ giaGestito: true }), { motivo: 'gia_gestito' })
+    // "Vivo": un contatto negli ultimi giorni (chat col bot, chiamata, esito).
+    assert.deepEqual(ent({ status: 'REJECTED', toccatoDalBot: true }, { ultimoContattoMs: ORA - 2 * G }), { motivo: 'non_fermo' })
+    assert.deepEqual(ent({ status: 'REJECTED', toccatoDalBot: true }, { ultimoContattoMs: ORA - 8 * G }), { regola: 'fermo', sposta: true })
+    // Un richiamo vecchio su un appuntamento chiuso non blocca.
+    assert.deepEqual(ent({ status: 'APPOINTMENT', appointmentDate: new Date(ORA - 100 * G) }, { recallDate: new Date(ORA - 100 * G), ultimoContattoMs: ORA - 90 * G }), { regola: 'fermo', sposta: false })
 })
 
-test('scarti che chiudono per sempre: non interessato, non in target, numero sbagliato/inesistente, gia cliente', () => {
-    for (const m of ['non interessato', 'Non interessata', 'non in target', 'numero inesistente', 'numero sbagliato', 'doppione - persona già cliente']) {
+test('scarti che tengono fuori: solo numero sbagliato/inesistente e richiesta di non essere contattato', () => {
+    for (const m of ['numero inesistente', 'numero sbagliato', 'Numero errato', 'non contattare', 'non vuole essere ricontattato', 'opt-out']) {
         assert.equal(scartoCheChiude(m), true, m)
     }
-    for (const m of ['irreperibile (4 tentativi vuoti)', 'solo informazioni', 'non ha potere decisionale', null]) {
+    for (const m of ['non interessato', 'Non interessata', 'non in target', 'doppione - persona già cliente', 'irreperibile (4 tentativi vuoti)', 'solo informazioni', 'non ha potere decisionale', null]) {
         assert.equal(scartoCheChiude(m), false, String(m))
     }
+})
+
+test('scarto della persona: "numero inesistente" su un doppione non chiude se il numero e\' provato buono', () => {
+    const altra = ['numero inesistente', 'non interessato']
+    // Scarto della scheda in coda: fuori comunque.
+    assert.equal(scartoChiusoPersona({ scartoScheda: 'numero inesistente', scartiPersona: ['numero inesistente'], numeroProvato: true }), true)
+    // Solo su un'altra scheda, e il bot ci ha parlato o c'e' un appuntamento: entra.
+    assert.equal(scartoChiusoPersona({ scartoScheda: 'non interessato', scartiPersona: altra, numeroProvato: true }), false)
+    assert.equal(scartoChiusoPersona({ scartoScheda: null, scartiPersona: altra, numeroProvato: true }), false)
+    // Solo su un'altra scheda e nessuna prova: fuori.
+    assert.equal(scartoChiusoPersona({ scartoScheda: null, scartiPersona: altra, numeroProvato: false }), true)
+    // "Non contattare" vale su qualunque scheda, sempre.
+    assert.equal(scartoChiusoPersona({ scartoScheda: null, scartiPersona: ['non contattare'], numeroProvato: true }), true)
+    assert.equal(scartoChiusoPersona({ scartoScheda: 'non interessato', scartiPersona: ['non interessato', 'doppione - persona già cliente'], numeroProvato: false }), false)
 })
 
 test('risposta del bot: chat ancora viva o quota riaperture = si salta il lead, il giro continua', () => {

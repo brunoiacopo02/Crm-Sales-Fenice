@@ -6,6 +6,7 @@ import { leads, users, leadEvents } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { MARKETING_QUEUE_BUCKET } from '@/lib/marketingQueue/applica'
 import { eseguiDatabaseAlBot } from '@/lib/marketingQueue/databaseAlBot'
+import { segnoDatabaseSql } from '@/lib/marketingQueue/database'
 import { leggiConfigCodaAlBot, pianificaCodaAlBot, funnelPerIlBot, finestraCodaAlBot, type CandidatoCoda } from '@/lib/marketingQueue/alBot'
 
 export const dynamic = 'force-dynamic'
@@ -70,9 +71,10 @@ export async function eseguiCodaAlBot(adesso: Date = new Date()) {
         // Lead di DATABASE (`"database": true` nella coda, PO 10/11/2026): mai per
         // questa strada (apertura di Mario, ritorno ai GDO). Li spinge solo
         // eseguiDatabaseAlBot, col suo interruttore; spento, restano fermi.
+        // Il segno: `database: true` o provenienza "database" (PO 12/11/2026, segnoDatabaseSql).
         sql`NOT EXISTS (
             SELECT 1 FROM "marketingQueueEntries" mq
-            WHERE mq."leadId" = "leads"."id" AND mq.payload->'database' = 'true'::jsonb
+            WHERE mq."leadId" = "leads"."id" AND ${sql.raw(segnoDatabaseSql('mq.payload'))}
         )`,
     ))
         // I più recenti per primi: il segnale del marketing è più fresco.

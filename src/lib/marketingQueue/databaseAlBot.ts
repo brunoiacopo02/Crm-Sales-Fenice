@@ -17,10 +17,11 @@ import { db } from '@/db'
 import { leads, leadEvents, marketingQueueEntries, users } from '@/db/schema'
 import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { personKeyOf } from '@/lib/bot-fissatore/personKey'
-import { soloCifreSql, stessoNumeroSql } from './telefonoSql'
+import { stessoNumeroSql } from './telefonoSql'
 import {
     BATCH_DATABASE_BOT, EVENTI_CONTATTO, EVENTO_DATABASE_BOT, azioneDaPush, ingressoAllargato, leggiConfigDatabaseAlBot, motivoNonIdoneo,
-    scartoCheChiude, type CandidatoDatabase, type MotivoNonIdoneoAllargato, type PersonaDatabase, type RegolaIngresso,
+    scartoChiusoPersona, segnoDatabaseSql, type CandidatoDatabase, type ConfigDatabaseAlBot, type EsitoIngresso, type PersonaDatabase,
+    type MotivoNonIdoneoAllargato, type RegolaIngresso,
 } from './database'
 
 const FENICE = 'fenice'
@@ -37,18 +38,28 @@ export type EsitoGiroDatabase =
         spinti: number
         assegnati: number
         definitivi: number
+        /** Chat aperte dal bot senza spostare la scheda (storico di un GDO da non toccare). */
+        apertiSenzaSpostare?: number
         fermatoPer?: string
     }
 
-export async function eseguiDatabaseAlBot(env: Record<string, string | undefined> = process.env): Promise<EsitoGiroDatabase> {
-    const config = leggiConfigDatabaseAlBot(env)
-    if (!config.attivo) return { ok: true, motivo: 'spento' }
-
+/** L'account bot di Fenice (l'assegnatario dei lead dati al bot). */
+export async function accountBotFenice(): Promise<{ id: string } | undefined> {
     const [bot] = await db.select({ id: users.id }).from(users).where(and(
         eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isBot, true), eq(users.isActive, true),
     )).limit(1)
-    if (!bot) return { ok: false, error: 'account bot non trovato' }
+    return bot
+}
 
+/**
+ * Lettura e giudizio dei lead di database della coda: SOLA LETTURA, nessuna spinta. La usa
+ * il giro (`eseguiDatabaseAlBot`) e la prova a secco (scripts/diretta/dryrun-database-tutti-12-11.ts).
+ * `ancheSenzaSegno` (solo per la prova a secco) guarda anche le righe che il marketing
+ * non ha segnato `"database": true`.
+ */
+export async function leggiCodaDatabase(
+    config: ConfigDatabaseAlBot, bot: { id: string }, opzioni: { ancheSenzaSegno?: boolean; nowMs?: number } = {},
+) {
     // Una scheda `pl` della stessa persona del lead letto (ultime 10 cifre).
     const STESSA_PERSONA_PL = stessoNumeroSql(sql.raw('pl.phone'), sql.raw('"leads"."phone"'))
 
@@ -57,6 +68,7 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
     // `"leads"."phone"` per esteso nella sottoquery: vedi la trappola nel cron
     // marketing-coda-bot (Drizzle toglie la qualificazione).
     const righe = await db.select({
+        rigaCodaId: marketingQueueEntries.id,
         id: leads.id,
         name: leads.name,
         phone: leads.phone,
@@ -118,25 +130,18 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
                 AND (pe."eventType" IN (${sql.join(EVENTI_CONTATTO.map((e) => sql`${e}`), sql`, `)})
                      OR (pe."eventType" = 'BOT_PUSHED' AND pe.metadata->>'result' IN ('sent','duplicate'))))
         )::text`,
-        appuntamentoVicino: sql<boolean>`EXISTS (
+        // PO 12/11/2026: fuori solo l'appuntamento FUTURO (quelli passati entrano) e il
+        // richiamo futuro su una scheda aperta. I clienti entrano: nessun controllo.
+        appuntamentoFuturo: sql<boolean>`EXISTS (
             SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
               AND ${STESSA_PERSONA_PL}
-              AND pl."appointmentDate" >= now() - interval '14 days'
+              AND pl."appointmentDate" >= now()
         )`,
         richiamoFissato: sql<boolean>`EXISTS (
             SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
               AND ${STESSA_PERSONA_PL}
-              AND pl.status IN ('NEW','IN_PROGRESS') AND pl."recallDate" IS NOT NULL
+              AND pl.status IN ('NEW','IN_PROGRESS') AND pl."recallDate" >= now()
         )`,
-        cliente: sql<boolean>`(EXISTS (
-            SELECT 1 FROM leads pl WHERE pl."companyId" = ${FENICE}
-              AND ${STESSA_PERSONA_PL}
-              AND (pl."salespersonOutcome" ILIKE 'chiuso%' OR pl."discardReason" ILIKE '%gi_ cliente%')
-        ) OR EXISTS (
-            SELECT 1 FROM "gestionaleContratti" g
-            WHERE length(${soloCifreSql(sql.raw(`coalesce(g."clienteTelefono", '')`))}) >= 9
-              AND ${stessoNumeroSql(sql.raw('g."clienteTelefono"'), sql.raw('"leads"."phone"'))}
-        ))`,
         motiviScartoPersona: sql<string | null>`(
             SELECT string_agg(DISTINCT pl."discardReason", ' | ') FROM leads pl WHERE pl."companyId" = ${FENICE}
               AND ${STESSA_PERSONA_PL}
@@ -153,7 +158,7 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         .where(and(
             eq(marketingQueueEntries.companyId, FENICE),
             eq(leads.companyId, FENICE),
-            sql`${marketingQueueEntries.payload}->'database' = 'true'::jsonb`,
+            opzioni.ancheSenzaSegno ? undefined : sql.raw(segnoDatabaseSql('"marketingQueueEntries"."payload"')),
             sql`${marketingQueueEntries.queueDate} >= ((now() AT TIME ZONE 'Europe/Rome')::date - ${config.giorniCoda}::int)`,
         ))
         // Coda piu' recente prima, poi l'ordine del marketing.
@@ -170,11 +175,8 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         return true
     })
 
-    const nonIdonei: Partial<Record<MotivoNonIdoneoAllargato, number>> = {}
-    const perRegola: Partial<Record<RegolaIngresso, number>> = {}
-    const idonei: Array<(typeof lista)[number] & { regola: RegolaIngresso }> = []
-    const nowMs = Date.now()
-    for (const r of lista) {
+    const nowMs = opzioni.nowMs ?? Date.now()
+    return lista.map((r) => {
         const c: CandidatoDatabase = {
             id: r.id,
             status: r.status,
@@ -191,9 +193,8 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         }
         if (!config.allargato) {
             const m = motivoNonIdoneo(c)
-            if (m) nonIdonei[m] = (nonIdonei[m] ?? 0) + 1
-            else { idonei.push({ ...r, regola: 'libero_nuovo' }); perRegola.libero_nuovo = (perRegola.libero_nuovo ?? 0) + 1 }
-            continue
+            const esito: EsitoIngresso = m ? { motivo: m } : { regola: 'libero_nuovo', sposta: true }
+            return { ...r, esito }
         }
         const aperto = r.status === 'NEW' || r.status === 'IN_PROGRESS'
         const ultimo = r.ultimoContatto ? Date.parse(r.ultimoContatto) : NaN
@@ -202,17 +203,36 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
             chiamateScheda: Number(r.chiamateScheda) || 0,
             callCount: r.callCount ?? 0,
             recallDate: r.recallDate,
-            appuntamentoVicino: Boolean(r.appuntamentoVicino),
-            cliente: Boolean(r.cliente),
+            appuntamentoFuturo: Boolean(r.appuntamentoFuturo),
             richiamoFissato: Boolean(r.richiamoFissato),
-            scartoChiuso: (r.motiviScartoPersona ?? '').split(' | ').some(scartoCheChiude),
+            scartoChiuso: scartoChiusoPersona({
+                scartoScheda: r.discardReason,
+                scartiPersona: (r.motiviScartoPersona ?? '').split(' | ').filter(Boolean),
+                numeroProvato: Boolean(r.toccatoDalBot) || r.status === 'APPOINTMENT' || r.appointmentDate !== null || r.presentedAt !== null,
+            }),
             assegnatoAPersona: Boolean(r.assegnatoAPersona),
             blackFridayAperto: aperto && /black ?friday/i.test(r.funnel ?? ''),
-            lancioInLavorazione: aperto && (r.launchBucket ?? '').startsWith('LANCIO') && r.lancioPool !== 'ARCHIVIATO',
         }
-        const esito = ingressoAllargato(c, persona, { nowMs, giorniFermo: config.giorniFermo })
-        if ('motivo' in esito) nonIdonei[esito.motivo] = (nonIdonei[esito.motivo] ?? 0) + 1
-        else { idonei.push({ ...r, regola: esito.regola }); perRegola[esito.regola] = (perRegola[esito.regola] ?? 0) + 1 }
+        return { ...r, esito: ingressoAllargato(c, persona, { nowMs, giorniFermo: config.giorniFermo }) }
+    })
+}
+
+export type RigaCodaDatabase = Awaited<ReturnType<typeof leggiCodaDatabase>>[number]
+
+export async function eseguiDatabaseAlBot(env: Record<string, string | undefined> = process.env): Promise<EsitoGiroDatabase> {
+    const config = leggiConfigDatabaseAlBot(env)
+    if (!config.attivo) return { ok: true, motivo: 'spento' }
+
+    const bot = await accountBotFenice()
+    if (!bot) return { ok: false, error: 'account bot non trovato' }
+
+    const lista = await leggiCodaDatabase(config, bot)
+    const nonIdonei: Partial<Record<MotivoNonIdoneoAllargato, number>> = {}
+    const perRegola: Partial<Record<RegolaIngresso, number>> = {}
+    const idonei: Array<RigaCodaDatabase & { regola: RegolaIngresso; sposta: boolean }> = []
+    for (const r of lista) {
+        if ('motivo' in r.esito) nonIdonei[r.esito.motivo] = (nonIdonei[r.esito.motivo] ?? 0) + 1
+        else { idonei.push({ ...r, regola: r.esito.regola, sposta: r.esito.sposta }); perRegola[r.esito.regola] = (perRegola[r.esito.regola] ?? 0) + 1 }
     }
 
     // Un rifiuto definitivo per motivo di idoneita' NON si scrive: il lead puo'
@@ -222,7 +242,7 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         return { ok: true, motivo: 'nessun_candidato', ...base, spinti: 0, assegnati: 0, definitivi: 0 }
     }
 
-    let spinti = 0, assegnati = 0, definitivi = 0
+    let spinti = 0, assegnati = 0, definitivi = 0, apertiSenzaSpostare = 0
     for (const r of idonei.slice(0, config.scaglione)) {
         const leadId = r.id
         const esito = await pushLeadToBot({
@@ -237,7 +257,7 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
             // no: si passa al prossimo (dopo 3 errori il lead esce da solo dai candidati).
             if (!azione.globale) continue
             console.log(`[database-al-bot] fermato su ${leadId}: ${azione.esito}`)
-            return { ok: true, motivo: 'fermato', ...base, spinti, assegnati, definitivi, fermatoPer: azione.esito }
+            return { ok: true, motivo: 'fermato', ...base, spinti, assegnati, definitivi, apertiSenzaSpostare, fermatoPer: azione.esito }
         }
 
         const now = new Date()
@@ -248,6 +268,22 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
                 companyId: FENICE,
             })
             definitivi++
+            continue
+        }
+
+        // Scheda che NON si sposta (PO 12/11/2026: appuntamento o presenza addosso, o scarto
+        // di un GDO: spostarla toglierebbe quei numeri dai conteggi del GDO). Il bot ha
+        // aperto la chat; qui resta solo il segno, che impedisce una seconda spinta.
+        if (!r.sposta) {
+            await db.insert(leadEvents).values({
+                id: crypto.randomUUID(), leadId, eventType: EVENTO_DATABASE_BOT, userId: null, timestamp: now,
+                metadata: {
+                    esito: azione.esito, assegnato: false, spostata: false, regola: r.regola, assegnatario: r.assignedToId, statoPrima: r.status,
+                    motivo: 'PO 12/11/2026: chat aperta dal bot, scheda lasciata dov\'e\' (storico del GDO intatto)',
+                },
+                companyId: FENICE,
+            })
+            apertiSenzaSpostare++
             continue
         }
 
@@ -291,5 +327,5 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         else console.warn(`[database-al-bot] ${leadId}: aperto dal bot ma nel frattempo non era piu' libero, non assegnato`)
     }
 
-    return { ok: true, motivo: 'ok', ...base, spinti, assegnati, definitivi }
+    return { ok: true, motivo: 'ok', ...base, spinti, assegnati, definitivi, apertiSenzaSpostare }
 }
