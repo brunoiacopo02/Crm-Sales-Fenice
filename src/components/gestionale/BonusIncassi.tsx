@@ -67,10 +67,10 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
                 <div className="shrink-0 sm:w-56">
                     <div className={`text-4xl font-bold ${b.raggiunto ? "text-emerald-700" : "text-ash-800"}`}>{formatPct(b.pctEuro)}</div>
                     <div className="mt-1 text-sm text-ash-600">
-                        {formatEur(b.pagatoCents)} pagati su {formatEur(b.firmatoCents)} firmati
+                        {formatEur(b.incassatoMeseCents)} incassati nel mese su {formatEur(b.firmatoCents)} firmati
                     </div>
                     <div className="mt-0.5 text-xs text-ash-500">
-                        {b.pagati === 1 ? "1 contratto pagato" : `${b.pagati} contratti pagati`} su {b.firmati === 1 ? "1 firmato" : `${b.firmati} firmati`}
+                        {b.pagati === 1 ? "1 contratto saldato" : `${b.pagati} contratti saldati`} su {b.firmati === 1 ? "1 firmato" : `${b.firmati} firmati`}
                     </div>
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
@@ -80,7 +80,7 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
                         aria-valuemin={0}
                         aria-valuemax={100}
                         aria-valuenow={Math.floor(pct)}
-                        aria-label="Importo dei contratti pagati sul totale del firmato"
+                        aria-label="Incassato nel mese sul totale del firmato"
                     >
                         <div className={`h-3 rounded-full ${b.raggiunto ? "bg-emerald-500" : "bg-brand-orange"}`} style={{ width: `${Math.min(100, pct)}%` }} />
                         {b.scaglioni.map(s => (
@@ -90,7 +90,7 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
                     {attivo && (
                         <div className="flex flex-wrap gap-2 text-xs">
                             {b.scaglioni.map(s => {
-                                const preso = scaglionePreso(s, b.pagatoCents, b.firmatoCents)
+                                const preso = scaglionePreso(s, b.incassatoMeseCents, b.firmatoCents)
                                 return (
                                     <div key={s.minPct} className={`rounded-md px-2 py-1 ${preso ? "bg-emerald-50 font-semibold text-emerald-700 ring-1 ring-emerald-300" : "bg-ash-50 text-ash-600"}`}>
                                         dall&apos;{s.minPct}% → {formatBonus(s.bonusPct)}
@@ -113,7 +113,7 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
             )}
 
             <div className="text-xs text-ash-500">
-                La percentuale è sugli euro: importo dei contratti che hai firmato nel mese e che sono stati pagati per intero entro la fine dello stesso mese, diviso l&apos;importo di tutti i contratti che hai firmato nel mese.
+                La percentuale è sugli euro: quanto è stato incassato entro la fine del mese sui contratti che hai firmato nel mese, diviso l&apos;importo di tutti i contratti che hai firmato nel mese. Conta anche l&apos;acconto di un contratto non ancora saldato; un contratto finanziato e saldato conta per tutto il suo importo.
                 {b.standBy > 0 && ` ${contratti(b.standBy)} in stand-by: ${b.standBy === 1 ? "non conta finché non viene convalidato" : "non contano finché non vengono convalidati"}.`}
             </div>
         </div>

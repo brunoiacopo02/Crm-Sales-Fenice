@@ -43,7 +43,7 @@ export function BonusIncassiVenditoriTable({ ym }: { ym: string }) {
             <div>
                 <h2 className="font-semibold text-ash-800">Bonus incassi del mese</h2>
                 <div className="max-w-3xl text-xs text-ash-500">
-                    Importo dei contratti <b>firmati</b> nel mese (dal gestionale, stand-by esclusi) e quanta parte viene da contratti <b>pagati per intero</b> entro la fine dello stesso mese. La percentuale è sugli euro, non sul numero dei contratti.{" "}
+                    Importo dei contratti <b>firmati</b> nel mese (dal gestionale, stand-by esclusi) e quanto di quell&apos;importo è stato <b>incassato</b> entro la fine dello stesso mese, acconti compresi. La percentuale è sugli euro, non sul numero dei contratti.{" "}
                     {scaglioni.length === 0
                         ? "In questo mese il bonus non c'era ancora (parte da ottobre 2026)."
                         : `Soglie: ${scaglioni.map(s => `dall'${s.minPct}% ${formatBonus(s.bonusPct)}`).join(", ")}.`}
@@ -61,9 +61,9 @@ export function BonusIncassiVenditoriTable({ ym }: { ym: string }) {
                             <tr>
                                 <th className="px-3 py-2">Venditore</th>
                                 <th className="px-3 py-2 text-right">Firmato</th>
-                                <th className="px-3 py-2 text-right">Pagato nel mese</th>
+                                <th className="px-3 py-2 text-right">Incassato nel mese</th>
                                 <th className="px-3 py-2 text-right">Percentuale</th>
-                                <th className="px-3 py-2 text-right">Contratti</th>
+                                <th className="px-3 py-2 text-right">Contratti saldati</th>
                                 <th className="px-3 py-2">Scaglione</th>
                                 <th className="px-3 py-2">Allo scaglione dopo</th>
                             </tr>
@@ -87,7 +87,7 @@ export function BonusIncassiVenditoriTable({ ym }: { ym: string }) {
                                                 </button>
                                             </td>
                                             <td className="whitespace-nowrap px-3 py-2 text-right text-ash-700">{formatEur(b.firmatoCents)}</td>
-                                            <td className="whitespace-nowrap px-3 py-2 text-right text-ash-700">{formatEur(b.pagatoCents)}</td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-right text-ash-700">{formatEur(b.incassatoMeseCents)}</td>
                                             <td className={`whitespace-nowrap px-3 py-2 text-right font-bold ${b.raggiunto ? "text-emerald-700" : "text-ash-900"}`}>{formatPct(b.pctEuro)}</td>
                                             <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-ash-500">{b.firmati > 0 ? `${b.pagati} su ${b.firmati}` : "—"}</td>
                                             <td className="whitespace-nowrap px-3 py-2">
@@ -97,7 +97,7 @@ export function BonusIncassiVenditoriTable({ ym }: { ym: string }) {
                                             </td>
                                             <td className="whitespace-nowrap px-3 py-2 text-ash-700">
                                                 {b.prossimo
-                                                    ? `mancano ${formatEur(b.prossimo.mancanoCents)} pagati per il ${formatBonus(b.prossimo.scaglione.bonusPct)}`
+                                                    ? `mancano ${formatEur(b.prossimo.mancanoCents)} incassati per il ${formatBonus(b.prossimo.scaglione.bonusPct)}`
                                                     : b.raggiunto ? "massimo raggiunto" : "—"}
                                             </td>
                                         </tr>

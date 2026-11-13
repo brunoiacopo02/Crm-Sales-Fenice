@@ -1,10 +1,11 @@
 // Bonus sugli incassi dello stesso mese (PO 02/11/2026). Funzioni pure.
 //
 // Per venditore, sull'IMPORTO dei contratti FIRMATI nel mese: se una quota
-// sufficiente di quell'importo viene da contratti PAGATI per intero entro la
-// fine dello stesso mese, la commissione sale di mezzo punto / un punto / un
-// punto e mezzo. La percentuale e' sugli euro, NON sul numero dei contratti
-// (correzione PO 13/11/2026).
+// sufficiente di quell'importo e' stata INCASSATA entro la fine dello stesso
+// mese, la commissione sale di mezzo punto / un punto / un punto e mezzo.
+// La percentuale e' sugli euro, NON sul numero dei contratti, e conta anche
+// l'acconto di un contratto non ancora saldato: contratto da 3.000 € con
+// acconto di 50 € = 50 € di incassato (correzioni PO 13/11/2026).
 // Qui si calcola solo A CHE PUNTO e' il venditore: la commissione mostrata
 // altrove (src/lib/venditore/obiettivi.ts) NON cambia.
 //
@@ -60,9 +61,13 @@ export type BonusIncassi = {
     mese: string
     /** Importo totale dei contratti firmati nel mese. */
     firmatoCents: number
-    /** Importo dei contratti firmati nel mese e pagati per intero entro il mese. */
-    pagatoCents: number
-    /** pagatoCents / firmatoCents × 100: e' la percentuale che decide lo scaglione. Null senza importo firmato. */
+    /**
+     * Incassato entro la fine del mese sui contratti firmati nel mese. Per ogni contratto:
+     * tutto l'importo se e' pagato per intero nel mese (anche finanziato, dove l'incasso
+     * registrato e' piu' basso); altrimenti i pagamenti datati entro il mese, mai oltre l'importo.
+     */
+    incassatoMeseCents: number
+    /** incassatoMeseCents / firmatoCents × 100: e' la percentuale che decide lo scaglione. Null senza importo firmato. */
     pctEuro: number | null
     /** Dato secondario: quanti contratti firmati e quanti pagati per intero nel mese. */
     firmati: number
@@ -71,7 +76,7 @@ export type BonusIncassi = {
     pct: number | null
     scaglioni: BonusScaglione[]
     raggiunto: BonusScaglione | null
-    /** Lo scaglione dopo e quanti euro di contratti pagati in piu' servono (in centesimi), a firmato fermo. */
+    /** Lo scaglione dopo e quanti euro di incassato in piu' servono (in centesimi), a firmato fermo. */
     prossimo: { scaglione: BonusScaglione; mancanoCents: number } | null
     /** Firmati nel mese non pagati per intero entro il mese. */
     daSaldare: ContrattoDaSaldare[]
@@ -96,7 +101,7 @@ export function calcolaBonusIncassi(mese: string, contratti: ContrattoBonus[], i
         if (lista) lista.push(i); else pagamenti.set(i.contrattoId, [i])
     }
 
-    let firmati = 0, pagati = 0, firmatoCents = 0, pagatoCents = 0, standBy = 0
+    let firmati = 0, pagati = 0, firmatoCents = 0, incassatoMeseCents = 0, standBy = 0
     const daSaldare: ContrattoDaSaldare[] = []
     for (const c of contratti) {
         if (!c.dataFirma || c.dataFirma.slice(0, 7) !== mese) continue
@@ -117,9 +122,11 @@ export function calcolaBonusIncassi(mese: string, contratti: ContrattoBonus[], i
         const saldatoNelMese = statoPagato && suoi.length > 0 && tuttiEntroMese && entroMese > 0
         if (copertoNelMese || saldatoNelMese) {
             pagati += 1
-            pagatoCents += c.importoTotaleCents
+            incassatoMeseCents += c.importoTotaleCents
             continue
         }
+        // Non saldato nel mese: vale quanto incassato entro il mese (anche solo l'acconto), mai oltre l'importo.
+        incassatoMeseCents += Math.max(0, Math.min(entroMese, c.importoTotaleCents))
         const saldato = statoPagato || (c.importoTotaleCents > 0 && totale >= c.importoTotaleCents)
         daSaldare.push({
             id: c.id,
@@ -139,14 +146,14 @@ export function calcolaBonusIncassi(mese: string, contratti: ContrattoBonus[], i
     let prossimo: BonusIncassi['prossimo'] = null
     if (firmatoCents > 0) {
         for (const s of scaglioni) {
-            if (scaglionePreso(s, pagatoCents, firmatoCents)) raggiunto = s
-            else if (!prossimo) prossimo = { scaglione: s, mancanoCents: Math.ceil((s.minPct * firmatoCents) / 100) - pagatoCents }
+            if (scaglionePreso(s, incassatoMeseCents, firmatoCents)) raggiunto = s
+            else if (!prossimo) prossimo = { scaglione: s, mancanoCents: Math.ceil((s.minPct * firmatoCents) / 100) - incassatoMeseCents }
         }
     }
     return {
         mese,
-        firmatoCents, pagatoCents,
-        pctEuro: firmatoCents > 0 ? (pagatoCents / firmatoCents) * 100 : null,
+        firmatoCents, incassatoMeseCents,
+        pctEuro: firmatoCents > 0 ? (incassatoMeseCents / firmatoCents) * 100 : null,
         firmati, pagati,
         pct: firmati > 0 ? (pagati / firmati) * 100 : null,
         scaglioni, raggiunto, prossimo, daSaldare, standBy,
@@ -154,8 +161,8 @@ export function calcolaBonusIncassi(mese: string, contratti: ContrattoBonus[], i
 }
 
 /** Confronto a centesimi interi: 17.000 € su 20.000 € e' esattamente l'85%, senza errori di virgola. */
-export function scaglionePreso(s: BonusScaglione, pagatoCents: number, firmatoCents: number): boolean {
-    return firmatoCents > 0 && pagatoCents * 100 >= s.minPct * firmatoCents
+export function scaglionePreso(s: BonusScaglione, incassatoMeseCents: number, firmatoCents: number): boolean {
+    return firmatoCents > 0 && incassatoMeseCents * 100 >= s.minPct * firmatoCents
 }
 
 /** "66,6%" · "80%": una cifra decimale solo se serve, troncata (79,96 non diventa mai "80%"). */
@@ -175,7 +182,7 @@ export function fraseBonusIncassi(b: BonusIncassi, meseChiuso: boolean): string 
     if (b.scaglioni.length === 0) return "Il bonus sugli incassi è partito a ottobre 2026: in questo mese non c'era."
     if (b.firmati === 0) return 'Nessun contratto firmato in questo mese.'
     const p = b.prossimo
-    const quanti = p ? `${formatEur(p.mancanoCents)} di contratti pagati` : ''
+    const quanti = p ? `${formatEur(p.mancanoCents)} incassati` : ''
     if (meseChiuso) {
         if (b.raggiunto) return `Mese chiuso con il ${formatBonus(b.raggiunto.bonusPct)}.`
         return p ? `Mese chiuso senza bonus: mancavano ${quanti} per il ${formatBonus(p.scaglione.bonusPct)}.` : 'Mese chiuso senza bonus.'
