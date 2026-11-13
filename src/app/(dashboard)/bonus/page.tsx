@@ -75,7 +75,7 @@ export default async function BonusPage() {
                     titolo="Venditori"
                     valore="+0,5% / +1% / +1,5%"
                     sotto="sull'incasso, uguale ogni mese"
-                    testo="Se almeno l'80% di chi firma nel mese paga entro lo stesso mese, +0,5% di provvigione su quei contratti. Se almeno l'85%, +1%. Se almeno il 90%, +1,5%."
+                    testo="Conta l'importo, non il numero dei contratti: se almeno l'80% dell'importo firmato nel mese viene da contratti pagati per intero entro lo stesso mese, +0,5% di provvigione su quei contratti. Se almeno l'85%, +1%. Se almeno il 90%, +1,5%."
                 />
             </div>
         </div>

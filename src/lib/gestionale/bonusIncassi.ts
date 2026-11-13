@@ -1,12 +1,16 @@
 // Bonus sugli incassi dello stesso mese (PO 02/11/2026). Funzioni pure.
 //
-// Per venditore, sull'insieme dei contratti FIRMATI nel mese: se una quota
-// sufficiente e' stata PAGATA per intero entro la fine dello stesso mese, la
-// commissione sale di mezzo punto / un punto / un punto e mezzo.
+// Per venditore, sull'IMPORTO dei contratti FIRMATI nel mese: se una quota
+// sufficiente di quell'importo viene da contratti PAGATI per intero entro la
+// fine dello stesso mese, la commissione sale di mezzo punto / un punto / un
+// punto e mezzo. La percentuale e' sugli euro, NON sul numero dei contratti
+// (correzione PO 13/11/2026).
 // Qui si calcola solo A CHE PUNTO e' il venditore: la commissione mostrata
 // altrove (src/lib/venditore/obiettivi.ts) NON cambia.
 //
 // Spec: docs/superpowers/specs/2026-11-12-bonus-incassi-venditori-design.md
+
+import { formatEur } from '../../components/gestionale/format'
 
 export type BonusScaglione = { minPct: number; bonusPct: number }
 
@@ -54,18 +58,21 @@ export type ContrattoDaSaldare = {
 
 export type BonusIncassi = {
     mese: string
+    /** Importo totale dei contratti firmati nel mese. */
+    firmatoCents: number
+    /** Importo dei contratti firmati nel mese e pagati per intero entro il mese. */
+    pagatoCents: number
+    /** pagatoCents / firmatoCents × 100: e' la percentuale che decide lo scaglione. Null senza importo firmato. */
+    pctEuro: number | null
+    /** Dato secondario: quanti contratti firmati e quanti pagati per intero nel mese. */
     firmati: number
     pagati: number
-    /** Contratti pagati / firmati × 100: e' la percentuale che decide lo scaglione. Null senza firmati. */
+    /** Dato secondario: contratti pagati / firmati × 100, sul numero. NON decide lo scaglione. */
     pct: number | null
-    firmatoCents: number
-    pagatoCents: number
-    /** Dato secondario: importo dei contratti pagati / importo dei firmati × 100. */
-    pctEuro: number | null
     scaglioni: BonusScaglione[]
     raggiunto: BonusScaglione | null
-    /** Lo scaglione dopo e quanti contratti pagati in piu' servono, a firmati fermi. */
-    prossimo: { scaglione: BonusScaglione; mancano: number } | null
+    /** Lo scaglione dopo e quanti euro di contratti pagati in piu' servono (in centesimi), a firmato fermo. */
+    prossimo: { scaglione: BonusScaglione; mancanoCents: number } | null
     /** Firmati nel mese non pagati per intero entro il mese. */
     daSaldare: ContrattoDaSaldare[]
     /** Contratti in stand-by con firma nel mese: non contano finche' restano tali. */
@@ -130,20 +137,25 @@ export function calcolaBonusIncassi(mese: string, contratti: ContrattoBonus[], i
     const scaglioni = scaglioniBonusIncassi(mese)
     let raggiunto: BonusScaglione | null = null
     let prossimo: BonusIncassi['prossimo'] = null
-    if (firmati > 0) {
+    if (firmatoCents > 0) {
         for (const s of scaglioni) {
-            // Confronto a interi: 17 su 20 e' esattamente l'85%.
-            if (pagati * 100 >= s.minPct * firmati) raggiunto = s
-            else if (!prossimo) prossimo = { scaglione: s, mancano: Math.ceil((s.minPct * firmati) / 100) - pagati }
+            if (scaglionePreso(s, pagatoCents, firmatoCents)) raggiunto = s
+            else if (!prossimo) prossimo = { scaglione: s, mancanoCents: Math.ceil((s.minPct * firmatoCents) / 100) - pagatoCents }
         }
     }
     return {
-        mese, firmati, pagati,
-        pct: firmati > 0 ? (pagati / firmati) * 100 : null,
+        mese,
         firmatoCents, pagatoCents,
         pctEuro: firmatoCents > 0 ? (pagatoCents / firmatoCents) * 100 : null,
+        firmati, pagati,
+        pct: firmati > 0 ? (pagati / firmati) * 100 : null,
         scaglioni, raggiunto, prossimo, daSaldare, standBy,
     }
+}
+
+/** Confronto a centesimi interi: 17.000 € su 20.000 € e' esattamente l'85%, senza errori di virgola. */
+export function scaglionePreso(s: BonusScaglione, pagatoCents: number, firmatoCents: number): boolean {
+    return firmatoCents > 0 && pagatoCents * 100 >= s.minPct * firmatoCents
 }
 
 /** "66,6%" · "80%": una cifra decimale solo se serve, troncata (79,96 non diventa mai "80%"). */
@@ -163,13 +175,12 @@ export function fraseBonusIncassi(b: BonusIncassi, meseChiuso: boolean): string 
     if (b.scaglioni.length === 0) return "Il bonus sugli incassi è partito a ottobre 2026: in questo mese non c'era."
     if (b.firmati === 0) return 'Nessun contratto firmato in questo mese.'
     const p = b.prossimo
-    const quanti = p ? (p.mancano === 1 ? '1 contratto pagato' : `${p.mancano} contratti pagati`) : ''
-    const verbo = (uno: string, tanti: string) => (p && p.mancano === 1 ? uno : tanti)
+    const quanti = p ? `${formatEur(p.mancanoCents)} di contratti pagati` : ''
     if (meseChiuso) {
         if (b.raggiunto) return `Mese chiuso con il ${formatBonus(b.raggiunto.bonusPct)}.`
-        return p ? `Mese chiuso senza bonus: ${verbo('mancava', 'mancavano')} ${quanti} per il ${formatBonus(p.scaglione.bonusPct)}.` : 'Mese chiuso senza bonus.'
+        return p ? `Mese chiuso senza bonus: mancavano ${quanti} per il ${formatBonus(p.scaglione.bonusPct)}.` : 'Mese chiuso senza bonus.'
     }
-    const manca = p ? `Ti ${verbo('manca', 'mancano')} ${quanti} per il ${formatBonus(p.scaglione.bonusPct)}.` : ''
+    const manca = p ? `Ti mancano ${quanti} per il ${formatBonus(p.scaglione.bonusPct)}.` : ''
     if (b.raggiunto) return p ? `Hai raggiunto il ${formatBonus(b.raggiunto.bonusPct)}. ${manca}` : `Hai raggiunto il ${formatBonus(b.raggiunto.bonusPct)}, il massimo.`
     return manca
 }

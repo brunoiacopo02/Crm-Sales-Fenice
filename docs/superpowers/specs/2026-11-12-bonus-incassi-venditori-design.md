@@ -2,6 +2,12 @@
 
 Data: 2026-11-12 · Stato: proposta, da confermare dal PO prima della pubblicazione
 
+**Correzione del PO (13/11/2026):** la percentuale che decide lo scaglione è sull'IMPORTO
+dei contratti, non sul loro numero: importo dei contratti firmati nel mese e pagati per
+intero entro il mese ÷ importo totale dei contratti firmati nel mese × 100. Il resto
+(soglie, stand-by e cancellati esclusi, finanziati pagati, definizione di "pagato nel
+mese") non cambia. Il documento qui sotto è già aggiornato.
+
 ## 1. Perché
 
 Richiesta del PO (12/11/2026): «una visualizzazione per i sales dove possono vedere come
@@ -14,9 +20,9 @@ Oggi il venditore vede in `/miei-incassi` la commissione 10/11/12%, ma non sa a 
 
 ## 2. La regola (PO 02/11/2026)
 
-Per venditore, sull'insieme dei contratti che ha firmato nel mese:
+Per venditore, sull'importo dei contratti che ha firmato nel mese:
 
-| Mese | Contratti pagati nel mese / firmati | Bonus |
+| Mese | Importo dei contratti pagati nel mese / importo dei firmati | Bonus |
 |---|---|---|
 | ottobre 2026 | ≥ 85% · ≥ 90% | +0,5% · +1% |
 | da novembre 2026 | ≥ 80% · ≥ 85% · ≥ 90% | +0,5% · +1% · +1,5% |
@@ -64,22 +70,28 @@ sempre gli incassi. Nessun contratto non `Pagato` risulta coperto dagli incassi.
 Le rate (`gestionaleRate`) non si usano: metà dei contratti non ne ha e ci sono contratti
 `Pagato` con la rata ancora "scaduta".
 
-- **Percentuale** (quella che decide lo scaglione): contratti pagati / contratti firmati,
-  sul numero. Confronto a interi (`pagati × 100 ≥ soglia × firmati`), niente arrotondamenti.
-- **Percentuale in euro** (dato secondario): importo dei contratti pagati / importo dei firmati.
-- **Mancano**: `ceil(soglia × firmati / 100) − pagati`, a firmati fermi.
+- **Percentuale** (quella che decide lo scaglione, `pctEuro`): importo dei contratti
+  pagati per intero nel mese / importo di tutti i contratti firmati nel mese. Un contratto
+  pagato vale per tutto il suo importo, anche se finanziato (incassato meno dell'importo);
+  un contratto non pagato per intero vale zero, anche se ha versato un acconto. Confronto
+  a centesimi interi (`pagatoCents × 100 ≥ soglia × firmatoCents`), niente arrotondamenti.
+  Se l'importo firmato è zero non c'è percentuale né scaglione.
+- **Numero dei contratti** (dato secondario): «7 su 9», e `pct` sul numero. Non decide nulla.
+- **Mancano** (`prossimo.mancanoCents`): euro di contratti pagati in più che servono per
+  lo scaglione dopo, `ceil(soglia × firmatoCents / 100) − pagatoCents`, a firmato fermo.
 
 ## 4. Cosa si vede
 
 - **Venditore** — `/miei-incassi`, card «Bonus incassi del mese» subito sotto «Il tuo
-  guadagno del mese», segue il selettore del mese: percentuale grande, «X contratti pagati
-  su Y firmati», barra con le soglie segnate, frase «ti mancano N contratti pagati per il
-  +0,5%» (o scaglione raggiunto), elenco dei contratti del mese non ancora saldati
+  guadagno del mese», segue il selettore del mese: percentuale grande (sull'importo), «X € pagati
+  su Y € firmati», sotto in piccolo «7 contratti pagati su 9 firmati», barra con le soglie
+  segnate, frase «ti mancano N € di contratti pagati per il +0,5%» (o scaglione raggiunto), elenco dei contratti del mese non ancora saldati
   (cliente, firma, importo, incassato, residuo, stato). Vede solo i suoi: l'utente viene
   dalla sessione.
 - **Manager/Admin** — `/performance-venditori`, scheda «Incassi e commissioni», tabella
   «Bonus incassi del mese» sotto quella delle commissioni, stesso selettore del mese:
-  venditore, firmati, pagati, percentuale, in euro, scaglione, quanti ne mancano; la riga
+  venditore, firmato e pagato nel mese in euro, percentuale (sull'importo), contratti
+  («7 su 9», in piccolo), scaglione, quanti euro mancano; la riga
   si apre sui contratti da saldare. Scelta rispetto a `/incassi`: quella scheda è già il
   posto dove manager e admin controllano firmato, incassato e commissione per venditore;
   `/incassi` è solo ADMIN, dietro password, e il manager non la vede.
@@ -97,6 +109,6 @@ Parole: «Firmato» e «Incassato», mai «fatturato».
 ## 6. Da confermare dal PO
 
 1. La definizione di "pagato" al punto 3 (in particolare la regola 2 per i finanziati).
-2. Percentuale sul numero di contratti (non sugli euro).
+2. ~~Percentuale sul numero di contratti (non sugli euro).~~ Deciso dal PO il 13/11/2026: sull'importo, non sul numero.
 3. Su cosa si applica il +0,5/+1/+1,5% (tutto l'incassato o solo quei contratti): qui non serve, la card non mostra euro di bonus.
 4. I contratti in Recupero/Avvocato contano come firmati non pagati.

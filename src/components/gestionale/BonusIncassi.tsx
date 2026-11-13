@@ -3,7 +3,7 @@
 // commissione mostrata nelle altre card non cambia.
 // Regole: src/lib/gestionale/bonusIncassi.ts.
 
-import { formatBonus, formatPct, fraseBonusIncassi, type BonusIncassi, type ContrattoDaSaldare } from "@/lib/gestionale/bonusIncassi"
+import { formatBonus, formatPct, fraseBonusIncassi, scaglionePreso, type BonusIncassi, type ContrattoDaSaldare } from "@/lib/gestionale/bonusIncassi"
 import { formatEur, formatDate } from "./format"
 
 const BADGE: Record<string, string> = {
@@ -57,7 +57,7 @@ export function DaSaldareTable({ rows }: { rows: ContrattoDaSaldare[] }) {
 }
 
 export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChiuso: boolean }) {
-    const pct = b.pct ?? 0
+    const pct = b.pctEuro ?? 0
     const attivo = b.scaglioni.length > 0
     return (
         <div className="space-y-4 rounded-xl border border-ash-200 bg-white p-4">
@@ -65,8 +65,11 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <div className="shrink-0 sm:w-56">
-                    <div className={`text-4xl font-bold ${b.raggiunto ? "text-emerald-700" : "text-ash-800"}`}>{formatPct(b.pct)}</div>
+                    <div className={`text-4xl font-bold ${b.raggiunto ? "text-emerald-700" : "text-ash-800"}`}>{formatPct(b.pctEuro)}</div>
                     <div className="mt-1 text-sm text-ash-600">
+                        {formatEur(b.pagatoCents)} pagati su {formatEur(b.firmatoCents)} firmati
+                    </div>
+                    <div className="mt-0.5 text-xs text-ash-500">
                         {b.pagati === 1 ? "1 contratto pagato" : `${b.pagati} contratti pagati`} su {b.firmati === 1 ? "1 firmato" : `${b.firmati} firmati`}
                     </div>
                 </div>
@@ -77,7 +80,7 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
                         aria-valuemin={0}
                         aria-valuemax={100}
                         aria-valuenow={Math.floor(pct)}
-                        aria-label="Contratti pagati sul totale dei firmati"
+                        aria-label="Importo dei contratti pagati sul totale del firmato"
                     >
                         <div className={`h-3 rounded-full ${b.raggiunto ? "bg-emerald-500" : "bg-brand-orange"}`} style={{ width: `${Math.min(100, pct)}%` }} />
                         {b.scaglioni.map(s => (
@@ -87,7 +90,7 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
                     {attivo && (
                         <div className="flex flex-wrap gap-2 text-xs">
                             {b.scaglioni.map(s => {
-                                const preso = b.firmati > 0 && b.pagati * 100 >= s.minPct * b.firmati
+                                const preso = scaglionePreso(s, b.pagatoCents, b.firmatoCents)
                                 return (
                                     <div key={s.minPct} className={`rounded-md px-2 py-1 ${preso ? "bg-emerald-50 font-semibold text-emerald-700 ring-1 ring-emerald-300" : "bg-ash-50 text-ash-600"}`}>
                                         dall&apos;{s.minPct}% → {formatBonus(s.bonusPct)}
@@ -110,8 +113,7 @@ export function BonusIncassiCard({ b, meseChiuso }: { b: BonusIncassi; meseChius
             )}
 
             <div className="text-xs text-ash-500">
-                Conta il numero dei contratti che hai firmato nel mese e che sono stati pagati per intero entro la fine dello stesso mese.
-                {b.firmati > 0 && ` In euro: firmato ${formatEur(b.firmatoCents)}, di cui già pagato per intero ${formatEur(b.pagatoCents)} (${formatPct(b.pctEuro)}).`}
+                La percentuale è sugli euro: importo dei contratti che hai firmato nel mese e che sono stati pagati per intero entro la fine dello stesso mese, diviso l&apos;importo di tutti i contratti che hai firmato nel mese.
                 {b.standBy > 0 && ` ${contratti(b.standBy)} in stand-by: ${b.standBy === 1 ? "non conta finché non viene convalidato" : "non contano finché non vengono convalidati"}.`}
             </div>
         </div>

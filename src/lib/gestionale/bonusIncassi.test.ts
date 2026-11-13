@@ -10,7 +10,7 @@ function contratto(id: string, over: Partial<ContrattoBonus> = {}): ContrattoBon
 function pagamento(contrattoId: string, data: string | null, importoCents: number, contaCommissione = true): IncassoBonus {
     return { contrattoId, data, importoCents, contaCommissione }
 }
-/** n contratti firmati a novembre, i primi `pagati` saldati nel mese. */
+/** n contratti da 2.000 € firmati a novembre, i primi `pagati` saldati nel mese: con importi uguali la percentuale in euro coincide con quella sul numero. */
 function mese(n: number, pagati: number): { contratti: ContrattoBonus[]; incassi: IncassoBonus[] } {
     const contratti = Array.from({ length: n }, (_, i) => contratto(`c${i}`, { statoPagamento: i < pagati ? 'Pagato' : 'Pagamento programmato' }))
     const incassi = contratti.slice(0, pagati).map(c => pagamento(c.id, '2026-11-10', 200_000))
@@ -115,16 +115,62 @@ test('nessun contratto firmato: nessuna percentuale, nessuno scaglione', () => {
     assert.equal(r.prossimo, null)
 })
 
-test('novembre: soglia esatta presa, e quanti ne mancano alla successiva', () => {
+test('lo scaglione si decide sull importo, non sul numero: 7 su 9 (77,7%) ma 80% degli euro = bonus', () => {
+    // 7 contratti da 4.000 € pagati, 2 da 3.500 € no: 28.000 su 35.000 = 80% esatto.
+    const contratti = [
+        ...Array.from({ length: 7 }, (_, i) => contratto(`p${i}`, { importoTotaleCents: 400_000, statoPagamento: 'Pagato' })),
+        contratto('n0', { importoTotaleCents: 350_000 }), contratto('n1', { importoTotaleCents: 350_000 }),
+    ]
+    const incassi = contratti.slice(0, 7).map(c => pagamento(c.id, '2026-11-10', 400_000))
+    const r = calcolaBonusIncassi(NOV, contratti, incassi)
+    assert.equal(r.firmati, 9)
+    assert.equal(r.pagati, 7)
+    assert.equal(r.pctEuro, 80)
+    assert.deepEqual(r.raggiunto, { minPct: 80, bonusPct: 0.5 })
+    // 85% di 35.000 = 29.750 -> mancano 1.750 €.
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 85, bonusPct: 1 }, mancanoCents: 175_000 })
+})
+
+test('lo scaglione si decide sull importo, non sul numero: 9 su 10 (90%) ma il non pagato e grosso = niente bonus', () => {
+    // 9 contratti da 1.000 € pagati, 1 da 6.000 € no: 9.000 su 15.000 = 60%.
+    const contratti = [
+        ...Array.from({ length: 9 }, (_, i) => contratto(`p${i}`, { importoTotaleCents: 100_000, statoPagamento: 'Pagato' })),
+        contratto('grosso', { importoTotaleCents: 600_000 }),
+    ]
+    const incassi = contratti.slice(0, 9).map(c => pagamento(c.id, '2026-11-10', 100_000))
+    const r = calcolaBonusIncassi(NOV, contratti, incassi)
+    assert.equal(r.pct, 90)
+    assert.equal(r.pctEuro, 60)
+    assert.equal(r.raggiunto, null)
+    // 80% di 15.000 = 12.000 -> mancano 3.000 €.
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 80, bonusPct: 0.5 }, mancanoCents: 300_000 })
+})
+
+test('finanziato pagato nel mese: vale per tutto l importo del contratto, non per quanto incassato', () => {
+    // Finanziato da 8.000 € (incassati 6.800) pagato, uno da 2.000 € no: 8.000 su 10.000 = 80%.
+    const r = calcolaBonusIncassi(NOV, [contratto('fin', { importoTotaleCents: 800_000, statoPagamento: 'Pagato' }), contratto('b')], [pagamento('fin', '2026-11-12', 680_000)])
+    assert.equal(r.pctEuro, 80)
+    assert.deepEqual(r.raggiunto, { minPct: 80, bonusPct: 0.5 })
+})
+
+test('contratti firmati ma con importo zero: nessuna percentuale, nessuno scaglione', () => {
+    const r = calcolaBonusIncassi(NOV, [contratto('a', { importoTotaleCents: 0 })], [])
+    assert.equal(r.firmati, 1)
+    assert.equal(r.pctEuro, null)
+    assert.equal(r.raggiunto, null)
+    assert.equal(r.prossimo, null)
+})
+
+test('novembre: soglia esatta presa, e quanti euro mancano alla successiva', () => {
     let { contratti, incassi } = mese(10, 7)
     let r = calcolaBonusIncassi(NOV, contratti, incassi)
     assert.equal(r.raggiunto, null)
-    assert.deepEqual(r.prossimo, { scaglione: { minPct: 80, bonusPct: 0.5 }, mancano: 1 })
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 80, bonusPct: 0.5 }, mancanoCents: 200_000 })
 
     ;({ contratti, incassi } = mese(10, 8))
     r = calcolaBonusIncassi(NOV, contratti, incassi)
     assert.deepEqual(r.raggiunto, { minPct: 80, bonusPct: 0.5 })
-    assert.deepEqual(r.prossimo, { scaglione: { minPct: 85, bonusPct: 1 }, mancano: 1 })
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 85, bonusPct: 1 }, mancanoCents: 100_000 })
 
     ;({ contratti, incassi } = mese(10, 9))
     r = calcolaBonusIncassi(NOV, contratti, incassi)
@@ -132,32 +178,36 @@ test('novembre: soglia esatta presa, e quanti ne mancano alla successiva', () =>
     assert.equal(r.prossimo, null)
 })
 
-test('mancano: arrotonda in su sui contratti interi', () => {
-    // 7 firmati, 3 pagati: l'80% di 7 = 5,6 -> servono 6 pagati -> ne mancano 3.
+test('mancano: euro a firmato fermo, arrotondati in su al centesimo', () => {
+    // 7 firmati da 2.000 €, 3 pagati: l'80% di 14.000 = 11.200 -> mancano 5.200 €.
     const { contratti, incassi } = mese(7, 3)
-    const r = calcolaBonusIncassi(NOV, contratti, incassi)
-    assert.deepEqual(r.prossimo, { scaglione: { minPct: 80, bonusPct: 0.5 }, mancano: 3 })
+    let r = calcolaBonusIncassi(NOV, contratti, incassi)
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 80, bonusPct: 0.5 }, mancanoCents: 520_000 })
+    // 333,33 € firmati, niente pagato: l'80% = 266,664 -> 266,67 €.
+    r = calcolaBonusIncassi(NOV, [contratto('a', { importoTotaleCents: 33_333 })], [])
+    assert.equal(r.prossimo?.mancanoCents, 26_667)
 })
 
-test('20 firmati, 17 pagati = 85% esatto: scaglione +1% (nessun errore di virgola)', () => {
+test('34.000 € pagati su 40.000 € = 85% esatto: scaglione +1% (nessun errore di virgola)', () => {
     const { contratti, incassi } = mese(20, 17)
     const r = calcolaBonusIncassi(NOV, contratti, incassi)
+    assert.equal(r.pctEuro, 85)
     assert.deepEqual(r.raggiunto, { minPct: 85, bonusPct: 1 })
-    assert.deepEqual(r.prossimo, { scaglione: { minPct: 90, bonusPct: 1.5 }, mancano: 1 })
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 90, bonusPct: 1.5 }, mancanoCents: 200_000 })
 })
 
 test('ottobre: 80% non basta (soglie 85/90)', () => {
     const contratti = Array.from({ length: 10 }, (_, i) => contratto(`c${i}`, { dataFirma: '2026-10-10', statoPagamento: i < 8 ? 'Pagato' : 'Sollecito' }))
     const incassi = contratti.slice(0, 8).map(c => pagamento(c.id, '2026-10-20', 200_000))
     const r = calcolaBonusIncassi('2026-10', contratti, incassi)
-    assert.equal(r.pct, 80)
+    assert.equal(r.pctEuro, 80)
     assert.equal(r.raggiunto, null)
-    assert.deepEqual(r.prossimo, { scaglione: { minPct: 85, bonusPct: 0.5 }, mancano: 1 })
+    assert.deepEqual(r.prossimo, { scaglione: { minPct: 85, bonusPct: 0.5 }, mancanoCents: 100_000 })
 })
 
 test('settembre: percentuale si, scaglioni no', () => {
     const r = calcolaBonusIncassi('2026-09', [contratto('a', { dataFirma: '2026-09-10', statoPagamento: 'Pagato' })], [pagamento('a', '2026-09-11', 200_000)])
-    assert.equal(r.pct, 100)
+    assert.equal(r.pctEuro, 100)
     assert.deepEqual(r.scaglioni, [])
     assert.equal(r.raggiunto, null)
     assert.equal(r.prossimo, null)
@@ -184,14 +234,15 @@ test('formatPct tronca: sotto soglia non si legge mai la soglia', () => {
 })
 
 test('frase: mancano / raggiunto / massimo / mese chiuso / bonus non ancora partito', () => {
-    const f = (n: number, p: number, chiuso = false) => { const m = mese(n, p); return fraseBonusIncassi(calcolaBonusIncassi(NOV, m.contratti, m.incassi), chiuso) }
-    assert.equal(f(10, 5), 'Ti mancano 3 contratti pagati per il +0,5%.')
-    assert.equal(f(10, 7), 'Ti manca 1 contratto pagato per il +0,5%.')
-    assert.equal(f(10, 8), 'Hai raggiunto il +0,5%. Ti manca 1 contratto pagato per il +1%.')
+    // Intl mette uno spazio non separabile prima di "€" (qui letto come spazio normale) e in italiano non mette il punto alle migliaia sotto 10.000.
+    const f = (n: number, p: number, chiuso = false) => { const m = mese(n, p); return fraseBonusIncassi(calcolaBonusIncassi(NOV, m.contratti, m.incassi), chiuso).replace(/\u00a0/g, ' ') }
+    assert.equal(f(10, 5), 'Ti mancano 6000,00 € di contratti pagati per il +0,5%.')
+    assert.equal(f(10, 7), 'Ti mancano 2000,00 € di contratti pagati per il +0,5%.')
+    assert.equal(f(10, 8), 'Hai raggiunto il +0,5%. Ti mancano 1000,00 € di contratti pagati per il +1%.')
     assert.equal(f(10, 10), 'Hai raggiunto il +1,5%, il massimo.')
     assert.equal(f(0, 0), 'Nessun contratto firmato in questo mese.')
-    assert.equal(f(10, 5, true), 'Mese chiuso senza bonus: mancavano 3 contratti pagati per il +0,5%.')
-    assert.equal(f(10, 7, true), 'Mese chiuso senza bonus: mancava 1 contratto pagato per il +0,5%.')
+    assert.equal(f(10, 5, true), 'Mese chiuso senza bonus: mancavano 6000,00 € di contratti pagati per il +0,5%.')
+    assert.equal(f(10, 7, true), 'Mese chiuso senza bonus: mancavano 2000,00 € di contratti pagati per il +0,5%.')
     assert.equal(f(10, 9, true), 'Mese chiuso con il +1,5%.')
     assert.match(fraseBonusIncassi(calcolaBonusIncassi('2026-09', [], []), true), /partito a ottobre 2026/)
 })
