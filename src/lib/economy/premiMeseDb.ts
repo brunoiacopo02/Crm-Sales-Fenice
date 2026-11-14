@@ -13,8 +13,12 @@
 // aggiustamenti manuali 'presenze', con la regola dell'account ripartito (118).
 //
 // Conferme: gli stessi filtri dei premi della settimana (confermatiDalleConferme
-// in ./settimanaDb.ts). Le persone si leggono anche se oggi disattivate: chi ha
-// lavorato in una settimana passata del mese prende comunque la sua quota.
+// in ./settimanaDb.ts). Le persone si leggono anche se oggi disattivate, purché
+// abbiano un nome vero (prendeQuotaConferme): chi ha lavorato in una settimana
+// passata prende comunque la sua quota, un account condiviso disattivato no.
+//
+// La chiave della cache contiene la settimana (chiaveSettimana): alla chiusura
+// del sabato e al lunedì un calcolo vecchio non può essere servito.
 
 import { unstable_cache } from 'next/cache'
 import { and, eq, gte, inArray, isNotNull, lt } from 'drizzle-orm'
@@ -29,7 +33,8 @@ import { accountVero } from '@/lib/prova/sql'
 import { readEconomyRules } from './awards'
 import { inizioEconomia, isConfermePersona } from './rules'
 import {
-    calcolaPremiMese, meseDelSalvadanaio, meseDellaSettimana, salvadanaioConfermeDi, settimanaConfermeDi, settimanaScorsa, settimaneDelMese,
+    calcolaPremiMese, chiaveSettimana, meseDelSalvadanaio, meseDellaSettimana, prendeQuotaConferme, settimanaScorsa, settimaneDelMese,
+    vistaSalvadanaioConferme,
     type ConfermeGrezze, type PremiMese, type PresenzaGrezza, type VistaSalvadanaioConferme,
 } from './premiMese'
 import { parsePremiSettimana, type PremiSettimana } from './premiSettimana'
@@ -69,14 +74,16 @@ async function leggiConfermeGrezze(companyId: string, start: Date, end: Date): P
     ])
     return {
         regola,
-        persone: persone.map(u => ({ userId: u.id, nome: nomeConferme(u), squadra: isConfermePersona(u) })),
+        persone: persone.filter(prendeQuotaConferme)
+            .map(u => ({ userId: u.id, nome: nomeConferme(u), squadra: isConfermePersona(u) })),
         chiusure: chiusure.flatMap(r => (r.at ? [r.at] : [])),
         presenze: presenze.flatMap(r => (r.at ? [r.at] : [])),
         confermate: confermate.flatMap(r => (r.userId && r.at ? [{ userId: r.userId, at: r.at }] : [])),
     }
 }
 
-async function calcola(companyId: string, mese: string): Promise<PremiMese> {
+/** `_settimana` non si usa nel calcolo: fa solo parte della chiave della cache (chiaveSettimana). */
+async function calcola(companyId: string, mese: string, _settimana?: string): Promise<PremiMese> {
     const now = new Date()
     const settimane = settimaneDelMese(mese)
     const [roster, economia, obiettivi, inizioAccount] = await Promise.all([
@@ -138,7 +145,7 @@ const inCache = unstable_cache(calcola, ['premi-mese-gdo-v2'], { revalidate: 120
 
 /** Bonus del mese di tutti i GDO e delle Conferme (settimane chiuse + quella in corso), in cache 2 minuti. */
 export function leggiPremiMese(companyId: string, mese: string): Promise<PremiMese> {
-    return inCache(companyId, mese)
+    return inCache(companyId, mese, chiaveSettimana(new Date()))
 }
 
 /** Quello che vede una persona delle Conferme: la settimana scorsa e il suo mese finora. */
@@ -150,6 +157,5 @@ export async function leggiSalvadanaioConferme(companyId: string, userId: string
         leggiPremiMese(companyId, mese),
         meseScorsa === mese ? null : leggiPremiMese(companyId, meseScorsa),
     ])
-    const s = (mPrima ?? m).chiuse.find(x => x.lunedi === scorsa.lunedi)
-    return { scorsa: s ? settimanaConfermeDi(s, userId) : null, mese: salvadanaioConfermeDi(m, userId) }
+    return vistaSalvadanaioConferme(m, mPrima, userId, now)
 }

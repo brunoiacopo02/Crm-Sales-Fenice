@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
     calcolaPremiMese, salvadanaioDi, salvadanaioConfermeDi, settimanaScorsa, meseDellaSettimana,
+    vistaSalvadanaioConferme, chiaveSettimana, prendeQuotaConferme,
     settimaneDelMese, meseDelSalvadanaio, nomeMese, dateSettimana, type InputPremiMese,
 } from './premiMese'
 import { DEFAULT_ECONOMY_RULES } from './rules'
@@ -351,6 +352,71 @@ test('settimana scorsa: dal lunedì al sabato quella prima, di domenica quella a
     const s = settimanaScorsa(new Date('2026-11-02T10:00:00Z'))
     assert.equal(s.lunedi, '2026-10-26')
     assert.equal(meseDellaSettimana(s), '2026-10')
+})
+
+// ── Revisione 14/11/2026 ───────────────────────────────────────────────
+
+/** Il calcolo di sabato 14/11 pomeriggio, come resterebbe in cache fino a lunedì. */
+const calcoloDiSabato = () => calcolaPremiMese(base({
+    now: NOW_14_11,
+    presenze: [...presenze('105', 8), ...presenze('112', 6, '2026-11-10T15:00:00Z')],
+    conferme: conferme({
+        chiusure: [...volte(4, '2026-11-05T15:00:00Z'), ...volte(28, '2026-11-11T15:00:00Z')],
+        confermate: [...confermate([ALBERTO, ANDREA, NOEMI_C], '2026-11-03T10:00:00Z'), ...confermate([ALBERTO, ANDREA, NOEMI_C], '2026-11-10T10:00:00Z')],
+    }),
+}))
+
+test('vista Conferme: calcolo fresco di sabato, la settimana scorsa è 2-7/11 e 9-14/11 matura', () => {
+    const v = vistaSalvadanaioConferme(calcoloDiSabato(), null, ANDREA, NOW_14_11)
+    assert.equal(v.scorsa?.lunedi, '2026-11-02')
+    assert.equal(v.scorsa?.euro, 0)
+    assert.equal(v.mese.inCorso?.euro, 144)
+    assert.equal(v.mese.euroMese, 0)
+})
+
+test('vista Conferme: dato di sabato servito domenica o lunedì, la settimana finita conta come chiusa', () => {
+    const vecchio = calcoloDiSabato()
+    for (const now of [new Date('2026-11-15T10:00:00Z'), new Date('2026-11-16T07:00:00Z')]) {
+        const v = vistaSalvadanaioConferme(vecchio, null, ANDREA, now)
+        assert.equal(v.scorsa?.lunedi, '2026-11-09', now.toISOString())
+        assert.equal(v.scorsa?.euro, 144)
+        assert.equal(v.scorsa?.conteggio, 28)
+        assert.deepEqual(v.mese.settimane.map(s => [s.lunedi, s.euro]), [['2026-11-02', 0], ['2026-11-09', 144]])
+        assert.equal(v.mese.euroMese, 144)
+        assert.equal(v.mese.inCorso, null)
+    }
+    // Il dato in cache non si tocca: i GDO restano quelli del calcolo.
+    assert.deepEqual(vecchio, calcoloDiSabato())
+})
+
+test('vista Conferme: la settimana scorsa del mese prima arriva dal suo mese', () => {
+    const c = conferme({ chiusure: volte(19, '2026-10-28T15:00:00Z'), confermate: confermate([ALBERTO], '2026-10-27T10:00:00Z') })
+    const now = new Date('2026-11-03T10:00:00Z')
+    const ott = calcolaPremiMese(base({ mese: '2026-10', now, presenze: [], conferme: c }))
+    const nov = calcolaPremiMese(base({ now, presenze: [], conferme: c }))
+    const v = vistaSalvadanaioConferme(nov, ott, ALBERTO, now)
+    assert.equal(v.scorsa?.lunedi, '2026-10-26')
+    assert.equal(v.scorsa?.euro, 36)
+    assert.equal(v.mese.mese, '2026-11')
+})
+
+test('chiave della settimana: cambia a mezzanotte di sabato e al lunedì di Roma', () => {
+    assert.equal(chiaveSettimana(new Date('2026-11-14T22:30:00Z')), '2026-11-09')          // sabato 23:30
+    assert.equal(chiaveSettimana(new Date('2026-11-14T23:30:00Z')), '2026-11-09-chiusa')   // domenica 00:30
+    assert.equal(chiaveSettimana(new Date('2026-11-15T10:00:00Z')), '2026-11-09-chiusa')   // domenica
+    assert.equal(chiaveSettimana(new Date('2026-11-15T23:30:00Z')), '2026-11-16')          // lunedì 00:30
+})
+
+test('quota Conferme: persone attive, disattivate solo con un nome vero, mai bot o altri ruoli', () => {
+    const p = (x: Partial<{ role: string; isActive: boolean; isBot: boolean; firstName: string | null }>) =>
+        prendeQuotaConferme({ role: 'CONFERME', isActive: true, isBot: false, firstName: null, ...x })
+    assert.equal(p({}), true)                                         // Alberto: attivo, senza firstName
+    assert.equal(p({ firstName: 'Andre' }), true)
+    assert.equal(p({ isActive: false, firstName: 'Christel' }), true) // persona disattivata con il nome vero
+    assert.equal(p({ isActive: false, firstName: null }), false)      // "Team Conferme": disattivato, nessun nome vero
+    assert.equal(p({ isActive: false, firstName: '  ' }), false)
+    assert.equal(p({ isBot: true }), false)
+    assert.equal(p({ role: 'GDO' }), false)
 })
 
 test('testi: nome del mese e date della settimana', () => {

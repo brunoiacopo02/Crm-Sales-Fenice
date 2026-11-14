@@ -52,6 +52,16 @@ export function meseDelSalvadanaio(now: Date): string {
     return meseDellaSettimana(settimanaLunSab(now))
 }
 
+/**
+ * Parte della chiave di cache (revisione 14/11/2026): cambia quando la
+ * settimana si chiude (domenica 00:00 di Roma) e quando ne parte una nuova
+ * (lunedì 00:00), così un calcolo fatto prima non può essere servito dopo.
+ */
+export function chiaveSettimana(now: Date): string {
+    const s = settimanaLunSab(now)
+    return settimanaChiusa(s, now) ? `${s.lunedi}-chiusa` : s.lunedi
+}
+
 /** L'ultima settimana chiusa: dal lunedì al sabato quella prima, di domenica quella appena finita. */
 export function settimanaScorsa(now: Date): SettimanaLunSab {
     const s = settimanaLunSab(now)
@@ -85,6 +95,20 @@ export interface GdoDelMese {
 
 /** Una presenza (n = 1) o un aggiustamento manuale (n = count), nel momento in cui conta. */
 export interface PresenzaGrezza { userId: string; at: Date | string; n: number }
+
+/**
+ * Chi può prendere la quota del bonus di squadra nel ricalcolo del mese
+ * (revisione 14/11/2026). Le persone attive delle Conferme (come
+ * isConfermePersona); le disattivate solo se hanno un nome vero (firstName),
+ * così chi ha lavorato resta pagato ma un account condiviso o di servizio
+ * disattivato ("Team Conferme", senza firstName) no. Nel DB non c'è un segno
+ * affidabile dell'account condiviso: il nome vero è lo stesso criterio dei
+ * GDO "umani" (isTeamMember, leggiRosterGdo).
+ */
+export function prendeQuotaConferme(u: { role: string; isActive: boolean; isBot: boolean | null; firstName: string | null }): boolean {
+    if (u.role !== 'CONFERME' || u.isBot) return false
+    return u.isActive || !!u.firstName?.trim()
+}
 
 /** Una persona delle Conferme. `squadra` = account attivo oggi: compare anche senza bonus. */
 export type PersonaConferme = GdoDelMese
@@ -353,6 +377,31 @@ export interface VistaSalvadanaioConferme {
     /** L'ultima settimana chiusa, anche se è del mese prima; null se è prima dei premi nuovi. */
     scorsa: SettimanaConferme | null
     mese: SalvadanaioConferme
+}
+
+/**
+ * La vista di una persona delle Conferme da uno o due calcoli del mese (`m`
+ * del mese in corso, `mScorsa` del mese della settimana scorsa se diverso).
+ * Robusta a un calcolo più vecchio di `now` (revisione 14/11/2026): se la
+ * settimana "in corso" del calcolo è già finita, conta come chiusa. Non tocca
+ * i calcoli ricevuti.
+ */
+export function vistaSalvadanaioConferme(m: PremiMese, mScorsa: PremiMese | null, userId: string, now: Date): VistaSalvadanaioConferme {
+    const finita = (s: SettimanaDelMese | null) => !!s && now.getTime() >= settimanaLunSab(new Date(`${s.lunedi}T12:00:00Z`)).end.getTime()
+    const chiuseDi = (x: PremiMese) => (finita(x.inCorso) ? [...x.chiuse, x.inCorso as SettimanaDelMese] : x.chiuse)
+
+    const scorsa = settimanaScorsa(now)
+    const s = chiuseDi(mScorsa ?? m).find(x => x.lunedi === scorsa.lunedi)
+    const settimane = chiuseDi(m).map(x => settimanaConfermeDi(x, userId))
+    return {
+        scorsa: s ? settimanaConfermeDi(s, userId) : null,
+        mese: {
+            mese: m.mese,
+            euroMese: arrotonda(settimane.reduce((t, x) => t + x.euro, 0)),
+            settimane,
+            inCorso: m.inCorso && !finita(m.inCorso) ? settimanaConfermeDi(m.inCorso, userId) : null,
+        },
+    }
 }
 
 export function settimanaConfermeDi(s: SettimanaDelMese, userId: string): SettimanaConferme {
