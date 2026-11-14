@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { numeroIt, numeroItFino } from "@/lib/diretta/formato"
 import { calcolaSimGdo, leggiUltimoGiro, type EsitoSimGdo, type UltimoGiro } from "@/lib/simGdo/run"
-import type { RigaCalcolata } from "@/lib/simGdo/giro"
+import { PREFISSO_MINIMO, type RigaCalcolata, type UtenteGdo } from "@/lib/simGdo/giro"
 import { COLORI_HEX } from "@/lib/simGdo/celle"
 import { MIN_CHIAMATE, FATTORE_ROSSO, type Colore } from "@/lib/simGdo/tasso"
 import { PRIMA_ORA, ULTIMA_ORA } from "@/lib/simGdo/orario"
@@ -53,10 +53,13 @@ const pc = (v: number | null) => (v === null ? "—" : `${numeroItFino(v * 100, 
 
 const NOME_COLORE: Record<Colore, string> = { grigio: "grigia", rosso: "rossa", verde: "verde" }
 
+function persona(u: UtenteGdo): string {
+    const codice = u.gdoCode ? `GDO ${u.gdoCode}` : "GDO"
+    return u.firstName ? `${u.firstName} (${codice})` : codice
+}
+
 function nomeCrm(r: RigaCalcolata): string {
-    if (!r.utente) return "—"
-    const codice = r.utente.gdoCode ? `GDO ${r.utente.gdoCode}` : r.utente.nomeCrm ?? ""
-    return r.utente.firstName ? `${r.utente.firstName} (${codice})` : codice
+    return r.utente ? persona(r.utente) : "—"
 }
 
 // ── Pezzi ────────────────────────────────────────────────────────────────
@@ -122,8 +125,8 @@ function UltimoGiroUi({ g }: { g: UltimoGiro | null }) {
 // ── Pagina ───────────────────────────────────────────────────────────────
 
 const MOTIVO: Record<Exclude<RigaCalcolata["esito"], "agganciato">, string> = {
-    non_agganciato: "Interno non collegato a nessun utente del CRM (tabella degli interni del centralino).",
-    nome_diverso: "Nel CRM questo interno è di un'altra persona: il nome nel foglio non corrisponde. La cella resta vuota finché l'interno non viene ricollegato.",
+    nessuno: "Nessun GDO attivo del CRM ha un nome che corrisponde a quello del foglio. La cella resta vuota.",
+    ambiguo: "Più GDO attivi del CRM corrispondono a questo nome: non so a chi agganciare la riga. La cella resta vuota.",
     interno_ripetuto: "Lo stesso interno compare in più righe: vale solo la prima.",
 }
 
@@ -135,7 +138,7 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Numero forte valore={pc(e.mediaTasso)} etichetta={<>media di squadra dal 1 giugno 2026 a oggi ({n(e.media.risposte)} risposte su {n(e.media.chiamate)} chiamate)</>} />
                 <Numero valore={pc(e.soglia)} etichetta={<>soglia rossa: sotto questo tasso, con almeno {MIN_CHIAMATE} chiamate, la cella è rossa ({numeroItFino(FATTORE_ROSSO * 100, 0)}% della media)</>} />
-                <Numero valore={`${n(agganciate.length)} su ${n(e.righe.length)}`} etichetta={<>righe del foglio collegate a un GDO del CRM; colonna del tasso: {e.colonnaTasso}</>} />
+                <Numero valore={`${n(agganciate.length)} su ${n(e.righe.length)}`} etichetta={<>righe del foglio collegate per nome a un GDO attivo; colonna del tasso: {e.colonnaTasso}</>} />
             </div>
 
             <Sezione titolo={`Oggi, alle ${oraDi(e.adesso)}`} className="mt-4">
@@ -146,7 +149,7 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
                             <td className={TD_SX}>{r.nome || "—"}</td>
                             <td className={TD_SX}>
                                 {nomeCrm(r)}
-                                {r.esito !== "agganciato" && <Piccolo arancio>{r.esito === "non_agganciato" ? "non collegato" : r.esito === "nome_diverso" ? "persona diversa dal foglio" : "interno ripetuto"}</Piccolo>}
+                                {r.esito !== "agganciato" && <Piccolo arancio>{r.esito === "nessuno" ? "nessun GDO con questo nome" : r.esito === "ambiguo" ? "nome ambiguo" : "interno ripetuto"}</Piccolo>}
                             </td>
                             <td className={TD_SX}>
                                 {r.numero || "—"}
@@ -174,7 +177,7 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
                                 <div className="font-semibold">Interno {r.interno} · {r.nome || "senza nome"} (riga {r.riga})</div>
                                 <div className="text-[#BFBFBF]">
                                     {MOTIVO[r.esito as keyof typeof MOTIVO]}
-                                    {r.esito === "nome_diverso" && r.utente && <> Oggi l&apos;interno {r.interno} risulta di {nomeCrm(r)}.</>}
+                                    {r.esito === "ambiguo" && <> Candidati: {r.candidati.map(persona).join(", ")}.</>}
                                 </div>
                             </div>
                         ))}
@@ -190,7 +193,7 @@ function ComeSiConta() {
         <Sezione titolo="Come si conta" className="mt-4">
             <div className="max-w-4xl space-y-2 text-[14px] leading-relaxed text-[#BFBFBF]">
                 <div>Tasso = risposte ÷ chiamate esitate dal GDO oggi, tutto l&apos;orario, sabato compreso. Risposta vuol dire ogni esito diverso da «non risposto». Gli scarti per numero inesistente non contano né come chiamata né come risposta.</div>
-                <div>La riga del foglio si collega al GDO con l&apos;interno del centralino (colonna GDO). Se nel foglio cambia il numero della SIM, da quel giro contano solo le chiamate fatte dopo il cambio.</div>
+                <div>La riga del foglio si collega al GDO attivo il cui nome corrisponde al NOME del foglio: uguale, o con almeno {PREFISSO_MINIMO} lettere iniziali in comune senza accenti e senza «h» (RICCARDINO è Riccardo). Nessuno o più di uno: la riga resta vuota. L&apos;interno (colonna GDO) serve solo a riconoscere la riga. Se nel foglio cambia il numero della SIM, da quel giro contano solo le chiamate fatte dopo il cambio.</div>
                 <div>Cella grigia: meno di {MIN_CHIAMATE} chiamate oggi, il numero è scritto ma è presto per giudicare. Rossa: sotto il {numeroItFino(FATTORE_ROSSO * 100, 0)}% della media di squadra. Verde chiaro: tutto il resto. Vuota: riga non collegata o nessuna chiamata.</div>
                 <div>La media di squadra è lo stesso conto su tutti i GDO dal 1 giugno 2026 a oggi (risposte totali ÷ chiamate totali), senza il bot, gli account di prova e il GDO 108.</div>
             </div>

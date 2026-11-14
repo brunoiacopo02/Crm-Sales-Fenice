@@ -9,11 +9,12 @@
 
 import { and, eq, gte, inArray, sql } from 'drizzle-orm'
 import { db } from '@/db'
-import { appSettings, callLogs, pbxExtensions, users } from '@/db/schema'
+import { appSettings, callLogs, users } from '@/db/schema'
+import { isRealGdo } from '@/lib/kpi/canon'
 import { dayBoundsRome, monthBoundsRome } from '@/lib/dateUtils'
 import { leggiFoglio, lettereColonna } from './intestazioni'
 import { aggiornaStatoSim, leggiStatoSim, type StatoSim } from './cambioSim'
-import { calcolaRighe, type RigaCalcolata, type UtenteInterno } from './giro'
+import { calcolaRighe, type RigaCalcolata, type UtenteGdo } from './giro'
 import { richiesteScrittura } from './celle'
 import { contaGruppi, eGdoDellaMedia, ESITI_CHIAMATA, MEDIA_DAL_MESE, sogliaRossa, tasso, type Conteggio } from './tasso'
 import { leggiFoglioSim, scriviFoglioSim } from './foglio'
@@ -73,21 +74,22 @@ async function salvaUltimoGiro(g: UltimoGiro): Promise<void> {
     await scriviSetting(ULTIMO_GIRO_KEY, JSON.stringify(g))
 }
 
-/** Interno → utente, dalla mappa del centralino (pbxExtensions). */
-async function leggiInterni(): Promise<Map<string, UtenteInterno>> {
+/**
+ * GDO a cui si può agganciare una riga del foglio: attivi, non bot, non prova
+ * (isRealGdo del canone). L'aggancio è per nome (giro.ts), non per interno:
+ * `pbxExtensions` non si usa, è ferma all'ultimo import dei tabulati.
+ */
+async function leggiGdoAttivi(): Promise<UtenteGdo[]> {
     const righe = await db.select({
-        extension: pbxExtensions.extension,
         id: users.id,
         firstName: users.firstName,
         gdoCode: users.gdoCode,
-        name: users.name,
-        displayName: users.displayName,
-    }).from(pbxExtensions)
-        .innerJoin(users, eq(users.id, pbxExtensions.userId))
-        .where(eq(pbxExtensions.companyId, FENICE))
-    return new Map(righe.map(r => [r.extension.trim(), {
-        id: r.id, firstName: r.firstName, gdoCode: r.gdoCode, nomeCrm: r.displayName ?? r.name,
-    }]))
+        role: users.role,
+        isActive: users.isActive,
+        isBot: users.isBot,
+        isTest: users.isTest,
+    }).from(users).where(and(eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isActive, true)))
+    return righe.filter(isRealGdo).map(r => ({ id: r.id, firstName: r.firstName, gdoCode: r.gdoCode }))
 }
 
 /** Media di squadra dal 1 giugno 2026 a adesso: totale risposte ÷ totale chiamate. */
@@ -149,8 +151,8 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
     const lettura = leggiFoglio(foglio.valori)
     if (!lettura.ok) return vuoto(adesso, lettura.errore)
 
-    const [interni, media, statoPrima] = await Promise.all([
-        leggiInterni(),
+    const [utenti, media, statoPrima] = await Promise.all([
+        leggiGdoAttivi(),
         leggiMedia(),
         leggiSetting(STATO_SIM_KEY).then(leggiStatoSim),
     ])
@@ -158,9 +160,9 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
 
     const mediaTasso = tasso(media)
     const soglia = mediaTasso === null ? null : sogliaRossa(mediaTasso)
-    const ids = [...new Set(lettura.righe.map(r => interni.get(r.interno)?.id).filter((x): x is string => !!x))]
-    const logs = await leggiLogsDiOggi(ids, adesso)
-    const righe = calcolaRighe({ righe: lettura.righe, statoSim: stato, interni, logs, soglia, adesso })
+    // Le chiamate di oggi di tutti i GDO attivi: pochi e poche righe, e così l'aggancio resta tutto in giro.ts.
+    const logs = await leggiLogsDiOggi(utenti.map(u => u.id), adesso)
+    const righe = calcolaRighe({ righe: lettura.righe, statoSim: stato, utenti, logs, soglia, adesso })
 
     const esito: EsitoSimGdo = {
         ok: true, adesso: adesso.toISOString(), media, mediaTasso, soglia,

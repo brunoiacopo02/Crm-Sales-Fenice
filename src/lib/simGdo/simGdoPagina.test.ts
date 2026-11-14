@@ -21,6 +21,12 @@ test('pagina SIM GDO: solo ADMIN dalla tabella users, niente bottoni dentro span
     assert.doesNotMatch(codice, /eseguiGiroSimGdo|scrivi: true/)
 })
 
+test('giro: aggancio per nome, la tabella pbxExtensions non si usa (PO 14/11/2026)', () => {
+    for (const f of ['src/lib/simGdo/run.ts', 'src/lib/simGdo/giro.ts', PAGINA]) {
+        assert.doesNotMatch(leggi(f).replace(/\/\/.*$|\/\*[\s\S]*?\*\/|^\s*\*.*$/gm, ''), /pbxExtensions/, f)
+    }
+})
+
 test('menu: SIM GDO nel gruppo Direzione solo per l\'ADMIN, nel Sales Manager della Rinascita', () => {
     const sidebar = leggi('src/components/Sidebar.tsx')
     const direzione = sidebar.slice(sidebar.indexOf('label: "Direzione"'), sidebar.indexOf('label: "GDO"', sidebar.indexOf('label: "Direzione"')))

@@ -3,32 +3,33 @@
 // tasso e il colore della cella. Logica pura: la usano sia il giro orario sia
 // la schermata /admin/sim-gdo.
 //
-// AGGANCIO riga → utente: interno del centralino (colonna GDO) → tabella
-// `pbxExtensions` (la stessa mappa dell'import dei tabulati, scripts/import-cdr.ts).
-// Quella mappa però si aggiorna solo con l'import dei tabulati e può restare
-// indietro quando un GDO cambia postazione. Per non scrivere il tasso di una
-// persona sulla SIM di un'altra, si controlla che il NOME scritto nel foglio
-// sia compatibile con il nome dell'utente agganciato: se non lo è la riga
-// resta vuota e la schermata dice perché.
+// AGGANCIO riga → utente PER NOME (PO 14/11/2026): il foglio è la verità su
+// chi usa quale SIM. La riga si aggancia all'unico GDO attivo (non bot, non
+// prova: isRealGdo del canone) il cui nome di persona (users.firstName)
+// corrisponde al NOME del foglio. Nessuno o più di uno = riga non agganciata.
+// L'interno del centralino (colonna GDO) resta solo un'informazione e la
+// chiave dello stato del cambio SIM: la tabella `pbxExtensions` NON si usa,
+// è ferma all'ultimo import dei tabulati e serve all'attribuzione storica.
 
 import { contaChiamate, coloreCella, tasso, type Colore, type LogChiamata } from './tasso'
 import { inizioConteggio, type StatoSim } from './cambioSim'
 import type { RigaFoglio } from './intestazioni'
 import { dayBoundsRome } from '@/lib/dateUtils'
 
-export interface UtenteInterno {
+export interface UtenteGdo {
     id: string
+    /** Nome di persona (users.firstName); name/displayName sono "GDO 1xx". */
     firstName: string | null
     gdoCode: number | null
-    /** name/displayName del CRM, es. "GDO 112". */
-    nomeCrm: string | null
 }
 
-export type EsitoRiga = 'agganciato' | 'non_agganciato' | 'nome_diverso' | 'interno_ripetuto'
+export type EsitoRiga = 'agganciato' | 'nessuno' | 'ambiguo' | 'interno_ripetuto'
 
 export interface RigaCalcolata extends RigaFoglio {
     esito: EsitoRiga
-    utente: UtenteInterno | null
+    utente: UtenteGdo | null
+    /** Per 'ambiguo': i GDO che corrispondono al nome. */
+    candidati: UtenteGdo[]
     chiamate: number
     risposte: number
     /** Tasso da scrivere (0-1); null = cella vuota. */
@@ -38,36 +39,42 @@ export interface RigaCalcolata extends RigaFoglio {
     ripartitoDal: string | null
 }
 
-function normalizzaNome(s: string | null | undefined): string {
+/** Minuscole, senza accenti, solo lettere, senza h ("Christian" = "Cristian"). */
+export function normalizzaNome(s: string | null | undefined): string {
     return (s ?? '')
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .toLowerCase()
         .replace(/[^a-z]/g, '')
-        // "Christian"/"Cristian", "Anthony"/"Antony": la h non distingue nessuno.
         .replace(/h/g, '')
 }
 
+/** Lettere iniziali in comune richieste per i diminutivi (RICCARDINO ↔ Riccardo). */
+export const PREFISSO_MINIMO = 4
+
 /**
- * Il NOME del foglio può essere la persona del CRM? Il foglio usa diminutivi e
- * grafie sue (RICCARDINO, ZORA, CHRISTIAN): basta che i primi tre caratteri
- * coincidano (senza accenti e senza h). Nome vuoto nel foglio = niente da smentire;
- * utente senza nome nel CRM = non si può verificare, quindi no.
+ * Il NOME del foglio è questa persona? Uguali dopo la normalizzazione, oppure
+ * un prefisso comune di almeno PREFISSO_MINIMO lettere. Nomi vuoti: mai.
  */
 export function nomiCompatibili(nomeFoglio: string, nomeCrm: string | null): boolean {
     const a = normalizzaNome(nomeFoglio)
-    if (!a) return true
     const b = normalizzaNome(nomeCrm)
-    if (!b) return false
+    if (!a || !b) return false
     if (a === b) return true
     let comune = 0
     while (comune < a.length && comune < b.length && a[comune] === b[comune]) comune++
-    return comune >= 3
+    return comune >= PREFISSO_MINIMO
+}
+
+/** GDO attivi che corrispondono al nome del foglio (passare solo GDO veri e attivi). */
+export function candidatiPerNome(nomeFoglio: string, utenti: UtenteGdo[]): UtenteGdo[] {
+    return utenti.filter(u => nomiCompatibili(nomeFoglio, u.firstName))
 }
 
 export function calcolaRighe(input: {
     righe: RigaFoglio[]
     statoSim: StatoSim
-    interni: Map<string, UtenteInterno>
+    /** GDO attivi, non bot, non prova. */
+    utenti: UtenteGdo[]
     logs: (LogChiamata & { userId: string | null })[]
     soglia: number | null
     adesso: Date
@@ -83,15 +90,18 @@ export function calcolaRighe(input: {
 
     const visti = new Set<string>()
     return input.righe.map((r): RigaCalcolata => {
-        const vuota = (esito: EsitoRiga, utente: UtenteInterno | null): RigaCalcolata => ({
-            ...r, esito, utente, chiamate: 0, risposte: 0, tasso: null, colore: null, ripartitoDal: null,
+        const vuota = (esito: EsitoRiga, candidati: UtenteGdo[] = []): RigaCalcolata => ({
+            ...r, esito, utente: null, candidati, chiamate: 0, risposte: 0, tasso: null, colore: null, ripartitoDal: null,
         })
-        if (visti.has(r.interno)) return vuota('interno_ripetuto', null)
+        // L'interno è la chiave dello stato del cambio SIM: due righe con lo
+        // stesso interno si confonderebbero, vale la prima.
+        if (visti.has(r.interno)) return vuota('interno_ripetuto')
         visti.add(r.interno)
 
-        const utente = input.interni.get(r.interno) ?? null
-        if (!utente) return vuota('non_agganciato', null)
-        if (!nomiCompatibili(r.nome, utente.firstName)) return vuota('nome_diverso', utente)
+        const candidati = candidatiPerNome(r.nome, input.utenti)
+        if (candidati.length === 0) return vuota('nessuno')
+        if (candidati.length > 1) return vuota('ambiguo', candidati)
+        const utente = candidati[0]
 
         const dal = inizioConteggio(input.statoSim[r.interno]?.dal ?? null, input.adesso)
         const c = contaChiamate(perUtente.get(utente.id) ?? [], dal)
@@ -99,6 +109,7 @@ export function calcolaRighe(input: {
             ...r,
             esito: 'agganciato',
             utente,
+            candidati,
             chiamate: c.chiamate,
             risposte: c.risposte,
             tasso: tasso(c),

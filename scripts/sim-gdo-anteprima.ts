@@ -20,7 +20,9 @@ async function main() {
         riga: r.riga,
         interno: r.interno,
         foglio: r.nome,
-        crm: r.utente ? `${r.utente.firstName ?? ''} (${r.utente.gdoCode ?? r.utente.nomeCrm})` : '',
+        crm: r.utente
+            ? `${r.utente.firstName ?? ''} (${r.utente.gdoCode ?? '?'})`
+            : r.candidati.map(c => `${c.firstName} (${c.gdoCode})`).join(' / '),
         numero: r.numero,
         esito: r.esito,
         chiamate: r.chiamate,
