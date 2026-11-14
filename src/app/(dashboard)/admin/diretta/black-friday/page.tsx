@@ -6,7 +6,7 @@ import { euroIt, numeroIt, numeroItFino } from "@/lib/diretta/formato"
 import { leggiMonitorBf } from "@/lib/blackFriday/monitorDb"
 import {
     MIN_LEAD_NUMERO, ORE_APPUNTAMENTO_SENZA_ESITO, ORE_FERMO_SUL_BOT, ORE_RIDATO_NON_CHIAMATO, PCT_CONSEGNA_MINIMA, PUNTI_RESA_BASSA,
-    type CascataSm, type Imbuto, type MonitorBf, type RigaConfronto, type RigaGruppo,
+    type CascataSm, type ColonnaCanale, type Imbuto, type MonitorBf, type RigaConfronto, type RigaGruppo,
 } from "@/lib/blackFriday/monitor"
 import { Indietro, NonDisponibile, PaginaAdmin, Sezione, TitoloAdmin, Vuoto } from "@/components/diretta/admin/ui"
 import { AggiornaBlackFriday } from "./AggiornaBlackFriday"
@@ -148,6 +148,7 @@ function Contenuto({ m }: { m: MonitorBf }) {
             <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col gap-4">
                     <SezioneImbuto m={m} />
+                    <SezioneEmailAds m={m} />
                     <SezioneSalesManager m={m} />
                     <SezioneGdo m={m} />
                     <SezioneConfronto m={m} />
@@ -213,6 +214,53 @@ function SezioneImbuto({ m }: { m: MonitorBf }) {
                 Giorno di ingresso in ora di Roma. Con chat: il bot ha scritto al lead da 2 minuti prima dell&apos;ingresso in poi.
                 Consegnato: un messaggio del bot dopo l&apos;ingresso risulta consegnato o letto su WhatsApp. Hanno risposto: almeno un messaggio del lead dopo l&apos;ingresso. * Oggi è ancora in corso: gli appuntamenti di chi è entrato oggi arrivano nelle prossime ore.
                 {motivi.length > 0 && <> Scarti delle Conferme: {motivi.map(([k, v]) => `${v} "${k}"`).join(", ")}.</>}
+            </div>
+        </Sezione>
+    )
+}
+
+// Email al database e inserzioni Meta a confronto (PO 14/11/2026)
+function SezioneEmailAds({ m }: { m: MonitorBf }) {
+    const { email, ads } = m.emailAds
+    const conPct = (v: number | null, p: number | null) => (v === null ? "—" : <>{n(v)}<Piccolo>{pc(p)} dei lead</Piccolo></>)
+    const righeBot: [string, (c: ColonnaCanale) => ReactNode, boolean?][] = m.bot ? [
+        ["Consegnati su WhatsApp", c => conPct(c.consegnato, c.pctConsegnato)],
+        ["Hanno risposto al bot", c => conPct(c.risposto, c.pctRisposto)],
+    ] : []
+    const righe: [string, (c: ColonnaCanale) => ReactNode, boolean?][] = [
+        ["Lead", c => n(c.lead), true],
+        ...righeBot,
+        ["Appuntamenti fissati", c => conPct(c.appuntamenti, c.pctAppuntamenti), true],
+        ["Confermati dalle Conferme", c => conPct(c.confermati, c.pctConfermati)],
+        ["Presentati alla call", c => conPct(c.presentati, c.pctPresentati)],
+        ["Vendite", c => conPct(c.chiusi, c.pctChiusi), true],
+        ["Firmato", c => euroIt(c.euro)],
+        ["Appuntamenti ancora da fare", c => conPct(c.futuri, c.pctFuturi)],
+        ["Già nel CRM prima del Black Friday", c => conPct(c.giaNelCrm, c.pctGiaNelCrm)],
+    ]
+    return (
+        <Sezione titolo="Email e inserzioni a confronto">
+            <Tabella intestazioni={["Passaggio", "Email al database", "Inserzioni Meta"]} min={420}>
+                {righe.map(([etichetta, f, forte]) => (
+                    <tr key={etichetta} className={forte ? "bg-[#2E2A24]" : ""}>
+                        <th scope="row" className={`${TH_RIGA} ${forte ? "font-semibold" : ""}`}>{etichetta}</th>
+                        <td className={TD}>{f(email)}</td>
+                        <td className={TD}>{f(ads)}</td>
+                    </tr>
+                ))}
+            </Tabella>
+            {!m.bot && (
+                <div className="mt-3">
+                    <SenzaBot>Consegnati su WhatsApp e risposte al bot arrivano dal bot, che ora non ha risposto.</SenzaBot>
+                </div>
+            )}
+            <div className="mt-3 space-y-2 text-[13px] leading-snug text-[#BFBFBF]">
+                <div className="font-semibold text-[#F2F2F2]">Gruppi arrivati in giorni diversi e non ancora maturi: è una fotografia, non un giudizio.</div>
+                <div>
+                    Stessi lead della tabella dei canali; percentuali sul totale dei lead della colonna. Presentati: appuntamento con presenza registrata,
+                    come nell&apos;imbuto. Vendite contate per persona, anche se firmate su un&apos;altra scheda della stessa persona.
+                    Già nel CRM: la scheda o un&apos;altra scheda con lo stesso telefono esisteva prima dell&apos;iscrizione al Black Friday.
+                </div>
             </div>
         </Sezione>
     )

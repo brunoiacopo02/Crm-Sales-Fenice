@@ -46,6 +46,8 @@ export interface LeadBf {
     salespersonOutcomeAt: Date | null
     /** Chiave persona (chiavePersona del telefono): serve solo ad agganciare le chiusure su altre schede. */
     persona?: string | null
+    /** La persona era già nel CRM prima dell'ingresso BF (vedi personeGiaNelCrm). */
+    giaNelCrm?: boolean
 }
 
 /**
@@ -202,6 +204,35 @@ export function attribuisciChiusureAltrove(leads: LeadBf[], chiusure: ChiusuraAl
         }),
         attribuite,
     }
+}
+
+/** Una scheda della persona (stesse ultime 10 cifre), per sapere se era già nel CRM. */
+export interface SchedaPersona { leadId: string; persona: string | null; createdAt: Date }
+
+/**
+ * Lead BF la cui persona era già nel CRM prima dell'iscrizione al Black Friday
+ * (PO 14/11/2026): la scheda stessa è nata prima dell'ingresso (convertito),
+ * oppure un'altra scheda della stessa persona, FUORI dal monitor, è stata creata
+ * prima dell'ingresso. Un'altra scheda BF non conta: è la stessa iscrizione.
+ * `createdAt` = ingresso BF, `natoAt` = creazione vera della scheda.
+ */
+export function personeGiaNelCrm(
+    leads: { id: string; createdAt: Date; natoAt: Date; persona: string | null | undefined }[],
+    altre: SchedaPersona[],
+): Set<string> {
+    const idBf = new Set(leads.map(l => l.id))
+    const primaPerPersona = new Map<string, Date>()
+    for (const a of altre) {
+        if (!a.persona || idBf.has(a.leadId)) continue
+        const p = primaPerPersona.get(a.persona)
+        if (!p || a.createdAt < p) primaPerPersona.set(a.persona, a.createdAt)
+    }
+    const out = new Set<string>()
+    for (const l of leads) {
+        const prima = l.persona ? primaPerPersona.get(l.persona) : undefined
+        if (l.natoAt < l.createdAt || (prima && prima < l.createdAt)) out.add(l.id)
+    }
+    return out
 }
 
 /** ORE DI TURNO GDO oltre le quali un ridato dal bot non ancora chiamato va segnalato (PO 09/11/2026). */
@@ -427,6 +458,33 @@ export interface RigaGruppo {
     pctAppuntamentiSuRisposto: number | null
 }
 
+/**
+ * Una colonna di "Email e inserzioni a confronto" (PO 14/11/2026). Tutte le % sono
+ * sui lead della colonna. Consegnato e risposto dal bot: null se il bot non ha
+ * risposto. Presentati come nell'imbuto (appuntamento con presenza registrata,
+ * qualunque esito del venditore); vendite per persona come nel resto del monitor.
+ */
+export interface ColonnaCanale {
+    lead: number
+    consegnato: number | null
+    pctConsegnato: number | null
+    risposto: number | null
+    pctRisposto: number | null
+    appuntamenti: number
+    pctAppuntamenti: number | null
+    confermati: number
+    pctConfermati: number | null
+    presentati: number
+    pctPresentati: number | null
+    chiusi: number
+    pctChiusi: number | null
+    euro: number
+    futuri: number
+    pctFuturi: number | null
+    giaNelCrm: number
+    pctGiaNelCrm: number | null
+}
+
 export interface MonitorBf {
     calcolatoAlle: string
     inizio: string
@@ -441,6 +499,8 @@ export interface MonitorBf {
         daChiamare: number
     }
     canali: { chiave: Canale; nome: string; lead: number; risposto: number | null; pctRisposto: number | null; appuntamenti: number; pctAppuntamenti: number | null; presenti: number; chiusi: number }[]
+    /** Email al database e inserzioni Meta a confronto, stessi lead della tabella canali. */
+    emailAds: { email: ColonnaCanale; ads: ColonnaCanale }
     /**
      * Confronto coi funnel del bot. fonte 'bot': chat nate dal 7/11 per funnel
      * (database del bot), più "BF tutti i lead" dal CRM con le risposte del bot.
@@ -499,6 +559,25 @@ function imbuto(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): 
         euroChiusi: chiusi.reduce((s, l) => s + (l.closeAmountEur ?? 0), 0),
         nonChiusi: app.filter(l => l.salespersonOutcome === 'Non chiuso').length,
         futuri: app.filter(l => l.appointmentDate !== null && l.appointmentDate > adesso).length,
+    }
+}
+
+function colonnaCanale(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): ColonnaCanale {
+    // Stesse definizioni dell'imbuto: i numeri della colonna tornano con quelli del totale.
+    const x = imbuto(a, adesso, bot)
+    const su = (v: number) => pct(v, a.length)
+    const giaNelCrm = a.filter(l => l.giaNelCrm).length
+    return {
+        lead: x.entrati,
+        consegnato: x.consegnato, pctConsegnato: x.pctConsegnato,
+        risposto: x.risposto, pctRisposto: x.pctRisposto,
+        appuntamenti: x.appuntamenti, pctAppuntamenti: x.pctAppuntamenti,
+        confermati: x.confermati, pctConfermati: su(x.confermati),
+        presentati: x.presenti, pctPresentati: su(x.presenti),
+        chiusi: x.chiusi, pctChiusi: su(x.chiusi),
+        euro: x.euroChiusi,
+        futuri: x.futuri, pctFuturi: su(x.futuri),
+        giaNelCrm, pctGiaNelCrm: su(giaNelCrm),
     }
 }
 
@@ -642,6 +721,11 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
             presenti: app.filter(l => l.presentedAt !== null).length, chiusi: a.filter(l => l.salespersonOutcome === 'Chiuso').length,
         }
     })
+
+    const emailAds = {
+        email: colonnaCanale(perCanale.get('email') ?? [], adesso, botPerLead),
+        ads: colonnaCanale(perCanale.get('meta') ?? [], adesso, botPerLead),
+    }
 
     // ── Confronto coi funnel del bot ──
     const DETTAGLIO = ['CORSO 10 ORE', 'JOB SIMULATOR', 'TELEGRAM']
@@ -818,6 +902,7 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
             daChiamare: ridatiDaChiamare.length,
         },
         canali,
+        emailAds,
         confronto,
         bot: gruppiBot,
         salesManager,

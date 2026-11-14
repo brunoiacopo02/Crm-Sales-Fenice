@@ -19,7 +19,7 @@ import { contaNeiKpiSql } from '@/lib/intakeBatch'
 import { readGamificationTargets } from '@/lib/diretta/settings'
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import {
-    BF_FUNNEL, CAMBIO_FUNNEL_BF, EVENTO_BF_CONVERTITO, attribuisciChiusureAltrove, calcolaMonitorBf, chiavePersona, ingressoBf, stadiSm,
+    BF_FUNNEL, CAMBIO_FUNNEL_BF, EVENTO_BF_CONVERTITO, attribuisciChiusureAltrove, calcolaMonitorBf, chiavePersona, ingressoBf, personeGiaNelCrm, stadiSm,
     type AltriFunnelSm, type BotFunnelChat, type BotLeadBf, type DatiBotBf, type MonitorBf,
 } from './monitor'
 
@@ -155,6 +155,22 @@ const conversioneBfAt = sql<string | Date | null>`(
 
 const comeData = (v: string | Date | null): Date | null => (v === null ? null : v instanceof Date ? v : new Date(v))
 
+/** Chiave persona in SQL: stessa espressione dell'indice leads_company_phonekey_idx. */
+const chiavePersonaSql = sql<string>`right(regexp_replace(${leads.phone}, '\\D', '', 'g'), 10)`
+
+/**
+ * Le schede delle persone dei lead BF (stesse ultime 10 cifre), per "già nel CRM
+ * prima dell'iscrizione" (PO 14/11/2026). Passa dall'indice leads_company_phonekey_idx:
+ * qualche centinaio di chiavi, nessuna scansione dei telefoni.
+ */
+async function leggiSchedePersone(persone: string[]): Promise<{ leadId: string; persona: string | null; createdAt: Date }[]> {
+    if (persone.length === 0) return []
+    const righe = await db.select({ id: leads.id, phone: leads.phone, createdAt: leads.createdAt })
+        .from(leads)
+        .where(and(eq(leads.companyId, FENICE), leadVero(), inArray(chiavePersonaSql, persone)))
+    return righe.map(r => ({ leadId: r.id, persona: chiavePersona(r.phone), createdAt: r.createdAt }))
+}
+
 async function leggi(): Promise<MonitorBf> {
     const adesso = new Date()
     const oggi = dayBoundsRome(adesso)
@@ -259,7 +275,21 @@ async function leggi(): Promise<MonitorBf> {
     const leadIn = righeLead.map(l => ({
         ...l, createdAt: ingressoBf(l.createdAt, comeData(l.convertitoAt), INIZIO_BF) ?? l.createdAt,
     }))
-    const bot = await leggiDatiBot(leadIn)
+    const personeBf = [...new Set(righeLead.map(l => chiavePersona(l.phone)).filter((p): p is string => !!p))]
+    const [bot, schedePersone] = await Promise.all([
+        leggiDatiBot(leadIn),
+        // Se non riesce, la riga "già nel CRM" resta a zero ma la pagina sta in piedi.
+        leggiSchedePersone(personeBf).catch(e => {
+            console.error('[monitor black friday] schede delle persone', e)
+            return null
+        }),
+    ])
+    const giaNelCrm = schedePersone
+        ? personeGiaNelCrm(
+            righeLead.map((l, i) => ({ id: l.id, createdAt: leadIn[i].createdAt, natoAt: l.createdAt, persona: chiavePersona(l.phone) })),
+            schedePersone,
+        )
+        : new Set<string>()
 
     // Il telefono serve solo al bot per trovare la chat e, ridotto a chiave persona,
     // ad agganciare le chiusure su altre schede: non entra nella cache della pagina.
@@ -269,7 +299,7 @@ async function leggi(): Promise<MonitorBf> {
         confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
         salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct,
         appointmentCreatedAt: l.appointmentCreatedAt, confirmationsTimestamp: l.confirmationsTimestamp,
-        salespersonOutcomeAt: l.salespersonOutcomeAt, persona: chiavePersona(l.phone),
+        salespersonOutcomeAt: l.salespersonOutcomeAt, persona: chiavePersona(l.phone), giaNelCrm: giaNelCrm.has(l.id),
     }))
     const chiusureAltrove = chiusiDal.flatMap(c => (c.at ? [{
         leadId: c.id, persona: chiavePersona(c.phone), at: c.at, closeAmountEur: c.closeAmountEur, closeProduct: c.closeProduct,
@@ -294,7 +324,7 @@ async function leggi(): Promise<MonitorBf> {
     })
 }
 
-const inCache = unstable_cache(leggi, ['monitor-black-friday-v3'], { revalidate: CACHE_SECONDI, tags: [TAG_MONITOR_BF] })
+const inCache = unstable_cache(leggi, ['monitor-black-friday-v4'], { revalidate: CACHE_SECONDI, tags: [TAG_MONITOR_BF] })
 
 /** Numeri del monitor, in cache 45 secondi. null se la lettura non riesce. */
 export async function leggiMonitorBf(): Promise<MonitorBf | null> {

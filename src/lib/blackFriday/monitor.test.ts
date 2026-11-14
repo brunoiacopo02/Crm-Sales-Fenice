@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT_TARGETS } from '@/lib/diretta/config'
 import {
-    CAMBIO_FUNNEL_BF, attribuisciChiusureAltrove, calcolaMonitorBf, canaleDi, chiavePersona, cascataSm, eConversioneBf, giorniDal, ingressoBf, oreDiTurno, pct, sigleNumero, stadiSm,
+    CAMBIO_FUNNEL_BF, attribuisciChiusureAltrove, calcolaMonitorBf, canaleDi, personeGiaNelCrm, chiavePersona, cascataSm, eConversioneBf, giorniDal, ingressoBf, oreDiTurno, pct, sigleNumero, stadiSm,
     type BotLeadBf, type DatiBotBf, type InputMonitorBf, type LeadBf,
 } from './monitor'
 
@@ -540,4 +540,96 @@ test('convertito: giorno, età e fermi dalla conversione; chiamate e ridati di p
     // Fermo sul bot solo il lead nato il 7/11, non il convertito di oggi.
     assert.equal(r.attenzioni.find(a => a.chiave === 'fermi_sul_bot')?.numero, 1)
     assert.equal(r.controlli.ok, true)
+})
+
+// ── Email e inserzioni a confronto (PO 14/11/2026) ──
+
+const EMAIL = { utmSource: 'ActiveCampaign', utmMedium: 'LancioBlackFriday2026' }
+const ADS = { utmSource: 'Facebook', utmMedium: 'Paid' }
+
+test('email e inserzioni: stesse righe, % sempre sul totale dei lead della colonna', () => {
+    const adesso = new Date('2026-11-12T18:00:00Z')
+    const app = (giorno: string) => ({ status: 'APPOINTMENT', appointmentDate: new Date(`${giorno}T09:00:00Z`) })
+    const presente = { confirmationsOutcome: 'confermato', presentedAt: new Date('2026-11-10T09:05:00Z') }
+    const r = calcolaMonitorBf(base({
+        adesso,
+        leads: [
+            // Email: 4 lead, 2 appuntamenti (uno futuro), 1 presente e chiuso, 1 venduto su un'altra scheda.
+            lead({ id: 'e1', ...EMAIL, ...app('2026-11-10'), ...presente, salespersonOutcome: 'Chiuso', closeAmountEur: 2890, giaNelCrm: true }),
+            lead({ id: 'e2', ...EMAIL, ...app('2026-11-14'), giaNelCrm: true }),
+            lead({ id: 'e3', ...EMAIL, persona: '3331112223', giaNelCrm: true }),
+            lead({ id: 'e4', utmSource: 'Email', utmMedium: 'LancioBlackFriday2026' }),
+            // Inserzioni: 2 lead, il presente "Sparito" conta come presente (come nel resto del monitor).
+            lead({ id: 'a1', ...ADS, ...app('2026-11-10'), ...presente, salespersonOutcome: 'Sparito' }),
+            lead({ id: 'a2', utmSource: 'Meta', utmMedium: 'Paid', ...app('2026-11-10'), confirmationsOutcome: 'scartato', giaNelCrm: true }),
+            // Fuori da entrambe le colonne.
+            lead({ id: 'x1', utmSource: 'bioorg', utmMedium: 'Lanciosmm', ...app('2026-11-10') }),
+            lead({ id: 'x2', utmSource: 'Email', utmMedium: 'Lanciowebai' }),
+        ],
+        chiusureAltrove: [{ leadId: 'vecchia-e3', persona: '3331112223', at: new Date('2026-11-11T10:00:00Z'), closeAmountEur: 999, closeProduct: 'gold' }],
+        bot: {
+            lettoAlle: adesso.toISOString(),
+            funnel: [],
+            leads: [
+                chat('e1', { risposto: true }), chat('e2'), chat('e3', { consegnato: false }),
+                chat('a1', { risposto: true }), chat('a2', { risposto: true }),
+            ],
+        },
+    }))
+    const { email, ads } = r.emailAds
+    assert.deepEqual(
+        [email.lead, email.consegnato, email.risposto, email.appuntamenti, email.confermati, email.presentati, email.chiusi, email.euro, email.futuri, email.giaNelCrm],
+        [4, 2, 1, 2, 1, 1, 2, 2890 + 999, 1, 3],
+    )
+    assert.equal(email.pctConsegnato, 50)
+    assert.equal(email.pctRisposto, 25)
+    assert.equal(email.pctAppuntamenti, 50)
+    assert.equal(email.pctConfermati, 25)
+    assert.equal(email.pctPresentati, 25)
+    assert.equal(email.pctChiusi, 50)
+    assert.equal(email.pctFuturi, 25)
+    assert.equal(email.pctGiaNelCrm, 75)
+    assert.deepEqual(
+        [ads.lead, ads.consegnato, ads.risposto, ads.appuntamenti, ads.confermati, ads.presentati, ads.chiusi, ads.euro, ads.futuri, ads.giaNelCrm],
+        [2, 2, 2, 2, 1, 1, 0, 0, 0, 1],
+    )
+    assert.equal(ads.pctPresentati, 50)
+    assert.equal(ads.pctChiusi, 0)
+    // Le colonne sono gli stessi lead della tabella Canali.
+    assert.equal(email.lead, r.canali.find(c => c.chiave === 'email')!.lead)
+    assert.equal(ads.lead, r.canali.find(c => c.chiave === 'meta')!.lead)
+})
+
+test('email e inserzioni: senza il bot consegnati e risposte non ci sono; colonna vuota senza %', () => {
+    const r = calcolaMonitorBf(base({ leads: [lead({ id: 'e', ...EMAIL })] }))
+    assert.equal(r.emailAds.email.consegnato, null)
+    assert.equal(r.emailAds.email.pctRisposto, null)
+    assert.equal(r.emailAds.email.lead, 1)
+    assert.equal(r.emailAds.email.giaNelCrm, 0)
+    assert.equal(r.emailAds.ads.lead, 0)
+    assert.equal(r.emailAds.ads.pctAppuntamenti, null)
+})
+
+test('personeGiaNelCrm: nato prima dell\'ingresso o con un\'altra scheda della persona creata prima', () => {
+    const ingresso = new Date('2026-11-10T10:00:00Z')
+    const bf = [
+        // Convertito: la scheda stessa esisteva prima.
+        { id: 'conv', createdAt: ingresso, natoAt: new Date('2026-09-01T10:00:00Z'), persona: '3330000001' },
+        // Scheda vecchia della stessa persona.
+        { id: 'vecchio', createdAt: ingresso, natoAt: ingresso, persona: '3330000002' },
+        // L'altra scheda è nata dopo l'iscrizione: non conta.
+        { id: 'dopo', createdAt: ingresso, natoAt: ingresso, persona: '3330000003' },
+        // Due schede BF della stessa persona: l'una non rende "già nel CRM" l'altra.
+        { id: 'bf1', createdAt: new Date('2026-11-08T10:00:00Z'), natoAt: new Date('2026-11-08T10:00:00Z'), persona: '3330000004' },
+        { id: 'bf2', createdAt: ingresso, natoAt: ingresso, persona: '3330000004' },
+        // Senza telefono valido.
+        { id: 'corto', createdAt: ingresso, natoAt: ingresso, persona: null },
+    ]
+    const altre = [
+        { leadId: 'x', persona: '3330000002', createdAt: new Date('2026-05-01T10:00:00Z') },
+        { leadId: 'y', persona: '3330000003', createdAt: new Date('2026-11-11T10:00:00Z') },
+        { leadId: 'bf1', persona: '3330000004', createdAt: new Date('2026-11-08T10:00:00Z') },
+        { leadId: 'z', persona: null, createdAt: new Date('2026-05-01T10:00:00Z') },
+    ]
+    assert.deepEqual([...personeGiaNelCrm(bf, altre)].sort(), ['conv', 'vecchio'])
 })
