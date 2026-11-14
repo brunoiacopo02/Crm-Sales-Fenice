@@ -28,6 +28,7 @@ import {
     ShoppingBag,
     SlidersHorizontal,
     Headphones,
+    Smartphone,
     type LucideIcon,
 } from "lucide-react"
 import { SerenaMenteLogo } from "@/components/SerenaMenteLogo"
@@ -245,6 +246,8 @@ export function Sidebar({ companyId, salesPipelineEnabled, diretta = false, ruol
                         ...(role === "ADMIN" ? [
                             { name: "Carico Conferme", href: "/admin/carico-conferme", icon: Headphones },
                             { name: "Black Friday in diretta", href: "/admin/diretta/black-friday", icon: ShoppingBag },
+                            // PO 14/11/2026: tasso di risposta delle SIM dei GDO (foglio Google).
+                            { name: "SIM GDO", href: "/admin/sim-gdo", icon: Smartphone },
                         ] : []),
                     ],
                 },
