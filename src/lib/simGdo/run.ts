@@ -4,7 +4,7 @@
 // scrivere niente (anteprima).
 //
 // Sicurezza: se la lettura del foglio o dell'intestazione fallisce non si
-// scrive nulla e non si tocca lo stato dei numeri; se il foglio cambia fra la
+// scrive nulla e non si tocca lo stato dei cambi SIM; se il foglio cambia fra la
 // lettura e la scrittura si rinuncia e si riprova al giro dopo. Ogni giro
 // lascia traccia in appSettings (ULTIMO_GIRO_KEY) per la schermata.
 
@@ -47,7 +47,7 @@ export interface EsitoSimGdo {
     soglia: number | null
     colonnaTasso: string | null
     righe: RigaCalcolata[]
-    /** Interni con un cambio di SIM visto in questo giro. */
+    /** Interni con un cambio SIM segnato nel foglio (DATA ULTIMO CAMBIO nuova) visto in questo giro. */
     cambiati: string[]
     /** Celle scritte con un valore / svuotate in questo giro (0 in anteprima). */
     celleConValore: number
@@ -190,7 +190,7 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
         return { ...vuoto(adesso, FOGLIO_MODIFICATO), media, mediaTasso, soglia, righe }
     }
 
-    // Lo stato dei numeri si salva prima di scrivere: il cambio di SIM è un
+    // Lo stato dei cambi SIM si salva prima di scrivere: il cambio segnato è un
     // fatto visto nel foglio, vale anche se la scrittura poi non riesce.
     if (JSON.stringify(stato) !== JSON.stringify(statoPrima)) await salvaStato(stato)
     await scriviFoglioSim(richiesteScrittura({ sheetId: foglio.sheetId, colonnaTasso: lettura.colonne.tasso, righe }))
@@ -218,7 +218,7 @@ export async function eseguiGiroSimGdo(): Promise<EsitoSimGdo> {
             alle: adesso.toISOString(),
             esito: esito.ok ? 'ok' : 'errore',
             messaggio: esito.ok
-                ? `Scritte ${esito.celleConValore} celle con il tasso, svuotate ${esito.celleSvuotate}${esito.cambiati.length ? `; cambio SIM su ${esito.cambiati.join(', ')}` : ''}.`
+                ? `Scritte ${esito.celleConValore} celle con il tasso, svuotate ${esito.celleSvuotate}${esito.cambiati.length ? `; conteggio ripartito per cambio SIM su ${esito.cambiati.join(', ')}` : ''}.`
                 : esito.errore ?? 'Errore ignoto.',
             celleConValore: esito.celleConValore,
             celleSvuotate: esito.celleSvuotate,

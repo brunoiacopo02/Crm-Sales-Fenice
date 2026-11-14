@@ -97,7 +97,7 @@ test('righe: dopo un cambio SIM di oggi contano solo le chiamate dopo la riparte
     const logs = [...chiamate('u116', 0, 100, '10:00'), ...chiamate('u116', 30, 30, '14:00')]
     const [r] = calcolaRighe({
         righe: [riga(2, '1007', 'LAVINIA', '3511111111')],
-        statoSim: { '1007': { numero: '3511111111', dal: ora('12:00').toISOString() } },
+        statoSim: { '1007': { dataCambio: '14/11/2026', dal: ora('12:00').toISOString() } },
         utenti, logs, soglia: 0.269, adesso: ADESSO,
     })
     assert.equal(r.chiamate, 60)
@@ -109,7 +109,7 @@ test('righe: dopo un cambio SIM di oggi contano solo le chiamate dopo la riparte
 test('righe: ripartenza di un altro giorno non si mostra e non taglia nulla', () => {
     const [r] = calcolaRighe({
         righe: [riga(2, '1007', 'LAVINIA', '3511111111')],
-        statoSim: { '1007': { numero: '3511111111', dal: '2026-11-13T12:00:00.000Z' } },
+        statoSim: { '1007': { dataCambio: '14/11/2026', dal: '2026-11-13T12:00:00.000Z' } },
         utenti: [u('u116', 'Lavinia', 116)], logs: chiamate('u116', 1, 1, '09:00'), soglia: 0.269, adesso: ADESSO,
     })
     assert.equal(r.chiamate, 2)

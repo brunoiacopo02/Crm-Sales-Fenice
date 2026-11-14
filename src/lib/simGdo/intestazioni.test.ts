@@ -12,12 +12,12 @@ test('intestazioni: maiuscole, punti, spazi e accenti non contano', () => {
 })
 
 test('foglio: colonne trovate dall\'intestazione, non dalla posizione', () => {
-    const spostato = ['NOME', 'TASSO DI RSP.', 'NUMERO', 'GDO', 'STATO']
-    const r = leggiFoglio([spostato, ['ZORA', '', '3522286297', '1017', 'SOSPETTO']])
+    const spostato = ['NOME', 'TASSO DI RSP.', 'NUMERO', 'GDO', 'STATO', 'Data ultimo cambio']
+    const r = leggiFoglio([spostato, ['ZORA', '', '3522286297', '1017', 'SOSPETTO', '14/11']])
     assert.ok(r.ok)
     assert.equal(r.colonne.tasso, 1)
     assert.equal(r.colonne.gdo, 3)
-    assert.deepEqual(r.righe, [{ riga: 2, interno: '1017', nome: 'ZORA', numero: '3522286297', stato: 'SOSPETTO', dataCambio: '' }])
+    assert.deepEqual(r.righe, [{ riga: 2, interno: '1017', nome: 'ZORA', numero: '3522286297', stato: 'SOSPETTO', dataCambio: '14/11' }])
 })
 
 test('foglio: righe vere del foglio, note a destra ignorate, righe vuote saltate, numero di riga del foglio', () => {
@@ -88,4 +88,10 @@ test('lettere della colonna', () => {
     assert.equal(lettereColonna(8), 'I')
     assert.equal(lettereColonna(25), 'Z')
     assert.equal(lettereColonna(26), 'AA')
+})
+
+test('foglio: senza la colonna DATA ULTIMO CAMBIO (fa ripartire il conteggio) il giro si ferma', () => {
+    const r = leggiFoglio([['GDO', 'NOME', 'NUMERO', 'TASSO DI RSP'], ['1020', 'CHRISTIAN', '35', '']])
+    assert.equal(r.ok, false)
+    if (!r.ok) assert.match(r.errore, /"DATA ULTIMO CAMBIO"/)
 })

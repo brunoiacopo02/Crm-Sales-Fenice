@@ -33,6 +33,8 @@ test('giro: rilettura del foglio subito prima del batchUpdate, si rinuncia se è
     assert.ok(confronto > 0)
     assert.ok(confronto < run.indexOf('await salvaStato(stato)'))
     assert.ok(confronto < run.indexOf('await scriviFoglioSim('))
+    // si scrive solo nella colonna del tasso, mai in DATA ULTIMO CAMBIO
+    assert.deepEqual([...run.matchAll(/richiesteScrittura\(\{[^}]*colonnaTasso: ([\w.]+)/g)].map(m => m[1]), ['lettura.colonne.tasso'])
     assert.match(run, /FOGLIO_MODIFICATO = 'Foglio modificato durante il giro, riprovo al prossimo\.'/)
     // la media è della stessa azienda dei GDO agganciabili
     const media = run.slice(run.indexOf('async function leggiMedia'), run.indexOf('async function leggiLogsDiOggi'))

@@ -24,6 +24,7 @@ async function main() {
             ? `${r.utente.firstName ?? ''} (${r.utente.gdoCode ?? '?'})`
             : r.candidati.map(c => `${c.firstName} (${c.gdoCode})`).join(' / '),
         numero: r.numero,
+        dataCambio: r.dataCambio,
         esito: r.esito,
         chiamate: r.chiamate,
         risposte: r.risposte,
@@ -31,7 +32,8 @@ async function main() {
         colore: r.colore ?? 'vuota',
         ripartito: r.ripartitoDal ?? '',
     })))
-    if (e.cambiati.length) console.log(`Cambi di SIM che il giro registrerebbe: ${e.cambiati.join(', ')}`)
+    if (!e.cambiati.length) console.log('Nessun azzeramento: nessuna DATA ULTIMO CAMBIO nuova rispetto allo stato salvato.')
+    if (e.cambiati.length) console.log(`Cambi SIM segnati nel foglio (DATA ULTIMO CAMBIO nuova) che il giro registrerebbe, con azzeramento: ${e.cambiati.join(', ')}`)
     process.exit(0)
 }
 

@@ -13,7 +13,8 @@ export interface ColonneFoglio {
     /** Obbligatoria: l'aggancio alla persona si fa per nome. */
     nome: number
     stato: number | null
-    dataCambio: number | null
+    /** Obbligatoria: un valore nuovo qui fa ripartire il conteggio (cambioSim.ts). Il giro non ci scrive mai. */
+    dataCambio: number
 }
 
 export interface RigaFoglio {
@@ -83,7 +84,7 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
         if (i === 'doppia') return { ok: false, errore: `La colonna "${nome}" compare due volte nell'intestazione: non so quale usare.` }
         trovate[chiave] = i
     }
-    const mancanti = (['gdo', 'nome', 'numero', 'tasso'] as const).filter(k => trovate[k] === null || trovate[k] === undefined)
+    const mancanti = (['gdo', 'nome', 'numero', 'dataCambio', 'tasso'] as const).filter(k => trovate[k] === null || trovate[k] === undefined)
     if (mancanti.length > 0) {
         return { ok: false, errore: `Nell'intestazione mancano le colonne ${mancanti.map(k => `"${INTESTAZIONI[k]}"`).join(', ')}.` }
     }
@@ -94,7 +95,7 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
         tasso: trovate.tasso as number,
         nome: trovate.nome as number,
         stato: trovate.stato ?? null,
-        dataCambio: trovate.dataCambio ?? null,
+        dataCambio: trovate.dataCambio as number,
     }
     const cella = (r: CellaFoglio[], i: number | null) => (i === null ? '' : testo(r[i]))
 

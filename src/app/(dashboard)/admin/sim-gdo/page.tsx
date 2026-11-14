@@ -160,8 +160,8 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
                             </td>
                             <td className={TD_SX}>
                                 {r.numero || "—"}
-                                {r.ripartitoDal && <Piccolo arancio>conteggio ripartito alle {oraDi(r.ripartitoDal)} per cambio SIM</Piccolo>}
-                                {e.cambiati.includes(r.interno) && <Piccolo>cambio di SIM visto adesso: lo registra il prossimo giro</Piccolo>}
+                                {r.ripartitoDal && <Piccolo arancio>conteggio ripartito alle {oraDi(r.ripartitoDal)} per cambio SIM segnato nel foglio</Piccolo>}
+                                {e.cambiati.includes(r.interno) && <Piccolo>cambio SIM appena segnato nel foglio: lo registra il prossimo giro</Piccolo>}
                             </td>
                             <td className={TD_SX}>{r.stato || "—"}</td>
                             <td className={TD}>{r.esito === "agganciato" ? n(r.chiamate) : "—"}</td>
@@ -201,7 +201,8 @@ function ComeSiConta() {
         <Sezione titolo="Come si conta" className="mt-4">
             <div className="max-w-4xl space-y-2 text-[14px] leading-relaxed text-[#BFBFBF]">
                 <div>Tasso = risposte ÷ chiamate esitate dal GDO oggi, tutto l&apos;orario, sabato compreso. Risposta vuol dire ogni esito diverso da «non risposto». Gli scarti per numero inesistente non contano né come chiamata né come risposta.</div>
-                <div>La riga del foglio si collega al GDO attivo il cui nome corrisponde al NOME del foglio: uguale, o con almeno {PREFISSO_MINIMO} lettere iniziali in comune senza accenti e senza «h» (RICCARDINO è Riccardo). Nessuno o più di uno: la riga resta vuota. L&apos;interno (colonna GDO) serve solo a riconoscere la riga. Se nel foglio cambia il numero della SIM, da quel giro contano solo le chiamate fatte dopo il cambio.</div>
+                <div>La riga del foglio si collega al GDO attivo il cui nome corrisponde al NOME del foglio: uguale, o con almeno {PREFISSO_MINIMO} lettere iniziali in comune senza accenti e senza «h» (RICCARDINO è Riccardo). Nessuno o più di uno: la riga resta vuota. L&apos;interno (colonna GDO) serve solo a riconoscere la riga.</div>
+                <div>Quando nella colonna DATA ULTIMO CAMBIO compare un valore nuovo (qualunque cosa ci sia scritto), il conteggio di quella riga riparte dal giro che lo vede: per il resto della giornata contano solo le chiamate fatte da lì. Se la cella viene svuotata non riparte niente. Cambiare solo il numero non fa ripartire il conteggio. Il CRM non scrive mai in quella colonna.</div>
                 <div>Cella grigia: meno di {MIN_CHIAMATE} chiamate oggi, il numero è scritto ma è presto per giudicare. Rossa: sotto il {numeroItFino(FATTORE_ROSSO * 100, 0)}% della media di squadra. Verde chiaro: tutto il resto. Vuota: riga non collegata o nessuna chiamata.</div>
                 <div>La media di squadra è lo stesso conto su tutti i GDO dal 1 giugno 2026 a oggi (risposte totali ÷ chiamate totali), senza il bot, gli account di prova e il GDO 108.</div>
             </div>
