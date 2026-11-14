@@ -48,8 +48,12 @@ export function normalizzaNome(s: string | null | undefined): string {
         .replace(/h/g, '')
 }
 
-/** Lettere iniziali in comune richieste per i diminutivi (RICCARDINO ↔ Riccardo). */
-export const PREFISSO_MINIMO = 4
+/**
+ * Lettere iniziali in comune richieste per i diminutivi (RICCARDINO ↔ Riccardo,
+ * ZORA ↔ Zoretta: PO 14/11/2026, 3 lettere). Se più GDO attivi corrispondono
+ * la riga è ambigua e resta vuota.
+ */
+export const PREFISSO_MINIMO = 3
 
 /**
  * Il NOME del foglio è questa persona? Uguali dopo la normalizzazione, oppure

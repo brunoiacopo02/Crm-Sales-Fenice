@@ -5,15 +5,16 @@ import { calcolaRighe, candidatiPerNome, nomiCompatibili, type UtenteGdo } from 
 const ADESSO = new Date('2026-11-14T15:05:00+01:00')
 const ora = (hhmm: string) => new Date(`2026-11-14T${hhmm}:00+01:00`)
 
-test('nomi: diminutivi e grafie del foglio, prefisso di almeno 4 lettere senza h', () => {
+test('nomi: diminutivi e grafie del foglio, prefisso di almeno 3 lettere senza h', () => {
     assert.equal(nomiCompatibili('CHRISTIAN', 'Cristian'), true)
     assert.equal(nomiCompatibili('ANTHONY', 'Antony'), true)
     assert.equal(nomiCompatibili('RICCARDINO', 'Riccardo'), true)
     assert.equal(nomiCompatibili('LAVINIA ', 'Lavinia'), true)
     assert.equal(nomiCompatibili('GIUSY', 'Giusy'), true)
     assert.equal(nomiCompatibili('Ugo', 'UGO'), true) // nomi corti: basta che siano uguali
-    // solo 3 lettere in comune: non basta
-    assert.equal(nomiCompatibili('ZORA', 'Zoretta'), false)
+    // 3 lettere in comune bastano (PO 14/11/2026), 2 no
+    assert.equal(nomiCompatibili('ZORA', 'Zoretta'), true)
+    assert.equal(nomiCompatibili('ZORA', 'Zoe'), false)
     assert.equal(nomiCompatibili('LAVINIA', 'Cristian'), false)
     assert.equal(nomiCompatibili('ALESSANDRO', 'Alessia'), true) // "ales": i candidati multipli diventano ambigui
     assert.equal(nomiCompatibili('ZORA', null), false)
