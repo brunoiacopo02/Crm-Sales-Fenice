@@ -116,6 +116,12 @@ function UltimoGiroUi({ g }: { g: UltimoGiro | null }) {
                     {" · "}
                     <span className={g.esito === "ok" ? "text-[#5FB37A]" : "font-semibold text-[#FF6B6B]"}>{g.esito === "ok" ? "riuscito" : "non riuscito"}</span>
                     <span className="text-[#BFBFBF]"> · {g.messaggio}</span>
+                    {g.esito === "ok" && (
+                        <div className="mt-1 text-[#BFBFBF]">
+                            Celle scritte con il tasso: <span className="font-semibold text-[#F2F2F2]">{n(g.celleConValore)}</span>
+                            {" · "}celle svuotate: <span className="font-semibold text-[#F2F2F2]">{n(g.celleSvuotate)}</span>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -128,6 +134,7 @@ const MOTIVO: Record<Exclude<RigaCalcolata["esito"], "agganciato">, string> = {
     nessuno: "Nessun GDO attivo del CRM ha un nome che corrisponde a quello del foglio. La cella resta vuota.",
     ambiguo: "Più GDO attivi del CRM corrispondono a questo nome: non so a chi agganciare la riga. La cella resta vuota.",
     interno_ripetuto: "Lo stesso interno compare in più righe: vale solo la prima.",
+    gdo_ripetuto: "Lo stesso GDO risulta su più righe del foglio: tiene la riga col nome uguale, se è una sola; altrimenti restano vuote tutte.",
 }
 
 function Contenuto({ e }: { e: EsitoSimGdo }) {
@@ -149,7 +156,7 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
                             <td className={TD_SX}>{r.nome || "—"}</td>
                             <td className={TD_SX}>
                                 {nomeCrm(r)}
-                                {r.esito !== "agganciato" && <Piccolo arancio>{r.esito === "nessuno" ? "nessun GDO con questo nome" : r.esito === "ambiguo" ? "nome ambiguo" : "interno ripetuto"}</Piccolo>}
+                                {r.esito !== "agganciato" && <Piccolo arancio>{r.esito === "nessuno" ? "nessun GDO con questo nome" : r.esito === "ambiguo" ? "nome ambiguo" : r.esito === "gdo_ripetuto" ? `stesso GDO di riga ${r.stessoGdoDi.join(", ")}` : "interno ripetuto"}</Piccolo>}
                             </td>
                             <td className={TD_SX}>
                                 {r.numero || "—"}
@@ -178,6 +185,7 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
                                 <div className="text-[#BFBFBF]">
                                     {MOTIVO[r.esito as keyof typeof MOTIVO]}
                                     {r.esito === "ambiguo" && <> Candidati: {r.candidati.map(persona).join(", ")}.</>}
+                                    {r.esito === "gdo_ripetuto" && <> {r.candidati.map(persona).join(", ")}: stesso GDO di riga {r.stessoGdoDi.join(", ")}.</>}
                                 </div>
                             </div>
                         ))}

@@ -25,9 +25,10 @@ test('nomi: diminutivi e grafie del foglio, prefisso di almeno 3 lettere senza h
 
 const u = (id: string, firstName: string | null, gdoCode: number): UtenteGdo => ({ id, firstName, gdoCode })
 
-test('candidati: Christel attiva insieme a Cristian rende CHRISTIAN ambiguo', () => {
+test('candidati: con Christel attiva, CHRISTIAN resta di Cristian (nome uguale senza h), CRIS è ambiguo', () => {
     const attivi = [u('u115', 'Cristian', 115), u('u114', 'Christel', 114)]
-    assert.deepEqual(candidatiPerNome('CHRISTIAN', attivi).map(x => x.gdoCode), [115, 114])
+    assert.deepEqual(candidatiPerNome('CHRISTIAN', attivi).map(x => x.gdoCode), [115])
+    assert.deepEqual(candidatiPerNome('CRIS', attivi).map(x => x.gdoCode), [115, 114])
     assert.deepEqual(candidatiPerNome('CHRISTIAN', [attivi[0]]).map(x => x.gdoCode), [115])
 })
 
@@ -123,4 +124,34 @@ test('righe: interno ripetuto nel foglio, la seconda riga resta vuota', () => {
     assert.equal(righe[0].esito, 'agganciato')
     assert.equal(righe[1].esito, 'interno_ripetuto')
     assert.equal(righe[1].tasso, null)
+})
+
+test('candidati: il nome uguale batte il prefisso (MARIA con Maria e Mariana attive = Maria)', () => {
+    const attivi = [u('ma', 'Maria', 1), u('mn', 'Mariana', 2)]
+    assert.deepEqual(candidatiPerNome('MARIA', attivi).map(x => x.id), ['ma'])
+    assert.deepEqual(candidatiPerNome('MARI', attivi).map(x => x.id), ['ma', 'mn'])
+    const [r] = calcolaRighe({ righe: [riga(2, '1001', 'MARIA')], statoSim: {}, utenti: attivi, logs: chiamate('ma', 1, 1), soglia: 0.269, adesso: ADESSO })
+    assert.equal(r.esito, 'agganciato')
+    assert.equal(r.utente?.id, 'ma')
+})
+
+test('stesso GDO su due righe: tiene quella col nome uguale, l\'altra resta vuota con il motivo', () => {
+    const righe = calcolaRighe({
+        righe: [riga(2, '1019', 'RICCARDINO'), riga(3, '1021', 'RICCARDO')],
+        statoSim: {}, utenti: [u('u119', 'Riccardo', 119)], logs: chiamate('u119', 10, 10), soglia: 0.269, adesso: ADESSO,
+    })
+    assert.equal(righe[0].esito, 'gdo_ripetuto')
+    assert.deepEqual(righe[0].stessoGdoDi, [3])
+    assert.equal(righe[0].tasso, null)
+    assert.equal(righe[1].esito, 'agganciato')
+    assert.equal(righe[1].tasso, 0.5)
+})
+
+test('stesso GDO su due righe senza nome uguale: restano vuote tutte e due', () => {
+    const righe = calcolaRighe({
+        righe: [riga(2, '1019', 'RICCARDINO'), riga(3, '1021', 'RICCA')],
+        statoSim: {}, utenti: [u('u119', 'Riccardo', 119)], logs: chiamate('u119', 10, 10), soglia: 0.269, adesso: ADESSO,
+    })
+    assert.deepEqual(righe.map(r => [r.esito, r.stessoGdoDi]), [['gdo_ripetuto', [3]], ['gdo_ripetuto', [2]]])
+    assert.ok(righe.every(r => r.tasso === null && r.colore === null))
 })

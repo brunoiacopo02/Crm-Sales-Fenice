@@ -23,13 +23,15 @@ export interface UtenteGdo {
     gdoCode: number | null
 }
 
-export type EsitoRiga = 'agganciato' | 'nessuno' | 'ambiguo' | 'interno_ripetuto'
+export type EsitoRiga = 'agganciato' | 'nessuno' | 'ambiguo' | 'interno_ripetuto' | 'gdo_ripetuto'
 
 export interface RigaCalcolata extends RigaFoglio {
     esito: EsitoRiga
     utente: UtenteGdo | null
-    /** Per 'ambiguo': i GDO che corrispondono al nome. */
+    /** Per 'ambiguo': i GDO che corrispondono al nome. Per 'gdo_ripetuto': il GDO conteso. */
     candidati: UtenteGdo[]
+    /** Per 'gdo_ripetuto': le altre righe del foglio agganciate allo stesso GDO. */
+    stessoGdoDi: number[]
     chiamate: number
     risposte: number
     /** Tasso da scrivere (0-1); null = cella vuota. */
@@ -69,9 +71,21 @@ export function nomiCompatibili(nomeFoglio: string, nomeCrm: string | null): boo
     return comune >= PREFISSO_MINIMO
 }
 
-/** GDO attivi che corrispondono al nome del foglio (passare solo GDO veri e attivi). */
+/** Il NOME del foglio è proprio il nome della persona (dopo la normalizzazione)? */
+export function nomeUguale(nomeFoglio: string, nomeCrm: string | null): boolean {
+    const a = normalizzaNome(nomeFoglio)
+    return a !== '' && a === normalizzaNome(nomeCrm)
+}
+
+/**
+ * GDO attivi che corrispondono al nome del foglio (passare solo GDO veri e
+ * attivi). Il nome uguale batte il prefisso: MARIA con Maria e Mariana attive
+ * è Maria, non un nome ambiguo.
+ */
 export function candidatiPerNome(nomeFoglio: string, utenti: UtenteGdo[]): UtenteGdo[] {
-    return utenti.filter(u => nomiCompatibili(nomeFoglio, u.firstName))
+    const compatibili = utenti.filter(u => nomiCompatibili(nomeFoglio, u.firstName))
+    const uguali = compatibili.filter(u => nomeUguale(nomeFoglio, u.firstName))
+    return uguali.length > 0 ? uguali : compatibili
 }
 
 export function calcolaRighe(input: {
@@ -92,20 +106,45 @@ export function calcolaRighe(input: {
         else perUtente.set(l.userId, [l])
     }
 
+    const vuota = (r: RigaFoglio, esito: EsitoRiga, candidati: UtenteGdo[] = [], stessoGdoDi: number[] = []): RigaCalcolata => ({
+        ...r, esito, utente: null, candidati, stessoGdoDi, chiamate: 0, risposte: 0, tasso: null, colore: null, ripartitoDal: null,
+    })
+
+    // 1. Ogni riga col suo GDO (o il motivo per cui non ne ha uno).
     const visti = new Set<string>()
-    return input.righe.map((r): RigaCalcolata => {
-        const vuota = (esito: EsitoRiga, candidati: UtenteGdo[] = []): RigaCalcolata => ({
-            ...r, esito, utente: null, candidati, chiamate: 0, risposte: 0, tasso: null, colore: null, ripartitoDal: null,
-        })
+    const scelte = input.righe.map((r): RigaCalcolata | UtenteGdo => {
         // L'interno è la chiave dello stato del cambio SIM: due righe con lo
         // stesso interno si confonderebbero, vale la prima.
-        if (visti.has(r.interno)) return vuota('interno_ripetuto')
+        if (visti.has(r.interno)) return vuota(r, 'interno_ripetuto')
         visti.add(r.interno)
-
         const candidati = candidatiPerNome(r.nome, input.utenti)
-        if (candidati.length === 0) return vuota('nessuno')
-        if (candidati.length > 1) return vuota('ambiguo', candidati)
-        const utente = candidati[0]
+        if (candidati.length === 0) return vuota(r, 'nessuno')
+        if (candidati.length > 1) return vuota(r, 'ambiguo', candidati)
+        return candidati[0]
+    })
+
+    // 2. Uno stesso GDO non sta su due righe: tiene la riga col nome uguale,
+    // se è una sola; altrimenti restano vuote tutte.
+    const righeDi = new Map<string, number[]>()
+    scelte.forEach((s, i) => {
+        if ('esito' in s) return
+        righeDi.set(s.id, [...(righeDi.get(s.id) ?? []), i])
+    })
+
+    return input.righe.map((r, i): RigaCalcolata => {
+        const s = scelte[i]
+        if ('esito' in s) return s
+        const utente = s
+        const contese = righeDi.get(utente.id) ?? [i]
+        if (contese.length > 1) {
+            const uguali = contese.filter(j => nomeUguale(input.righe[j].nome, utente.firstName))
+            const tiene = uguali.length === 1 ? uguali[0] : null
+            if (tiene !== i) {
+                const altre = (tiene === null ? contese.filter(j => j !== i) : [tiene]).map(j => input.righe[j].riga)
+                return vuota(r, 'gdo_ripetuto', [utente], altre)
+            }
+        }
+        const candidati = [utente]
 
         const dal = inizioConteggio(input.statoSim[r.interno]?.dal ?? null, input.adesso)
         const c = contaChiamate(perUtente.get(utente.id) ?? [], dal)
@@ -114,6 +153,7 @@ export function calcolaRighe(input: {
             esito: 'agganciato',
             utente,
             candidati,
+            stessoGdoDi: [],
             chiamate: c.chiamate,
             risposte: c.risposte,
             tasso: tasso(c),

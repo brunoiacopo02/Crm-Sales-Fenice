@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { lettereColonna, leggiFoglio, normalizzaIntestazione } from './intestazioni'
+import { impronta, lettereColonna, leggiFoglio, normalizzaIntestazione } from './intestazioni'
 
 const INTESTAZIONE = ['GDO', 'NOME', 'NUMERO', 'STATO', 'DATA ULTIMO CAMBIO', 'DATA ULTIMO SPAM', 'SOFTWARE', 'SIM', 'TASSO DI RSP']
 
@@ -44,6 +44,37 @@ test('foglio: senza le colonne indispensabili non si scrive nulla', () => {
     if (!r.ok) assert.match(r.errore, /TASSO DI RSP/)
     const vuoto = leggiFoglio([])
     assert.equal(vuoto.ok, false)
+})
+
+test('foglio: senza la colonna NOME (serve all\'aggancio) il giro si ferma', () => {
+    const r = leggiFoglio([['GDO', 'NUMERO', 'TASSO DI RSP'], ['1020', '35', '']])
+    assert.equal(r.ok, false)
+    if (!r.ok) assert.match(r.errore, /"NOME"/)
+})
+
+test('foglio: è una riga solo se GDO è un interno di sole cifre (note e totali mai toccati)', () => {
+    const r = leggiFoglio([
+        INTESTAZIONE,
+        ['1020', 'CHRISTIAN', 'da ins'],
+        ['TOTALE', '', ''],
+        ['1020 bis', 'X', ''],
+        ['nota: ordinare SIM', '', ''],
+        [' 1019 ', 'RICCARDINO', '35'],
+    ])
+    assert.ok(r.ok)
+    assert.deepEqual(r.righe.map(x => [x.riga, x.interno]), [[2, '1020'], [6, '1019']])
+})
+
+test('impronta: cambia se cambiano intestazione o posizione degli interni, non se cambiano gli altri valori', () => {
+    const base = [INTESTAZIONE, ['1020', 'CHRISTIAN', 'da ins'], ['1017', 'ZORA', '35']]
+    const altroNumero = [INTESTAZIONE, ['1020', 'CHRISTIAN', '3500000000'], ['1017', 'ZORA', '35']]
+    const scambiate = [INTESTAZIONE, ['1017', 'ZORA', '35'], ['1020', 'CHRISTIAN', 'da ins']]
+    const rigaInserita = [INTESTAZIONE, [], ['1020', 'CHRISTIAN', 'da ins'], ['1017', 'ZORA', '35']]
+    const colonnaSpostata = [['NOME', ...INTESTAZIONE.filter(h => h !== 'NOME')], ['CHRISTIAN', '1020'], ['ZORA', '1017']]
+    assert.equal(impronta(base), impronta(altroNumero))
+    assert.notEqual(impronta(base), impronta(scambiate))
+    assert.notEqual(impronta(base), impronta(rigaInserita))
+    assert.notEqual(impronta(base), impronta(colonnaSpostata))
 })
 
 test('foglio: colonna del tasso ripetuta = ambiguo, non si scrive', () => {

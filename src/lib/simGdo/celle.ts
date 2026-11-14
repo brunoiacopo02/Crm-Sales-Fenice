@@ -40,8 +40,19 @@ interface Cella {
     }
 }
 
+/** Quante celle il giro riempie con un valore e quante svuota. */
+export function contaCelle(righe: { tasso: number | null }[]): { conValore: number; svuotate: number } {
+    const conValore = righe.filter(r => r.tasso !== null).length
+    return { conValore, svuotate: righe.length - conValore }
+}
+
+/**
+ * Le righe arrivano da leggiFoglio, quindi sono solo righe con un interno di
+ * sole cifre: note e totali non ci sono e non si toccano. L'intestazione
+ * (riga 1) non si scrive mai, anche se arrivasse per errore.
+ */
 export function richiesteScrittura(input: { sheetId: number; colonnaTasso: number; righe: CellaDaScrivere[] }) {
-    return input.righe.map(r => {
+    return input.righe.filter(r => Number.isInteger(r.riga) && r.riga >= 2).map(r => {
         // Cella vuota: valore e formato assenti ma nella maschera dei campi,
         // quindi Google li cancella (niente numero, niente colore).
         const cella: Cella = r.tasso === null ? {} : {

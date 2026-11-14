@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { COLORI_CELLA, richiesteScrittura } from './celle'
+import { COLORI_CELLA, contaCelle, richiesteScrittura } from './celle'
 
 test('scrittura: una richiesta per riga, solo nella colonna del tasso, valore + sfondo + formato', () => {
     const req = richiesteScrittura({
@@ -33,4 +33,13 @@ test('colori: grigio, rosso e verde chiaro distinti', () => {
     for (const c of Object.values(COLORI_CELLA)) {
         for (const v of [c.red, c.green, c.blue]) assert.ok(v >= 0 && v <= 1)
     }
+})
+
+test('scrittura: solo le righe passate, mai l\'intestazione', () => {
+    const req = richiesteScrittura({ sheetId: 1, colonnaTasso: 8, righe: [{ riga: 1, tasso: 0.3, colore: 'verde' }, { riga: 9, tasso: 0.3, colore: 'verde' }] })
+    assert.deepEqual(req.map(r => r.updateCells.range.startRowIndex), [8])
+})
+
+test('conteggio celle: con un valore e svuotate', () => {
+    assert.deepEqual(contaCelle([{ tasso: 0.2 }, { tasso: null }, { tasso: 0 }, { tasso: null }]), { conValore: 2, svuotate: 2 })
 })

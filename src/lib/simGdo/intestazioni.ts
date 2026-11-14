@@ -10,7 +10,8 @@ export interface ColonneFoglio {
     gdo: number
     numero: number
     tasso: number
-    nome: number | null
+    /** Obbligatoria: l'aggancio alla persona si fa per nome. */
+    nome: number
     stato: number | null
     dataCambio: number | null
 }
@@ -82,7 +83,7 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
         if (i === 'doppia') return { ok: false, errore: `La colonna "${nome}" compare due volte nell'intestazione: non so quale usare.` }
         trovate[chiave] = i
     }
-    const mancanti = (['gdo', 'numero', 'tasso'] as const).filter(k => trovate[k] === null || trovate[k] === undefined)
+    const mancanti = (['gdo', 'nome', 'numero', 'tasso'] as const).filter(k => trovate[k] === null || trovate[k] === undefined)
     if (mancanti.length > 0) {
         return { ok: false, errore: `Nell'intestazione mancano le colonne ${mancanti.map(k => `"${INTESTAZIONI[k]}"`).join(', ')}.` }
     }
@@ -91,7 +92,7 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
         gdo: trovate.gdo as number,
         numero: trovate.numero as number,
         tasso: trovate.tasso as number,
-        nome: trovate.nome ?? null,
+        nome: trovate.nome as number,
         stato: trovate.stato ?? null,
         dataCambio: trovate.dataCambio ?? null,
     }
@@ -100,7 +101,9 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
     const righe: RigaFoglio[] = []
     valori.slice(1).forEach((r, i) => {
         const interno = cella(r, colonne.gdo)
-        if (!interno) return
+        // È una riga della tabella solo se GDO è un interno di sole cifre: note
+        // e totali scritti sotto o accanto non si toccano mai, nemmeno per svuotarli.
+        if (!/^\d+$/.test(interno)) return
         righe.push({
             riga: i + 2,
             interno,
@@ -111,4 +114,17 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
         })
     })
     return { ok: true, colonne, righe }
+}
+
+/**
+ * Impronta di ciò da cui dipende la scrittura: intestazione normalizzata e
+ * posizione di ogni interno. Si confronta subito prima del batchUpdate con una
+ * seconda lettura: se è cambiata qualcuno ha toccato il foglio durante il giro
+ * e le celle potrebbero finire sulla riga sbagliata.
+ */
+export function impronta(valori: CellaFoglio[][]): string {
+    const intestazione = (valori[0] ?? []).map(normalizzaIntestazione)
+    const l = leggiFoglio(valori)
+    const posti = l.ok ? l.righe.map(r => `${r.riga}:${r.interno}`) : [l.errore]
+    return JSON.stringify({ intestazione, posti })
 }

@@ -33,7 +33,8 @@ export async function GET(req: Request) {
     return NextResponse.json({
         ok: esito.ok,
         errore: esito.errore,
-        celleScritte: esito.celleScritte,
+        celleConValore: esito.celleConValore,
+        celleSvuotate: esito.celleSvuotate,
         cambiati: esito.cambiati,
         mediaTasso: esito.mediaTasso,
         righe: esito.righe.map(r => ({ riga: r.riga, interno: r.interno, esito: r.esito, chiamate: r.chiamate, tasso: r.tasso, colore: r.colore })),

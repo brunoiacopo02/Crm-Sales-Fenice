@@ -4,18 +4,19 @@
 // scrivere niente (anteprima).
 //
 // Sicurezza: se la lettura del foglio o dell'intestazione fallisce non si
-// scrive nulla e non si tocca lo stato dei numeri. Ogni giro lascia traccia
-// in appSettings (ULTIMO_GIRO_KEY) per la schermata.
+// scrive nulla e non si tocca lo stato dei numeri; se il foglio cambia fra la
+// lettura e la scrittura si rinuncia e si riprova al giro dopo. Ogni giro
+// lascia traccia in appSettings (ULTIMO_GIRO_KEY) per la schermata.
 
 import { and, eq, gte, inArray, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { appSettings, callLogs, users } from '@/db/schema'
 import { isRealGdo } from '@/lib/kpi/canon'
 import { dayBoundsRome, monthBoundsRome } from '@/lib/dateUtils'
-import { leggiFoglio, lettereColonna } from './intestazioni'
+import { impronta, leggiFoglio, lettereColonna } from './intestazioni'
 import { aggiornaStatoSim, leggiStatoSim, type StatoSim } from './cambioSim'
 import { calcolaRighe, type RigaCalcolata, type UtenteGdo } from './giro'
-import { richiesteScrittura } from './celle'
+import { contaCelle, richiesteScrittura } from './celle'
 import { contaGruppi, eGdoDellaMedia, ESITI_CHIAMATA, MEDIA_DAL_MESE, sogliaRossa, tasso, type Conteggio } from './tasso'
 import { leggiFoglioSim, scriviFoglioSim } from './foglio'
 
@@ -25,12 +26,16 @@ export const STATO_SIM_KEY = 'sim_gdo_stato_sim'
 /** Ora ed esito dell'ultimo giro orario. */
 export const ULTIMO_GIRO_KEY = 'sim_gdo_ultimo_giro'
 const AUTORE = 'cron:sim-gdo'
+export const FOGLIO_MODIFICATO = 'Foglio modificato durante il giro, riprovo al prossimo.'
 
 export interface UltimoGiro {
     alle: string
     esito: 'ok' | 'errore'
     messaggio: string
-    celleScritte: number
+    /** Celle riempite con un tasso. */
+    celleConValore: number
+    /** Celle svuotate (riga senza GDO agganciato o senza chiamate oggi). */
+    celleSvuotate: number
 }
 
 export interface EsitoSimGdo {
@@ -44,7 +49,9 @@ export interface EsitoSimGdo {
     righe: RigaCalcolata[]
     /** Interni con un cambio di SIM visto in questo giro. */
     cambiati: string[]
-    celleScritte: number
+    /** Celle scritte con un valore / svuotate in questo giro (0 in anteprima). */
+    celleConValore: number
+    celleSvuotate: number
 }
 
 async function leggiSetting(key: string): Promise<string | null> {
@@ -63,15 +70,18 @@ export async function leggiUltimoGiro(): Promise<UltimoGiro | null> {
     const raw = await leggiSetting(ULTIMO_GIRO_KEY)
     if (!raw) return null
     try {
-        const v = JSON.parse(raw) as UltimoGiro
-        return typeof v?.alle === 'string' ? v : null
+        const v = JSON.parse(raw) as Partial<UltimoGiro>
+        if (typeof v?.alle !== 'string') return null
+        return {
+            alle: v.alle,
+            esito: v.esito === 'ok' ? 'ok' : 'errore',
+            messaggio: typeof v.messaggio === 'string' ? v.messaggio : '',
+            celleConValore: Number(v.celleConValore) || 0,
+            celleSvuotate: Number(v.celleSvuotate) || 0,
+        }
     } catch {
         return null
     }
-}
-
-async function salvaUltimoGiro(g: UltimoGiro): Promise<void> {
-    await scriviSetting(ULTIMO_GIRO_KEY, JSON.stringify(g))
 }
 
 /**
@@ -109,6 +119,8 @@ async function leggiMedia(): Promise<Conteggio> {
             gte(callLogs.createdAt, dal),
             inArray(callLogs.outcome, [...ESITI_CHIAMATA]),
             eq(users.role, 'GDO'),
+            // Stessa azienda dei GDO a cui si agganciano le righe (leggiGdoAttivi).
+            eq(users.companyId, FENICE),
         ))
         .groupBy(users.id, users.role, users.isBot, users.isTest, users.gdoCode, callLogs.outcome, callLogs.discardReason)
     // Chi entra nella media lo decide eGdoDellaMedia, in un punto solo.
@@ -132,7 +144,7 @@ async function leggiLogsDiOggi(userIds: string[], adesso: Date) {
 
 const vuoto = (adesso: Date, errore: string): EsitoSimGdo => ({
     ok: false, errore, adesso: adesso.toISOString(), media: { chiamate: 0, risposte: 0 },
-    mediaTasso: null, soglia: null, colonnaTasso: null, righe: [], cambiati: [], celleScritte: 0,
+    mediaTasso: null, soglia: null, colonnaTasso: null, righe: [], cambiati: [], celleConValore: 0, celleSvuotate: 0,
 })
 
 /**
@@ -166,15 +178,25 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
 
     const esito: EsitoSimGdo = {
         ok: true, adesso: adesso.toISOString(), media, mediaTasso, soglia,
-        colonnaTasso: lettereColonna(lettura.colonne.tasso), righe, cambiati, celleScritte: 0,
+        colonnaTasso: lettereColonna(lettura.colonne.tasso), righe, cambiati, celleConValore: 0, celleSvuotate: 0,
     }
     if (!opts.scrivi) return esito
+
+    // Subito prima di scrivere si rilegge il foglio: se nel frattempo qualcuno
+    // ha cambiato intestazione o righe degli interni, le celle finirebbero
+    // sulla riga sbagliata. Si rinuncia (stato compreso) e si riprova al giro dopo.
+    const seconda = await leggiFoglioSim('scrittura')
+    if (seconda.sheetId !== foglio.sheetId || impronta(seconda.valori) !== impronta(foglio.valori)) {
+        return { ...vuoto(adesso, FOGLIO_MODIFICATO), media, mediaTasso, soglia, righe }
+    }
 
     // Lo stato dei numeri si salva prima di scrivere: il cambio di SIM è un
     // fatto visto nel foglio, vale anche se la scrittura poi non riesce.
     if (JSON.stringify(stato) !== JSON.stringify(statoPrima)) await salvaStato(stato)
     await scriviFoglioSim(richiesteScrittura({ sheetId: foglio.sheetId, colonnaTasso: lettura.colonne.tasso, righe }))
-    esito.celleScritte = righe.length
+    const celle = contaCelle(righe)
+    esito.celleConValore = celle.conValore
+    esito.celleSvuotate = celle.svuotate
     return esito
 }
 
@@ -192,14 +214,15 @@ export async function eseguiGiroSimGdo(): Promise<EsitoSimGdo> {
         esito = vuoto(adesso, e instanceof Error ? e.message : 'Errore ignoto.')
     }
     try {
-        await salvaUltimoGiro({
+        await scriviSetting(ULTIMO_GIRO_KEY, JSON.stringify({
             alle: adesso.toISOString(),
             esito: esito.ok ? 'ok' : 'errore',
             messaggio: esito.ok
-                ? `Scritte ${esito.celleScritte} celle${esito.cambiati.length ? `, cambio SIM su ${esito.cambiati.join(', ')}` : ''}.`
+                ? `Scritte ${esito.celleConValore} celle con il tasso, svuotate ${esito.celleSvuotate}${esito.cambiati.length ? `; cambio SIM su ${esito.cambiati.join(', ')}` : ''}.`
                 : esito.errore ?? 'Errore ignoto.',
-            celleScritte: esito.celleScritte,
-        })
+            celleConValore: esito.celleConValore,
+            celleSvuotate: esito.celleSvuotate,
+        } satisfies UltimoGiro))
     } catch (e) {
         console.error('[sim-gdo] traccia dell\'ultimo giro non salvata', e)
     }

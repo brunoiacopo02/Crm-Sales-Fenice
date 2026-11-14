@@ -27,6 +27,18 @@ test('giro: aggancio per nome, la tabella pbxExtensions non si usa (PO 14/11/202
     }
 })
 
+test('giro: rilettura del foglio subito prima del batchUpdate, si rinuncia se è cambiato', () => {
+    const run = leggi('src/lib/simGdo/run.ts')
+    const confronto = run.indexOf('impronta(seconda.valori) !== impronta(foglio.valori)')
+    assert.ok(confronto > 0)
+    assert.ok(confronto < run.indexOf('await salvaStato(stato)'))
+    assert.ok(confronto < run.indexOf('await scriviFoglioSim('))
+    assert.match(run, /FOGLIO_MODIFICATO = 'Foglio modificato durante il giro, riprovo al prossimo\.'/)
+    // la media è della stessa azienda dei GDO agganciabili
+    const media = run.slice(run.indexOf('async function leggiMedia'), run.indexOf('async function leggiLogsDiOggi'))
+    assert.match(media, /eq\(users\.companyId, FENICE\)/)
+})
+
 test('menu: SIM GDO nel gruppo Direzione solo per l\'ADMIN, nel Sales Manager della Rinascita', () => {
     const sidebar = leggi('src/components/Sidebar.tsx')
     const direzione = sidebar.slice(sidebar.indexOf('label: "Direzione"'), sidebar.indexOf('label: "GDO"', sidebar.indexOf('label: "Direzione"')))
