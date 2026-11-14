@@ -9,6 +9,7 @@ import { AppDaVerificarePanel } from "@/components/conferme/AppDaVerificarePanel
 import { DailyQuoteSlotServer } from "@/components/diretta/DailyQuoteSlotServer"
 import { VesteAllineata } from "@/components/diretta/VesteAllineata"
 import { isDirettaOn } from "@/lib/diretta/settings"
+import { leggiSalvadanaioConferme } from "@/lib/economy/premiMeseDb"
 import { redirect } from "next/navigation"
 import dynamic from "next/dynamic"
 import "./conferme-diretta.css"
@@ -38,6 +39,9 @@ export default async function ConfermePage() {
     const diretta = session.user.role === 'CONFERME' && await isDirettaOn('CONFERME')
 
     if (diretta) {
+        // Salvadanaio delle Conferme (titolare 14/11/2026): uguale per tutti, in cache 2 minuti.
+        const salvadanaio = await leggiSalvadanaioConferme('fenice', session.user.id)
+            .catch((e: unknown) => { console.error('[Conferme Diretta] salvadanaio', e); return null })
         return (
             <div className="d-conferme flex min-h-full flex-col bg-[var(--d-bg)] text-[var(--d-text)]">
                 <VesteAllineata diretta />
@@ -45,7 +49,7 @@ export default async function ConfermePage() {
                 <TeamRadarWidget currentUser={session.user} variant="diretta" />
                 <div className="flex flex-1 flex-wrap">
                     <div className="flex-[1_1_320px] bg-[var(--d-orange)] lg:max-w-[360px]">
-                        <SafeWrapper><ConfermeDirettaColumn /></SafeWrapper>
+                        <SafeWrapper><ConfermeDirettaColumn salvadanaio={salvadanaio} /></SafeWrapper>
                     </div>
                     <div className="min-w-0 flex-[999_1_560px] px-4 pt-2 sm:px-8">
                         {/* Citazione del giorno e consiglio di vendita, in cima alla board */}

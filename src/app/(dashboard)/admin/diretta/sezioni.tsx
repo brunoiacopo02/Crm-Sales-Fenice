@@ -466,9 +466,9 @@ export function LinkSalvadanai() {
             className="flex items-center justify-between gap-3 rounded-[16px] bg-[#262626] px-5 py-4 transition-colors hover:bg-[#2E2E2E] sm:px-6"
         >
             <div className="min-w-0">
-                <div className="text-[17px] font-semibold">Salvadanai dei GDO</div>
+                <div className="text-[17px] font-semibold">Salvadanai dei GDO e delle Conferme</div>
                 <div className="mt-1 text-[14px] leading-snug text-[#BFBFBF]">
-                    I bonus in euro del mese di ogni GDO, settimana per settimana, e la settimana in corso.
+                    I bonus in euro del mese di ogni GDO e di ogni persona delle Conferme, settimana per settimana, e la settimana in corso.
                 </div>
             </div>
             <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-[#BFBFBF]" strokeWidth={1.5} />

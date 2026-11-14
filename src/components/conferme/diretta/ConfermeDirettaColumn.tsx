@@ -17,6 +17,8 @@ import { CONFERMATO_EVENT, confermeOggiConOttimistiche } from "@/lib/conferme/di
 import { formatEuro } from "./ui"
 import { numeroIt } from "@/lib/diretta/formato"
 import type { Obiettivo } from "@/lib/economy/rules"
+import type { VistaSalvadanaioConferme } from "@/lib/economy/premiMese"
+import { SalvadanaioConferme } from "./SalvadanaioConferme"
 
 const POLL_MS = 30_000
 const MIN_GAP_MS = 20_000
@@ -74,7 +76,8 @@ function Blocchi({ pieni, totale }: { pieni: number; totale: number }) {
     )
 }
 
-export function ConfermeDirettaColumn() {
+/** `salvadanaio`: bonus della settimana scorsa e del mese (titolare 14/11/2026), letto sul server dalla pagina. */
+export function ConfermeDirettaColumn({ salvadanaio = null }: { salvadanaio?: VistaSalvadanaioConferme | null }) {
     const [stats, setStats] = useState<ConfermeDirettaStats | null>(null)
     const [errore, setErrore] = useState(false)
     // Lead confermati dal drawer e non ancora visti dal server: id → istante.
@@ -206,6 +209,8 @@ export function ConfermeDirettaColumn() {
                     Dalla {squadra.soglia + 1}ª {u.una} in poi, {formatEuro(squadra.euroPerUnita)} per ognuna.
                 </div>
             </section>
+
+            {salvadanaio && <SalvadanaioConferme scorsa={salvadanaio.scorsa} mese={salvadanaio.mese} />}
 
             <div className="h-0.5 bg-[var(--d-orange-ink)] opacity-20" />
 

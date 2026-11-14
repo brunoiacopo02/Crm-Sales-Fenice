@@ -1,7 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { calcolaPremiMese, salvadanaioDi, settimaneDelMese, meseDelSalvadanaio, nomeMese, dateSettimana, type InputPremiMese } from './premiMese'
+import {
+    calcolaPremiMese, salvadanaioDi, salvadanaioConfermeDi, settimanaScorsa, meseDellaSettimana,
+    settimaneDelMese, meseDelSalvadanaio, nomeMese, dateSettimana, type InputPremiMese,
+} from './premiMese'
 import { DEFAULT_ECONOMY_RULES } from './rules'
+import { DEFAULT_CONFERME_BONUS } from '@/lib/conferme/bonus'
 import { DEFAULT_TARGETS } from '@/lib/diretta/config'
 import type { PremiSettimana } from './premiSettimana'
 
@@ -149,6 +153,204 @@ test('salvadanaio del GDO: le sue settimane e quella in corso', () => {
     const vuoto = salvadanaioDi(m, 'nessuno')
     assert.equal(vuoto.euroMese, 0)
     assert.equal(vuoto.settimane[0].euro, 0)
+})
+
+// ── Conferme nel salvadanaio del mese (titolare 14/11/2026) ─────────────
+
+const ALBERTO = 'c-alberto', ANDREA = 'c-andrea', NOEMI_C = 'c-noemi', CHRISTEL = 'c-christel'
+const NOEMI_GDO = '107'
+const personeConferme = [
+    { userId: ALBERTO, nome: 'Alberto', squadra: true },
+    { userId: ANDREA, nome: 'Andre', squadra: true },
+    { userId: NOEMI_C, nome: 'Noemi', squadra: true },
+    // Disattivata oggi: ha lavorato solo nella settimana 2-7/11.
+    { userId: CHRISTEL, nome: 'Christel', squadra: false },
+]
+/** n istanti nello stesso momento. */
+const volte = (n: number, at: string) => Array.from({ length: n }, () => at)
+const conferme = (p: Partial<NonNullable<InputPremiMese['conferme']>> = {}): NonNullable<InputPremiMese['conferme']> => ({
+    persone: personeConferme,
+    chiusure: [],
+    presenze: [],
+    confermate: [],
+    regola: DEFAULT_CONFERME_BONUS,
+    ...p,
+})
+const confermate = (userIds: string[], at: string) => userIds.map(userId => ({ userId, at }))
+const NOW_14_11 = new Date('2026-11-14T15:00:00Z')   // sabato 14/11 pomeriggio: 9-14/11 in corso
+
+test('conferme: settimana sopra soglia, gli stessi euro a testa a chi ha confermato', () => {
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        gdo: [...gdo, { userId: NOEMI_GDO, nome: 'Noemi', squadra: true }],
+        conferme: conferme({
+            // 2-7/11: 4 chiusure, sotto soglia. 9-14/11: 28 chiusure, 12 oltre la 16ª.
+            chiusure: [...volte(4, '2026-11-05T15:00:00Z'), ...volte(28, '2026-11-11T15:00:00Z')],
+            confermate: [
+                ...confermate([ALBERTO, ANDREA, NOEMI_C, CHRISTEL], '2026-11-03T10:00:00Z'),
+                ...confermate([ALBERTO, ANDREA, NOEMI_C], '2026-11-10T10:00:00Z'),
+            ],
+        }),
+    }))
+    const sett = m.chiuse[0].conferme
+    assert.equal(sett?.conteggio, 4)
+    assert.equal(sett?.euroATesta, 0)
+    assert.deepEqual(sett?.persone, [])
+    const c = m.inCorso?.conferme
+    assert.equal(c?.conteggio, 28)
+    assert.equal(c?.oltre, 12)
+    assert.equal(c?.euroATesta, 144)
+    assert.deepEqual(c?.persone.map(p => [p.nome, p.euro]), [['Alberto', 144], ['Andre', 144], ['Noemi', 144]])
+
+    const righeC = m.righe.filter(r => r.ruolo === 'CONFERME')
+    assert.deepEqual(righeC.map(r => [r.nome, r.euroMese, r.euroInMaturazione]).sort(), [['Alberto', 0, 144], ['Andre', 0, 144], ['Noemi', 0, 144]])
+    // Il totale del mese resta quello dei GDO: niente totale di squadra delle Conferme.
+    assert.equal(m.totaleInMaturazione, m.inCorso?.totaleEuro)
+    assert.equal(Object.keys(m.inCorso?.voci ?? {}).some(id => id.startsWith('c-')), false)
+
+    const s = salvadanaioConfermeDi(m, ANDREA)
+    assert.equal(s.euroMese, 0)
+    assert.deepEqual(s.settimane.map(w => [w.lunedi, w.conteggio, w.euro]), [['2026-11-02', 4, 0]])
+    assert.equal(s.inCorso?.euro, 144)
+    assert.equal(s.inCorso?.euroATesta, 144)
+})
+
+test('conferme: chi non ha confermato nella settimana non prende la quota', () => {
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        conferme: conferme({
+            chiusure: volte(20, '2026-11-11T15:00:00Z'),
+            confermate: confermate([ALBERTO, NOEMI_C], '2026-11-10T10:00:00Z'),
+        }),
+    }))
+    assert.deepEqual(m.inCorso?.conferme?.persone.map(p => p.userId).sort(), [ALBERTO, NOEMI_C].sort())
+    assert.equal(salvadanaioConfermeDi(m, ANDREA).inCorso?.euro, 0)
+    assert.equal(salvadanaioConfermeDi(m, ANDREA).inCorso?.euroATesta, 48)
+})
+
+test('conferme: la domenica non conta, né per le chiusure né per chi ha confermato', () => {
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        conferme: conferme({
+            chiusure: [...volte(17, '2026-11-05T15:00:00Z'), ...volte(5, '2026-11-08T10:00:00Z')],
+            confermate: [...confermate([ALBERTO], '2026-11-03T10:00:00Z'), ...confermate([ANDREA], '2026-11-08T10:00:00Z')],
+        }),
+    }))
+    assert.equal(m.chiuse[0].conferme?.conteggio, 17)
+    assert.deepEqual(m.chiuse[0].conferme?.persone.map(p => [p.userId, p.euro]), [[ALBERTO, 12]])
+    assert.equal(m.inCorso?.conferme?.conteggio, 0)
+})
+
+test('conferme: la settimana registrata vince sul ricalcolo', () => {
+    const snap: PremiSettimana = {
+        lunedi: '2026-11-02',
+        classifica: [],
+        presenzeGdo: [],
+        conferme: { unita: 'chiusure', conteggio: 18, soglia: 16, oltre: 2, euroPerUnita: 12, euroATesta: 24, persone: [{ userId: ALBERTO, nome: 'Alberto', euro: 24 }] },
+        totaleEuro: 24,
+    }
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        presenze: [],
+        registrate: { '2026-11-02': snap },
+        conferme: conferme({ chiusure: volte(30, '2026-11-05T15:00:00Z'), confermate: confermate([ALBERTO, ANDREA], '2026-11-03T10:00:00Z') }),
+    }))
+    assert.equal(m.chiuse[0].registrata, true)
+    assert.equal(m.chiuse[0].conferme?.conteggio, 18)
+    assert.equal(salvadanaioConfermeDi(m, ALBERTO).euroMese, 24)
+    assert.equal(salvadanaioConfermeDi(m, ANDREA).euroMese, 0)
+    // Il totale dei GDO non prende gli euro delle Conferme dello snapshot.
+    assert.equal(m.chiuse[0].totaleEuro, 0)
+    assert.equal(m.totaleMese, 0)
+})
+
+test('conferme: 26-31/10 conta in ottobre, 30/11-5/12 in dicembre', () => {
+    const c = conferme({
+        chiusure: [...volte(19, '2026-10-28T15:00:00Z'), ...volte(20, '2026-12-02T15:00:00Z')],
+        confermate: [...confermate([ALBERTO, ANDREA, NOEMI_C], '2026-10-27T10:00:00Z'), ...confermate([ALBERTO], '2026-12-01T10:00:00Z')],
+    })
+    const ott = calcolaPremiMese(base({ mese: '2026-10', now: new Date('2026-12-07T10:00:00Z'), presenze: [], conferme: c }))
+    assert.deepEqual(ott.chiuse.map(s => [s.lunedi, s.conferme?.conteggio, s.conferme?.euroATesta]), [['2026-10-26', 19, 36]])
+    for (const id of [ALBERTO, ANDREA, NOEMI_C]) assert.equal(salvadanaioConfermeDi(ott, id).euroMese, 36)
+    const nov = calcolaPremiMese(base({ mese: '2026-11', now: new Date('2026-12-07T10:00:00Z'), presenze: [], conferme: c }))
+    assert.equal(nov.chiuse.some(s => (s.conferme?.conteggio ?? 0) > 0), false)
+    assert.equal(salvadanaioConfermeDi(nov, ALBERTO).euroMese, 0)
+    const dic = calcolaPremiMese(base({ mese: '2026-12', now: new Date('2026-12-07T10:00:00Z'), presenze: [], conferme: c }))
+    assert.equal(dic.chiuse[0].lunedi, '2026-11-30')
+    assert.equal(salvadanaioConfermeDi(dic, ALBERTO).euroMese, 48)
+})
+
+test('conferme: chi oggi è disattivato ma ha lavorato una settimana passata resta', () => {
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        conferme: conferme({
+            chiusure: volte(18, '2026-11-05T15:00:00Z'),
+            confermate: confermate([ALBERTO, CHRISTEL], '2026-11-03T10:00:00Z'),
+        }),
+    }))
+    assert.deepEqual(m.chiuse[0].conferme?.persone.map(p => p.nome).sort(), ['Alberto', 'Christel'])
+    const r = m.righe.find(x => x.userId === CHRISTEL)
+    assert.deepEqual(r, { userId: CHRISTEL, nome: 'Christel', ruolo: 'CONFERME', euroMese: 24, euroInMaturazione: 0 })
+    // Senza bonus nel mese, chi non è più in squadra non compare.
+    const vuoto = calcolaPremiMese(base({ now: NOW_14_11, conferme: conferme() }))
+    assert.equal(vuoto.righe.some(x => x.userId === CHRISTEL), false)
+})
+
+test('conferme: Noemi con due account, due righe distinte riconoscibili dal ruolo', () => {
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        gdo: [...gdo, { userId: NOEMI_GDO, nome: 'Noemi', squadra: true }],
+        presenze: [...presenze(NOEMI_GDO, 6)],
+        conferme: conferme({ chiusure: volte(17, '2026-11-05T15:00:00Z'), confermate: confermate([NOEMI_C], '2026-11-03T10:00:00Z') }),
+    }))
+    const noemi = m.righe.filter(r => r.nome === 'Noemi')
+    assert.deepEqual(noemi.map(r => [r.ruolo, r.userId, r.euroMese]).sort(), [['CONFERME', NOEMI_C, 12], ['GDO', NOEMI_GDO, 74]])
+    assert.equal(salvadanaioDi(m, NOEMI_GDO).euroMese, 74)
+    assert.equal(salvadanaioConfermeDi(m, NOEMI_C).euroMese, 12)
+    assert.equal(salvadanaioConfermeDi(m, NOEMI_GDO).euroMese, 0)
+})
+
+test('conferme: i GDO non cambiano di un centesimo', () => {
+    const p = [...presenze('105', 8), ...presenze('116', 6), ...presenze('106', 5), ...presenze('112', 6, '2026-11-10T15:00:00Z')]
+    const senza = calcolaPremiMese(base({ now: NOW_14_11, presenze: p }))
+    const con = calcolaPremiMese(base({
+        now: NOW_14_11,
+        presenze: p,
+        conferme: conferme({
+            chiusure: [...volte(25, '2026-11-05T15:00:00Z'), ...volte(28, '2026-11-11T15:00:00Z')],
+            confermate: [...confermate([ALBERTO, ANDREA], '2026-11-03T10:00:00Z'), ...confermate([ALBERTO, ANDREA, NOEMI_C], '2026-11-10T10:00:00Z')],
+        }),
+    }))
+    assert.deepEqual(con.righe.filter(r => r.ruolo === 'GDO'), senza.righe)
+    assert.equal(con.totaleMese, senza.totaleMese)
+    assert.equal(con.totaleInMaturazione, senza.totaleInMaturazione)
+    assert.deepEqual(con.chiuse.map(s => [s.voci, s.totaleEuro]), senza.chiuse.map(s => [s.voci, s.totaleEuro]))
+    assert.deepEqual([con.inCorso?.voci, con.inCorso?.totaleEuro], [senza.inCorso?.voci, senza.inCorso?.totaleEuro])
+    for (const id of ['105', '116', '106', '112']) assert.deepEqual(salvadanaioDi(con, id), salvadanaioDi(senza, id))
+    // Senza conferme in ingresso ogni riga è GDO e la settimana non ha bonus Conferme.
+    assert.ok(senza.righe.every(r => r.ruolo === 'GDO'))
+    assert.equal(senza.chiuse[0].conferme, null)
+})
+
+test('conferme: con la regola a mese niente bonus a settimana', () => {
+    const m = calcolaPremiMese(base({
+        now: NOW_14_11,
+        conferme: conferme({ regola: { ...DEFAULT_CONFERME_BONUS, periodo: 'mese' }, chiusure: volte(30, '2026-11-05T15:00:00Z'), confermate: confermate([ALBERTO], '2026-11-03T10:00:00Z') }),
+    }))
+    assert.equal(m.chiuse[0].conferme, null)
+    const s = salvadanaioConfermeDi(m, ALBERTO)
+    assert.equal(s.settimane[0].conteggio, null)
+    assert.equal(s.euroMese, 0)
+})
+
+test('settimana scorsa: dal lunedì al sabato quella prima, di domenica quella appena chiusa', () => {
+    assert.equal(settimanaScorsa(NOW_14_11).lunedi, '2026-11-02')
+    assert.equal(settimanaScorsa(new Date('2026-11-09T08:00:00Z')).lunedi, '2026-11-02')
+    assert.equal(settimanaScorsa(new Date('2026-11-15T10:00:00Z')).lunedi, '2026-11-09')
+    // Lunedì 2/11: la settimana scorsa è 26-31/10, di ottobre.
+    const s = settimanaScorsa(new Date('2026-11-02T10:00:00Z'))
+    assert.equal(s.lunedi, '2026-10-26')
+    assert.equal(meseDellaSettimana(s), '2026-10')
 })
 
 test('testi: nome del mese e date della settimana', () => {

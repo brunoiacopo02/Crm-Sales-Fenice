@@ -18,8 +18,24 @@ import { isConfermePersona } from './rules'
 import type { NumeriSettimana, SettimanaLunSab } from './premiSettimana'
 
 /** Nome di un account delle Conferme: il nome vero, poi quello storico ("Alberto"), mai "(Conferme)". */
-const nomeConferme = (u: { firstName: string | null; name: string | null; displayName: string | null; id: string }) =>
+export const nomeConferme = (u: { firstName: string | null; name: string | null; displayName: string | null; id: string }) =>
     u.firstName?.trim() || u.name || u.displayName || u.id
+
+/**
+ * Lead veri confermati da un account CONFERME vero, come nella colonna
+ * arancione. È la base del bonus di squadra delle Conferme: la prova (migr.
+ * 0050) non entra. Lo usano i premi della settimana e il salvadanaio del mese
+ * (./premiMeseDb.ts).
+ */
+export function confermatiDalleConferme(companyId: string) {
+    const accountConferme = db.select({ id: users.id }).from(users).where(and(eq(users.role, 'CONFERME'), accountVero()))
+    return and(
+        eq(leads.companyId, companyId),
+        leadVero(),
+        eq(leads.confirmationsOutcome, 'confermato'),
+        inArray(leads.confirmationsUserId, accountConferme),
+    )
+}
 
 /**
  * GDO umani con un nome (fuori 108 e 201) e veri (fuori la prova, migr.
@@ -54,30 +70,22 @@ export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab
         .filter(r => isTeamMember(r.u) || r.presenze > 0 || r.fissati > 0)
         .map(r => ({ userId: r.userId, nome: r.nome, presenze: r.presenze, fissati: r.fissati }))
 
-    // Conferme: lead veri confermati da un account CONFERME vero, come nella
-    // colonna arancione (chiusure per salespersonOutcomeAt, presenze per
-    // presentedAt). La prova (migr. 0050) non entra nel bonus di squadra.
-    const accountConferme = db.select({ id: users.id }).from(users).where(and(eq(users.role, 'CONFERME'), accountVero()))
-    const confermatiDalleConferme = and(
-        eq(leads.companyId, companyId),
-        leadVero(),
-        eq(leads.confirmationsOutcome, 'confermato'),
-        inArray(leads.confirmationsUserId, accountConferme),
-    )
+    // Conferme: chiusure per salespersonOutcomeAt, presenze per presentedAt.
+    const confermati = confermatiDalleConferme(companyId)
     const [chiusure, presenzeConf, chiHaConfermato] = await Promise.all([
         db.select({ id: leads.id }).from(leads).where(and(
-            confermatiDalleConferme,
+            confermati,
             eq(leads.salespersonOutcome, 'Chiuso'),
             gte(leads.salespersonOutcomeAt, s.start),
             lt(leads.salespersonOutcomeAt, s.end),
         )),
         db.select({ id: leads.id }).from(leads).where(and(
-            confermatiDalleConferme,
+            confermati,
             gte(leads.presentedAt, s.start),
             lt(leads.presentedAt, s.end),
         )),
         db.selectDistinct({ userId: leads.confirmationsUserId }).from(leads).where(and(
-            confermatiDalleConferme,
+            confermati,
             gte(leads.confirmationsTimestamp, s.start),
             lt(leads.confirmationsTimestamp, s.end),
         )),

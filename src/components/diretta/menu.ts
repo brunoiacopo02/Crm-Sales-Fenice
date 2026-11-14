@@ -49,7 +49,7 @@ export const MENU_ADMIN_DIRETTA: VoceGruppo[] = [
     { name: "Citazioni del giorno", href: "/admin/citazioni", icon: Quote },
     { name: "Premi del negozio", href: "/admin/premi", icon: Gift },
     { name: "Registro delle monete", href: "/admin/diretta/registro", icon: Coins },
-    { name: "Salvadanai dei GDO", href: "/admin/diretta/salvadanai", icon: PiggyBank },
+    { name: "Salvadanai GDO e Conferme", href: "/admin/diretta/salvadanai", icon: PiggyBank },
     { name: "Bonus e obiettivi Conferme", href: "/admin/diretta/conferme", icon: Target },
     { name: "Pagina Squadra", href: "/classifica", icon: Users },
 ]
