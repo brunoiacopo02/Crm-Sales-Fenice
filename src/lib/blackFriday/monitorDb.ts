@@ -176,7 +176,7 @@ async function leggi(): Promise<MonitorBf> {
 
     const [righeLead, eventi, chiamate, carichi, attivita, funnelBot, turni, altriFunnel, chiusiDal] = await Promise.all([
         db.select({
-            id: leads.id, createdAt: leads.createdAt, utmSource: leads.utmSource, status: leads.status,
+            id: leads.id, createdAt: leads.createdAt, utmSource: leads.utmSource, utmMedium: leads.utmMedium, status: leads.status,
             assignedToId: leads.assignedToId, appointmentDate: leads.appointmentDate,
             confirmationsOutcome: leads.confirmationsOutcome, confirmationsDiscardReason: leads.confirmationsDiscardReason,
             presentedAt: leads.presentedAt, salespersonOutcome: leads.salespersonOutcome,
@@ -264,7 +264,7 @@ async function leggi(): Promise<MonitorBf> {
     // Il telefono serve solo al bot per trovare la chat e, ridotto a chiave persona,
     // ad agganciare le chiusure su altre schede: non entra nella cache della pagina.
     const leadsBf = leadIn.map(l => ({
-        id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, status: l.status, assignedToId: l.assignedToId,
+        id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, utmMedium: l.utmMedium, status: l.status, assignedToId: l.assignedToId,
         appointmentDate: l.appointmentDate, confirmationsOutcome: l.confirmationsOutcome,
         confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
         salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct,

@@ -29,6 +29,8 @@ export interface LeadBf {
      */
     createdAt: Date
     utmSource: string | null
+    /** Mezzo (utm medium): distingue le email del lancio BF dalle altre e le inserzioni a pagamento. */
+    utmMedium: string | null
     status: string
     assignedToId: string | null
     appointmentDate: Date | null
@@ -315,12 +317,29 @@ export const NOMI_CANALE: Record<Canale, string> = {
     meta: 'Inserzioni Meta', instagram: 'Instagram', email: 'Email al database', telegram: 'Telegram', altro: 'Altro',
 }
 
-/** Canale dal utmSource dei lead BF (Meta, bioorg, Email, Telegram, ...). */
-export function canaleDi(utmSource: string | null): Canale {
+/** Sorgenti delle inserzioni Meta (Meta = modulo nativo, Facebook = landing). */
+const SORGENTI_ADS = new Set(['meta', 'facebook'])
+/** Mezzi a pagamento delle inserzioni. */
+const MEZZI_PAGATI = new Set(['paid', 'cpc', 'ppc', 'paidsocial', 'paid_social', 'paid-social'])
+/** Sorgenti delle email al database (Email = link della mail, ActiveCampaign = modulo di AC). */
+const SORGENTI_EMAIL = new Set(['email', 'activecampaign'])
+/** Mezzo delle email del lancio Black Friday (LancioBlackFriday2026). */
+const MEZZO_EMAIL_BF = 'lancioblackfriday'
+
+/**
+ * Canale del lead BF da utmSource e utmMedium (PO 14/11/2026):
+ *  - Inserzioni Meta: sorgente Meta o Facebook con mezzo a pagamento (Paid, cpc, ...);
+ *  - Email al database: sorgente Email o ActiveCampaign col mezzo del lancio Black
+ *    Friday (LancioBlackFriday2026); la mail di un altro lancio (es. Lanciowebai) è "Altro";
+ *  - Instagram (bioorg) e Telegram come prima; tutto il resto "Altro".
+ * Maiuscole e minuscole indifferenti.
+ */
+export function canaleDi(utmSource: string | null, utmMedium: string | null): Canale {
     const s = (utmSource ?? '').trim().toLowerCase()
-    if (s === 'meta') return 'meta'
+    const m = (utmMedium ?? '').trim().toLowerCase()
+    if (SORGENTI_ADS.has(s) && MEZZI_PAGATI.has(m)) return 'meta'
+    if (SORGENTI_EMAIL.has(s) && m.startsWith(MEZZO_EMAIL_BF)) return 'email'
     if (s === 'bioorg' || s.includes('instagram')) return 'instagram'
-    if (s.startsWith('email')) return 'email'
     if (s === 'telegram') return 'telegram'
     return 'altro'
 }
@@ -609,7 +628,7 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
     // ── Canali ──
     const perCanale = new Map<Canale, LeadBf[]>()
     for (const l of leads) {
-        const c = canaleDi(l.utmSource)
+        const c = canaleDi(l.utmSource, l.utmMedium)
         perCanale.set(c, [...(perCanale.get(c) ?? []), l])
     }
     const canali = (Object.keys(NOMI_CANALE) as Canale[]).filter(c => perCanale.has(c)).map(c => {

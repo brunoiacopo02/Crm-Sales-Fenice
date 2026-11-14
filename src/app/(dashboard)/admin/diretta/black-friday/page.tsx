@@ -524,7 +524,10 @@ function SezioneProvenienza({ m }: { m: MonitorBf }) {
                     </tr>
                 ))}
             </Tabella>
-            <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">Percentuali sui lead del canale.</div>
+            <div className="mt-3 text-[13px] leading-snug text-[#BFBFBF]">
+                Percentuali sui lead del canale. Inserzioni Meta: sorgente Meta o Facebook a pagamento. Email al database: le email del lancio Black Friday
+                (sorgente Email o ActiveCampaign); la mail di un altro lancio va in Altro.
+            </div>
         </Sezione>
     )
 }
