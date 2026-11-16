@@ -9,7 +9,9 @@
 //    fuori fascia) il lead resta com'era e il giro si ferma;
 // 3. se il bot l'ha aperto il lead passa all'account bot nell'infornata a SENSO
 //    UNICO `DATABASE_BOT_202611`: chi non risponde o sparisce non torna ai GDO
-//    (reassign.ts lo chiude come REJECTED, ripescabile in blocco).
+//    (reassign.ts lo chiude come REJECTED, ripescabile in blocco);
+// 4. ogni lead che il bot ha aperto (spostato o no) prende la provenienza `Database`
+//    (titolare 16/11/2026); quella di prima resta nell'evento `DATABASE_BOT`.
 
 import crypto from 'node:crypto'
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm'
@@ -19,8 +21,8 @@ import { pushLeadToBot } from '@/lib/bot-fissatore/push'
 import { personKeyOf } from '@/lib/bot-fissatore/personKey'
 import { stessoNumeroSql } from './telefonoSql'
 import {
-    BATCH_DATABASE_BOT, EVENTI_CONTATTO, EVENTO_DATABASE_BOT, azioneDaPush, ingressoAllargato, leggiConfigDatabaseAlBot, motivoNonIdoneo,
-    scartoChiusoPersona, segnoDatabaseSql, type CandidatoDatabase, type ConfigDatabaseAlBot, type EsitoIngresso, type PersonaDatabase,
+    BATCH_DATABASE_BOT, EVENTI_CONTATTO, EVENTO_DATABASE_BOT, FUNNEL_DATABASE, azioneDaPush, ingressoAllargato, leggiConfigDatabaseAlBot, motivoNonIdoneo,
+    provenienzaAllApertura, scartoChiusoPersona, segnoDatabaseSql, type CandidatoDatabase, type ConfigDatabaseAlBot, type EsitoIngresso, type PersonaDatabase,
     type MotivoNonIdoneoAllargato, type RegolaIngresso,
 } from './database'
 
@@ -49,6 +51,30 @@ export async function accountBotFenice(): Promise<{ id: string } | undefined> {
         eq(users.companyId, FENICE), eq(users.role, 'GDO'), eq(users.isBot, true), eq(users.isActive, true),
     )).limit(1)
     return bot
+}
+
+type Transazione = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Titolare 16/11/2026: "i lead database come provenienza devono avere tutti database".
+ * Il lead che il bot ha aperto come database prende `funnel = 'Database'`; se lo era gia',
+ * in qualunque grafia, non si tocca niente. La provenienza di prima si legge QUI, sotto
+ * lock, e chi chiama la scrive nell'evento (`funnelPrima`, `funnelCambiato`): da li' e'
+ * sempre recuperabile. Cambia solo la provenienza: assegnatario, stato, infornata e
+ * `launchBucket` (che e' cio' che tiene il lancio lontano dai GDO) restano com'erano.
+ */
+export async function segnaProvenienzaDatabase(
+    tx: Transazione, leadId: string, now: Date,
+): Promise<{ funnelPrima: string | null; funnelCambiato: boolean }> {
+    const [cur] = await tx.select({ funnel: leads.funnel }).from(leads).where(eq(leads.id, leadId)).for('update')
+    if (!cur) return { funnelPrima: null, funnelCambiato: false }
+    const provenienza = provenienzaAllApertura(cur.funnel)
+    if (provenienza.funnelCambiato) {
+        await tx.update(leads)
+            .set({ funnel: FUNNEL_DATABASE, updatedAt: now, version: sql`${leads.version} + 1` })
+            .where(eq(leads.id, leadId))
+    }
+    return provenienza
 }
 
 /**
@@ -275,13 +301,17 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
         // di un GDO: spostarla toglierebbe quei numeri dai conteggi del GDO). Il bot ha
         // aperto la chat; qui resta solo il segno, che impedisce una seconda spinta.
         if (!r.sposta) {
-            await db.insert(leadEvents).values({
-                id: crypto.randomUUID(), leadId, eventType: EVENTO_DATABASE_BOT, userId: null, timestamp: now,
-                metadata: {
-                    esito: azione.esito, assegnato: false, spostata: false, regola: r.regola, assegnatario: r.assignedToId, statoPrima: r.status,
-                    motivo: 'PO 12/11/2026: chat aperta dal bot, scheda lasciata dov\'e\' (storico del GDO intatto)',
-                },
-                companyId: FENICE,
+            await db.transaction(async (tx) => {
+                const provenienza = await segnaProvenienzaDatabase(tx, leadId, now)
+                await tx.insert(leadEvents).values({
+                    id: crypto.randomUUID(), leadId, eventType: EVENTO_DATABASE_BOT, userId: null, timestamp: now,
+                    metadata: {
+                        esito: azione.esito, assegnato: false, spostata: false, regola: r.regola, assegnatario: r.assignedToId, statoPrima: r.status,
+                        ...provenienza,
+                        motivo: 'PO 12/11/2026: chat aperta dal bot, scheda lasciata dov\'e\' (storico del GDO intatto)',
+                    },
+                    companyId: FENICE,
+                })
             })
             apertiSenzaSpostare++
             continue
@@ -306,6 +336,9 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
                     : and(eq(leads.id, leadId), isNull(leads.assignedToId), eq(leads.status, 'NEW')))
                 .returning({ id: leads.id })
             const ok = agg.length > 0
+            // DOPO lo spostamento (che ha per guardiano la `version` letta) e anche se lo
+            // spostamento non e' riuscito: la chat il bot l'ha aperta comunque.
+            const provenienza = await segnaProvenienzaDatabase(tx, leadId, now)
             await tx.insert(leadEvents).values([
                 ...(ok ? [{
                     id: crypto.randomUUID(), leadId, eventType: 'ASSIGNED', userId: bot.id, timestamp: now,
@@ -317,7 +350,7 @@ export async function eseguiDatabaseAlBot(env: Record<string, string | undefined
                 }] : []),
                 {
                     id: crypto.randomUUID(), leadId, eventType: EVENTO_DATABASE_BOT, userId: null, timestamp: now,
-                    metadata: { esito: azione.esito, assegnato: ok, regola: r.regola, intakeBatchPrima: r.intakeBatch, discardReasonPrima: r.discardReason },
+                    metadata: { esito: azione.esito, assegnato: ok, regola: r.regola, intakeBatchPrima: r.intakeBatch, discardReasonPrima: r.discardReason, ...provenienza },
                     companyId: FENICE,
                 },
             ])

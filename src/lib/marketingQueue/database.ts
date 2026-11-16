@@ -50,6 +50,50 @@ export function segnoDatabaseSql(payload: string): string {
     return `(${payload}->'database' = 'true'::jsonb OR 'database' IN (${campi}))`
 }
 
+/**
+ * La provenienza dei lead di database (titolare 16/11/2026: "i lead database come
+ * provenienza devono avere tutti database"). E' la grafia canonica gia' usata dai pool
+ * database (`DB_POOL_FUNNEL` in databasePoolActions.ts, 13.734 lead storici); a DB c'e'
+ * anche `DATABASE`, e il codice confronta ovunque senza distinguere le maiuscole.
+ */
+export const FUNNEL_DATABASE = 'Database'
+
+/** La provenienza e' gia' "database", in qualunque grafia (`Database`, `DATABASE`, ` database `). */
+export function eFunnelDatabase(funnel: string | null | undefined): boolean {
+    return (funnel ?? '').trim().toLowerCase() === 'database'
+}
+
+/**
+ * `NOT eFunnelDatabase` in SQL (`funnel` = l'espressione della colonna, es. `"leads"."funnel"`).
+ * Testo puro: chi lo usa lo passa a `sql.raw`. Vanno tenute uguali.
+ */
+export function funnelNonDatabaseSql(funnel: string): string {
+    return `lower(btrim(coalesce(${funnel}, ''))) <> 'database'`
+}
+
+/**
+ * Cosa si scrive nell'evento `DATABASE_BOT` quando il bot apre un lead di database: la
+ * provenienza che il lead aveva PRIMA (sempre recuperabile da li': la ripristina
+ * scripts/diretta/database-provenienza-recupero.ts) e se e' stata cambiata. Se era gia'
+ * database, in qualunque grafia, non si tocca niente.
+ */
+export function provenienzaAllApertura(funnel: string | null | undefined): { funnelPrima: string | null; funnelCambiato: boolean } {
+    return { funnelPrima: funnel ?? null, funnelCambiato: !eFunnelDatabase(funnel) }
+}
+
+/**
+ * Gli `esito` dell'evento `DATABASE_BOT` che vogliono dire "il bot l'ha aperto" (le azioni
+ * `assegna` di `azioneDaPush`): sono i lead che prendono la provenienza `Database`.
+ */
+export const ESITI_APERTO_DAL_BOT = ['aperto', 'aperto_duplicato', 'apertura_non_partita'] as const
+
+/**
+ * Evento del recupero e del ripristino della provenienza sui lead aperti PRIMA del
+ * 16/11/2026 (scripts/diretta/database-provenienza-recupero.ts). Un tipo a parte: un
+ * secondo `DATABASE_BOT` sullo stesso lead si conterebbe come una seconda apertura.
+ */
+export const EVENTO_PROVENIENZA_DATABASE = 'DATABASE_PROVENIENZA'
+
 export const SCAGLIONE_DATABASE_DEFAULT = 10
 export const GIORNI_CODA_DATABASE_DEFAULT = 7
 

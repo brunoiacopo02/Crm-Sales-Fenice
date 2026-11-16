@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import {
     BATCH_DATABASE_BOT, SCAGLIONE_DATABASE_DEFAULT, GIORNI_CODA_DATABASE_DEFAULT,
     MAX_TENTATIVI_FALLITI, GIORNI_FERMO_DEFAULT, ingressoAllargato, scartoCheChiude, scartoChiusoPersona, segnoDatabaseSql, CAMPI_PROVENIENZA_CODA, type PersonaDatabase, azioneDaPush, eLeadDatabase, leggiConfigDatabaseAlBot, motivoNonIdoneo, type CandidatoDatabase,
+    ESITI_APERTO_DAL_BOT, FUNNEL_DATABASE, eFunnelDatabase, funnelNonDatabaseSql, provenienzaAllApertura,
 } from './database'
+import { eLeadDelLancio } from '@/lib/diretta/instradamento'
+import { LANCIO_BUCKET } from '@/lib/lancio/intake'
 import { scegliLeadEsistente } from './payload'
 import { ripresaVaAlGdo } from '@/lib/bot-fissatore/ripresaChat'
 import { BATCH_SENSO_UNICO, BATCH_ESCLUSI_DAI_KPI, BATCH_FREDDI } from '@/lib/intakeBatch'
@@ -253,4 +256,45 @@ test("allargato: il lead in attesa «riscrivo io» (PO 12/11/2026) entra come gl
     assert.deepEqual(ent(inAttesa, { assegnatoAPersona: true, ultimoContattoMs: ORA - 2 * G }), { motivo: 'non_fermo' })
     // Niente richiamo: l'attesa non scrive nessuna recallDate.
     assert.deepEqual(ent(inAttesa, { assegnatoAPersona: true, ultimoContattoMs: ORA - 10 * G, richiamoFissato: false }), { regola: 'fermo', sposta: false })
+})
+
+// ── Provenienza `Database` all'apertura (titolare 16/11/2026) ──
+test('provenienza all\'apertura: diventa Database, quella di prima resta nell\'evento; gia\' database non si tocca', () => {
+    assert.equal(FUNNEL_DATABASE, 'Database')
+    assert.deepEqual(provenienzaAllApertura('Lancio Web Dev AI'), { funnelPrima: 'Lancio Web Dev AI', funnelCambiato: true })
+    assert.deepEqual(provenienzaAllApertura('CORSO 10 ORE'), { funnelPrima: 'CORSO 10 ORE', funnelCambiato: true })
+    // Senza provenienza: si scrive Database e `funnelPrima: null` dice che non ce n'era una.
+    assert.deepEqual(provenienzaAllApertura(null), { funnelPrima: null, funnelCambiato: true })
+    assert.deepEqual(provenienzaAllApertura(''), { funnelPrima: '', funnelCambiato: true })
+    // Idempotente: qualunque grafia di "database" resta com'e' (non si riscrive nemmeno DATABASE in Database).
+    for (const gia of ['Database', 'DATABASE', 'database', ' Database ']) {
+        assert.deepEqual(provenienzaAllApertura(gia), { funnelPrima: gia, funnelCambiato: false }, gia)
+        assert.equal(eFunnelDatabase(gia), true, gia)
+    }
+    // Solo l'uguaglianza: "Database luglio" non e' la provenienza database.
+    assert.equal(eFunnelDatabase('Database luglio'), false)
+    assert.equal(eFunnelDatabase(undefined), false)
+    // Seconda passata sullo stesso lead: niente da cambiare.
+    assert.equal(provenienzaAllApertura(FUNNEL_DATABASE).funnelCambiato, false)
+    // "Aperto dal bot" = le azioni `assegna` del push, tutte e sole.
+    const esiti = [
+        { result: 'sent' }, { result: 'duplicate' }, { result: 'network_error' }, { result: 'http_error' }, { result: 'boh' },
+        ...['database_chat_attiva', 'database_chat_esistente', 'telefono_non_valido', 'apertura_non_partita', 'arruolamento_fallito', 'altro']
+            .map((motivo) => ({ result: 'not_accepted', motivo })),
+    ].map(azioneDaPush)
+    assert.deepEqual(esiti.filter((a) => a.tipo === 'assegna').map((a) => a.esito).sort(), [...ESITI_APERTO_DAL_BOT].sort())
+    // La stessa regola in SQL.
+    assert.equal(funnelNonDatabaseSql('"leads"."funnel"'), `lower(btrim(coalesce("leads"."funnel", ''))) <> 'database'`)
+})
+
+test('provenienza Database: un lead del lancio resta del lancio (launchBucket) e il senso unico non cambia', () => {
+    // Il lancio si riconosce dal bucket anche senza il suo funnel: mai ai GDO.
+    const lancio = { launchBucket: LANCIO_BUCKET, funnel: FUNNEL_DATABASE, lancioPool: null, humanTestCohort: null }
+    assert.equal(eLeadDelLancio(lancio), true)
+    const base = { assignedToId: null, status: 'NEW', appointmentDate: null, presentedAt: null, isTest: false }
+    assert.equal(ripresaVaAlGdo({ ...base, ...lancio, intakeBatch: null }), false)
+    // Il senso unico sta sull'infornata, non sulla provenienza.
+    const fuoriLancio = { ...base, launchBucket: null, lancioPool: null, humanTestCohort: null, intakeBatch: BATCH_DATABASE_BOT }
+    assert.equal(ripresaVaAlGdo({ ...fuoriLancio, funnel: 'CORSO 10 ORE' }), false)
+    assert.equal(ripresaVaAlGdo({ ...fuoriLancio, funnel: FUNNEL_DATABASE }), false)
 })
