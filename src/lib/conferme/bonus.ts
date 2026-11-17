@@ -9,7 +9,7 @@
 // l'admin da /admin/diretta/conferme. Qui ci sono i default e i calcoli, puri e
 // testabili senza database.
 
-import { monthBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
+import { dayBoundsRome, monthBoundsRome, toRomeDateStr, weekBoundsRome } from '@/lib/dateUtils'
 
 export const CONFERME_BONUS_KEY = 'conferme_bonus'
 
@@ -166,11 +166,18 @@ export function validateConfermeBonus(input: unknown, utentiAmmessi: ReadonlySet
     }
 }
 
-/** Finestra del bonus di squadra che contiene `now`: settimana ISO o mese, ora di Roma, fine esclusa. */
+/**
+ * Finestra del bonus di squadra che contiene `now`, ora di Roma, fine esclusa:
+ * il mese, oppure la settimana lunedì-sabato dei premi (titolare 14/11/2026,
+ * come settimanaLunSab in src/lib/economy/premiSettimana.ts): la domenica non
+ * conta e di domenica resta la settimana appena chiusa.
+ */
 export function periodoBonusBounds(now: Date, periodo: BonusPeriodo): { start: Date; end: Date } {
-    return periodo === 'settimana'
-        ? weekBoundsRome(now)
-        : monthBoundsRome(toRomeDateStr(now).slice(0, 7))
+    if (periodo === 'mese') return monthBoundsRome(toRomeDateStr(now).slice(0, 7))
+    const w = weekBoundsRome(now)
+    // Sabato a mezzogiorno circa: un'ora di cambio d'ora non sposta il giorno.
+    const sabato = new Date(w.start.getTime() + 5 * 86_400_000 + 12 * 3_600_000)
+    return { start: w.start, end: dayBoundsRome(sabato).end }
 }
 
 export interface ProgressoSquadra {

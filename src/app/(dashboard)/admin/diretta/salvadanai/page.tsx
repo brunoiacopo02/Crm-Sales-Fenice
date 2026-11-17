@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic"
 /**
  * Salvadanai dei GDO (PO 09/11/2026): i bonus in euro di ogni GDO nel mese,
  * settimana per settimana (bonus presenze e classifica), più la settimana in
- * corso provvisoria. Gli stessi conti di "Premi della settimana"; una
+ * corso provvisoria. Dal 14/11/2026 anche le Conferme, in un gruppo a parte:
+ * importi solo per persona, nessun subtotale di squadra. Gli stessi conti di "Premi della settimana"; una
  * settimana conta nel mese del suo sabato (confermata dal PO il 09/11/2026).
  * Solo ADMIN, letto dalla tabella users. Dati in cache 2 minuti.
  */
@@ -47,10 +48,11 @@ export default async function SalvadanaiPage({ searchParams }: { searchParams: P
                 Rinascita
             </Link>
             <div>
-                <h1 className="text-2xl font-bold text-brand-charcoal">Salvadanai dei GDO</h1>
+                <h1 className="text-2xl font-bold text-brand-charcoal">Salvadanai dei GDO e delle Conferme</h1>
                 <p className="mt-1 text-sm text-ash-500">
-                    I bonus in euro del mese: presenze oltre la soglia e classifica, settimana per settimana (lunedì-sabato).
-                    Una settimana conta nel mese del suo sabato. Nel totale entrano solo le settimane chiuse.
+                    I bonus in euro del mese, settimana per settimana (lunedì-sabato): per i GDO presenze oltre la soglia e
+                    classifica, per le Conferme il bonus di squadra a testa. Una settimana conta nel mese del suo sabato.
+                    Nel totale entrano solo le settimane chiuse.
                 </p>
             </div>
 
@@ -95,13 +97,16 @@ export default async function SalvadanaiPage({ searchParams }: { searchParams: P
 
 function Riepilogo({ p }: { p: PremiMese }) {
     const mese = nomeMese(p.mese)
+    const gdo = p.righe.filter(r => r.ruolo === "GDO")
+    const conferme = p.righe.filter(r => r.ruolo === "CONFERME")
     return (
         <section className="rounded-2xl border border-ash-200 bg-white p-5">
-            <h2 className="text-base font-bold text-brand-charcoal">Totale di {mese}</h2>
-            {p.righe.length === 0 ? (
+            <h2 className="text-base font-bold text-brand-charcoal">Riepilogo di {mese}</h2>
+            <h3 className="mt-3 text-sm font-bold text-brand-charcoal">GDO</h3>
+            {gdo.length === 0 ? (
                 <div className="mt-1 text-sm text-ash-500">Nessun GDO.</div>
             ) : (
-                <div className="mt-3 overflow-x-auto">
+                <div className="mt-1 overflow-x-auto">
                     <table className="w-full min-w-[360px] text-left text-sm tabular-nums">
                         <thead>
                             <tr className="text-ash-500">
@@ -111,7 +116,7 @@ function Riepilogo({ p }: { p: PremiMese }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {p.righe.map(r => (
+                            {gdo.map(r => (
                                 <tr key={r.userId} className="border-t border-ash-100">
                                     <th scope="row" className="py-1.5 font-normal">{r.nome}</th>
                                     <td className="py-1.5 text-right font-semibold">{euroIt(r.euroMese)}</td>
@@ -121,11 +126,38 @@ function Riepilogo({ p }: { p: PremiMese }) {
                         </tbody>
                         <tfoot>
                             <tr className="border-t-2 border-ash-200">
-                                <th scope="row" className="py-2 text-left font-bold text-brand-charcoal">Totale</th>
+                                <th scope="row" className="py-2 text-left font-bold text-brand-charcoal">Totale GDO</th>
                                 <td className="py-2 text-right font-bold text-brand-charcoal">{euroIt(p.totaleMese)}</td>
                                 {p.inCorso && <td className="py-2 text-right text-ash-500">{euroIt(p.totaleInMaturazione)}</td>}
                             </tr>
                         </tfoot>
+                    </table>
+                </div>
+            )}
+
+            <h3 className="mt-5 text-sm font-bold text-brand-charcoal">Conferme</h3>
+            {conferme.length === 0 ? (
+                <div className="mt-1 text-sm text-ash-500">Nessuna persona delle Conferme.</div>
+            ) : (
+                <div className="mt-1 overflow-x-auto">
+                    {/* Bonus di squadra: gli importi sono per persona, nessun subtotale del gruppo. */}
+                    <table className="w-full min-w-[360px] text-left text-sm tabular-nums">
+                        <thead>
+                            <tr className="text-ash-500">
+                                <th scope="col" className="py-1 font-medium">Conferme</th>
+                                <th scope="col" className="py-1 text-right font-medium">Settimane chiuse</th>
+                                {p.inCorso && <th scope="col" className="py-1 text-right font-medium">In maturazione</th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {conferme.map(r => (
+                                <tr key={r.userId} className="border-t border-ash-100">
+                                    <th scope="row" className="py-1.5 font-normal">{r.nome}</th>
+                                    <td className="py-1.5 text-right font-semibold">{euroIt(r.euroMese)}</td>
+                                    {p.inCorso && <td className="py-1.5 text-right text-ash-500">{euroIt(r.euroInMaturazione)}</td>}
+                                </tr>
+                            ))}
+                        </tbody>
                     </table>
                 </div>
             )}
@@ -134,8 +166,22 @@ function Riepilogo({ p }: { p: PremiMese }) {
     )
 }
 
+/** «Conferme: 28 chiusure di squadra su 16 → 144 € a testa a Alberto, Andre, Noemi». */
+function RigaConferme({ s }: { s: SettimanaDelMese }) {
+    const c = s.conferme
+    if (!c) return null
+    const unita = c.unita === "presenze" ? "presenze" : "chiusure"
+    const chi = c.persone.length > 0 ? ` a ${c.persone.map(x => x.nome).join(", ")}` : ""
+    return (
+        <div className="mt-3 border-t border-ash-100 pt-2 text-sm text-ash-700">
+            <span className="font-semibold text-brand-charcoal">Conferme:</span>{" "}
+            {c.conteggio} {unita} di squadra su {c.soglia} → {euroIt(c.euroATesta)} a testa{chi}.
+        </div>
+    )
+}
+
 function Settimana({ s, p, provvisoria }: { s: SettimanaDelMese; p: PremiMese; provvisoria: boolean }) {
-    const righe = p.righe.filter(r => s.voci[r.userId]).map(r => ({ ...r, v: s.voci[r.userId] }))
+    const righe = p.righe.filter(r => r.ruolo === "GDO" && s.voci[r.userId]).map(r => ({ ...r, v: s.voci[r.userId] }))
     return (
         <section className="rounded-2xl border border-ash-200 bg-white p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -173,13 +219,14 @@ function Settimana({ s, p, provvisoria }: { s: SettimanaDelMese; p: PremiMese; p
                         </tbody>
                         <tfoot>
                             <tr className="border-t-2 border-ash-200">
-                                <th scope="row" colSpan={4} className="py-2 text-left font-bold text-brand-charcoal">Totale settimana</th>
+                                <th scope="row" colSpan={4} className="py-2 text-left font-bold text-brand-charcoal">Totale GDO della settimana</th>
                                 <td className="py-2 text-right font-bold text-brand-charcoal">{euroIt(s.totaleEuro)}</td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
             )}
+            <RigaConferme s={s} />
         </section>
     )
 }

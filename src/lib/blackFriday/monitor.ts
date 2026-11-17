@@ -29,6 +29,8 @@ export interface LeadBf {
      */
     createdAt: Date
     utmSource: string | null
+    /** Mezzo (utm medium): distingue le email del lancio BF dalle altre e le inserzioni a pagamento. */
+    utmMedium: string | null
     status: string
     assignedToId: string | null
     appointmentDate: Date | null
@@ -42,6 +44,23 @@ export interface LeadBf {
     appointmentCreatedAt: Date | null
     confirmationsTimestamp: Date | null
     salespersonOutcomeAt: Date | null
+    /** Chiave persona (chiavePersona del telefono): serve solo ad agganciare le chiusure su altre schede. */
+    persona?: string | null
+    /** La persona era già nel CRM prima dell'ingresso BF (vedi personeGiaNelCrm). */
+    giaNelCrm?: boolean
+}
+
+/**
+ * Esito "Chiuso" dal 7/11 su una scheda FUORI dal monitor (es. la scheda vecchia
+ * di chi si è iscritto al Black Friday dall'email e ha firmato lì).
+ */
+export interface ChiusuraAltrove {
+    leadId: string
+    persona: string | null
+    /** salespersonOutcomeAt della scheda. */
+    at: Date
+    closeAmountEur: number | null
+    closeProduct: string | null
 }
 
 /** Stato della chat del lead BF, dal bot. */
@@ -94,6 +113,8 @@ export interface InputMonitorBf {
     turni: GamificationTargets
     /** Altri funnel nello stesso periodo, per le percentuali come nel Sales Manager; null se non letti. */
     altriSm: AltriFunnelSm | null
+    /** Chiusure dal 7/11 sulle schede fuori dal monitor (vedi attribuisciChiusureAltrove). */
+    chiusureAltrove?: ChiusuraAltrove[]
 }
 
 export const BF_FUNNEL = 'BLACK FRIDAY'
@@ -125,6 +146,95 @@ export function ingressoBf(createdAt: Date, convertitoAt: Date | null, inizio: D
     if (convertitoAt && convertitoAt >= inizio) return convertitoAt > createdAt ? convertitoAt : createdAt
     return createdAt >= inizio ? createdAt : null
 }
+
+// ── Vendite per persona (PO 12/11/2026) ──
+// Una vendita Black Friday si conta per PERSONA (stesse ultime 10 cifre del
+// telefono): chi si iscrive al BF e firma su un'altra sua scheda (di solito la
+// vecchia, perché la scheda BF è stata chiusa come doppione) è una vendita BF.
+
+/** Chiave persona: le ultime 10 cifre del telefono; null se le cifre sono meno di 10. */
+export function chiavePersona(telefono: string | null | undefined): string | null {
+    const cifre = (telefono ?? '').replace(/\D/g, '')
+    return cifre.length >= 10 ? cifre.slice(-10) : null
+}
+
+/** Una chiusura su un'altra scheda contata per il Black Friday. */
+export interface ChiusuraAttribuita { leadBfId: string; leadChiusuraId: string; at: Date; closeAmountEur: number | null; closeProduct: string | null }
+
+/**
+ * Porta sulla scheda BF le chiusure fatte su un'altra scheda della stessa persona.
+ * Regole:
+ *  - conta solo una chiusura con data successiva o uguale all'ingresso della PRIMA
+ *    scheda BF della persona: una chiusura precedente è un già cliente che si iscrive;
+ *  - una persona conta una volta sola: se una sua scheda BF è già "Chiuso" non si
+ *    aggiunge niente, e con più schede BF la vendita va sulla prima (il suo canale);
+ *  - con più chiusure valide vale la prima.
+ * La scheda BF scelta esce con esito "Chiuso", data, importo e prodotto di quella
+ * chiusura; il resto (appuntamento, conferma, presenza) resta com'è.
+ */
+export function attribuisciChiusureAltrove(leads: LeadBf[], chiusure: ChiusuraAltrove[]): { leads: LeadBf[]; attribuite: ChiusuraAttribuita[] } {
+    if (chiusure.length === 0) return { leads, attribuite: [] }
+    const idBf = new Set(leads.map(l => l.id))
+    const perPersona = new Map<string, ChiusuraAltrove[]>()
+    for (const c of chiusure) {
+        if (!c.persona || idBf.has(c.leadId)) continue
+        perPersona.set(c.persona, [...(perPersona.get(c.persona) ?? []), c])
+    }
+    const schede = new Map<string, LeadBf[]>()
+    for (const l of leads) {
+        if (!l.persona || !perPersona.has(l.persona)) continue
+        schede.set(l.persona, [...(schede.get(l.persona) ?? []), l])
+    }
+    const attribuite: ChiusuraAttribuita[] = []
+    for (const [persona, sue] of schede) {
+        if (sue.some(l => l.salespersonOutcome === 'Chiuso')) continue
+        const prima = sue.reduce((a, b) => (b.createdAt < a.createdAt ? b : a))
+        const valida = perPersona.get(persona)!
+            .filter(c => c.at >= prima.createdAt)
+            .sort((a, b) => a.at.getTime() - b.at.getTime())[0]
+        if (!valida) continue
+        attribuite.push({ leadBfId: prima.id, leadChiusuraId: valida.leadId, at: valida.at, closeAmountEur: valida.closeAmountEur, closeProduct: valida.closeProduct })
+    }
+    if (attribuite.length === 0) return { leads, attribuite }
+    const perLead = new Map(attribuite.map(a => [a.leadBfId, a]))
+    return {
+        leads: leads.map(l => {
+            const a = perLead.get(l.id)
+            return a ? { ...l, salespersonOutcome: 'Chiuso', salespersonOutcomeAt: a.at, closeAmountEur: a.closeAmountEur, closeProduct: a.closeProduct } : l
+        }),
+        attribuite,
+    }
+}
+
+/** Una scheda della persona (stesse ultime 10 cifre), per sapere se era già nel CRM. */
+export interface SchedaPersona { leadId: string; persona: string | null; createdAt: Date }
+
+/**
+ * Lead BF la cui persona era già nel CRM prima dell'iscrizione al Black Friday
+ * (PO 14/11/2026): la scheda stessa è nata prima dell'ingresso (convertito),
+ * oppure un'altra scheda della stessa persona, FUORI dal monitor, è stata creata
+ * prima dell'ingresso. Un'altra scheda BF non conta: è la stessa iscrizione.
+ * `createdAt` = ingresso BF, `natoAt` = creazione vera della scheda.
+ */
+export function personeGiaNelCrm(
+    leads: { id: string; createdAt: Date; natoAt: Date; persona: string | null | undefined }[],
+    altre: SchedaPersona[],
+): Set<string> {
+    const idBf = new Set(leads.map(l => l.id))
+    const primaPerPersona = new Map<string, Date>()
+    for (const a of altre) {
+        if (!a.persona || idBf.has(a.leadId)) continue
+        const p = primaPerPersona.get(a.persona)
+        if (!p || a.createdAt < p) primaPerPersona.set(a.persona, a.createdAt)
+    }
+    const out = new Set<string>()
+    for (const l of leads) {
+        const prima = l.persona ? primaPerPersona.get(l.persona) : undefined
+        if (l.natoAt < l.createdAt || (prima && prima < l.createdAt)) out.add(l.id)
+    }
+    return out
+}
+
 /** ORE DI TURNO GDO oltre le quali un ridato dal bot non ancora chiamato va segnalato (PO 09/11/2026). */
 export const ORE_RIDATO_NON_CHIAMATO = 2
 /** Numero WhatsApp segnalato se ha almeno questi lead BF... */
@@ -238,12 +348,29 @@ export const NOMI_CANALE: Record<Canale, string> = {
     meta: 'Inserzioni Meta', instagram: 'Instagram', email: 'Email al database', telegram: 'Telegram', altro: 'Altro',
 }
 
-/** Canale dal utmSource dei lead BF (Meta, bioorg, Email, Telegram, ...). */
-export function canaleDi(utmSource: string | null): Canale {
+/** Sorgenti delle inserzioni Meta (Meta = modulo nativo, Facebook = landing). */
+const SORGENTI_ADS = new Set(['meta', 'facebook'])
+/** Mezzi a pagamento delle inserzioni. */
+const MEZZI_PAGATI = new Set(['paid', 'cpc', 'ppc', 'paidsocial', 'paid_social', 'paid-social'])
+/** Sorgenti delle email al database (Email = link della mail, ActiveCampaign = modulo di AC). */
+const SORGENTI_EMAIL = new Set(['email', 'activecampaign'])
+/** Mezzo delle email del lancio Black Friday (LancioBlackFriday2026). */
+const MEZZO_EMAIL_BF = 'lancioblackfriday'
+
+/**
+ * Canale del lead BF da utmSource e utmMedium (PO 14/11/2026):
+ *  - Inserzioni Meta: sorgente Meta o Facebook con mezzo a pagamento (Paid, cpc, ...);
+ *  - Email al database: sorgente Email o ActiveCampaign col mezzo del lancio Black
+ *    Friday (LancioBlackFriday2026); la mail di un altro lancio (es. Lanciowebai) è "Altro";
+ *  - Instagram (bioorg) e Telegram come prima; tutto il resto "Altro".
+ * Maiuscole e minuscole indifferenti.
+ */
+export function canaleDi(utmSource: string | null, utmMedium: string | null): Canale {
     const s = (utmSource ?? '').trim().toLowerCase()
-    if (s === 'meta') return 'meta'
+    const m = (utmMedium ?? '').trim().toLowerCase()
+    if (SORGENTI_ADS.has(s) && MEZZI_PAGATI.has(m)) return 'meta'
+    if (SORGENTI_EMAIL.has(s) && m.startsWith(MEZZO_EMAIL_BF)) return 'email'
     if (s === 'bioorg' || s.includes('instagram')) return 'instagram'
-    if (s.startsWith('email')) return 'email'
     if (s === 'telegram') return 'telegram'
     return 'altro'
 }
@@ -331,6 +458,33 @@ export interface RigaGruppo {
     pctAppuntamentiSuRisposto: number | null
 }
 
+/**
+ * Una colonna di "Email e inserzioni a confronto" (PO 14/11/2026). Tutte le % sono
+ * sui lead della colonna. Consegnato e risposto dal bot: null se il bot non ha
+ * risposto. Presentati come nell'imbuto (appuntamento con presenza registrata,
+ * qualunque esito del venditore); vendite per persona come nel resto del monitor.
+ */
+export interface ColonnaCanale {
+    lead: number
+    consegnato: number | null
+    pctConsegnato: number | null
+    risposto: number | null
+    pctRisposto: number | null
+    appuntamenti: number
+    pctAppuntamenti: number | null
+    confermati: number
+    pctConfermati: number | null
+    presentati: number
+    pctPresentati: number | null
+    chiusi: number
+    pctChiusi: number | null
+    euro: number
+    futuri: number
+    pctFuturi: number | null
+    giaNelCrm: number
+    pctGiaNelCrm: number | null
+}
+
 export interface MonitorBf {
     calcolatoAlle: string
     inizio: string
@@ -345,6 +499,8 @@ export interface MonitorBf {
         daChiamare: number
     }
     canali: { chiave: Canale; nome: string; lead: number; risposto: number | null; pctRisposto: number | null; appuntamenti: number; pctAppuntamenti: number | null; presenti: number; chiusi: number }[]
+    /** Email al database e inserzioni Meta a confronto, stessi lead della tabella canali. */
+    emailAds: { email: ColonnaCanale; ads: ColonnaCanale }
     /**
      * Confronto coi funnel del bot. fonte 'bot': chat nate dal 7/11 per funnel
      * (database del bot), più "BF tutti i lead" dal CRM con le risposte del bot.
@@ -385,7 +541,9 @@ function imbuto(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): 
         const m = l.confirmationsDiscardReason?.trim() || 'senza motivo'
         motiviScarto[m] = (motiviScarto[m] ?? 0) + 1
     }
-    const chiusi = app.filter(l => l.salespersonOutcome === 'Chiuso')
+    // Sui lead, non sugli appuntamenti: una vendita firmata su un'altra scheda della
+    // persona (attribuisciChiusureAltrove) arriva su una scheda BF senza appuntamento.
+    const chiusi = a.filter(l => l.salespersonOutcome === 'Chiuso')
     return {
         entrati: a.length,
         conChat, consegnato, risposto,
@@ -401,6 +559,25 @@ function imbuto(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): 
         euroChiusi: chiusi.reduce((s, l) => s + (l.closeAmountEur ?? 0), 0),
         nonChiusi: app.filter(l => l.salespersonOutcome === 'Non chiuso').length,
         futuri: app.filter(l => l.appointmentDate !== null && l.appointmentDate > adesso).length,
+    }
+}
+
+function colonnaCanale(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): ColonnaCanale {
+    // Stesse definizioni dell'imbuto: i numeri della colonna tornano con quelli del totale.
+    const x = imbuto(a, adesso, bot)
+    const su = (v: number) => pct(v, a.length)
+    const giaNelCrm = a.filter(l => l.giaNelCrm).length
+    return {
+        lead: x.entrati,
+        consegnato: x.consegnato, pctConsegnato: x.pctConsegnato,
+        risposto: x.risposto, pctRisposto: x.pctRisposto,
+        appuntamenti: x.appuntamenti, pctAppuntamenti: x.pctAppuntamenti,
+        confermati: x.confermati, pctConfermati: su(x.confermati),
+        presentati: x.presenti, pctPresentati: su(x.presenti),
+        chiusi: x.chiusi, pctChiusi: su(x.chiusi),
+        euro: x.euroChiusi,
+        futuri: x.futuri, pctFuturi: su(x.futuri),
+        giaNelCrm, pctGiaNelCrm: su(giaNelCrm),
     }
 }
 
@@ -451,7 +628,9 @@ function elencoNomi(conteggi: Map<string, number>): string {
 const piu = (n: number, una: string, tante: string) => (n === 1 ? `1 ${una}` : `${n} ${tante}`)
 
 export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
-    const { adesso, inizio, leads } = input
+    const { adesso, inizio } = input
+    // Vendite per persona: le chiusure su altre schede entrano qui, una volta sola.
+    const { leads } = attribuisciChiusureAltrove(input.leads, input.chiusureAltrove ?? [])
     const botIds = new Set(input.gdo.filter(g => g.bot).map(g => g.id))
     const gdoPerId = new Map(input.gdo.map(g => [g.id, g]))
     const umano = (userId: string | null) => userId !== null && !botIds.has(userId)
@@ -528,7 +707,7 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
     // ── Canali ──
     const perCanale = new Map<Canale, LeadBf[]>()
     for (const l of leads) {
-        const c = canaleDi(l.utmSource)
+        const c = canaleDi(l.utmSource, l.utmMedium)
         perCanale.set(c, [...(perCanale.get(c) ?? []), l])
     }
     const canali = (Object.keys(NOMI_CANALE) as Canale[]).filter(c => perCanale.has(c)).map(c => {
@@ -539,9 +718,14 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
             chiave: c, nome: NOMI_CANALE[c], lead: a.length,
             risposto, pctRisposto: risposto === null ? null : pct(risposto, a.length),
             appuntamenti: app.length, pctAppuntamenti: pct(app.length, a.length),
-            presenti: app.filter(l => l.presentedAt !== null).length, chiusi: app.filter(l => l.salespersonOutcome === 'Chiuso').length,
+            presenti: app.filter(l => l.presentedAt !== null).length, chiusi: a.filter(l => l.salespersonOutcome === 'Chiuso').length,
         }
     })
+
+    const emailAds = {
+        email: colonnaCanale(perCanale.get('email') ?? [], adesso, botPerLead),
+        ads: colonnaCanale(perCanale.get('meta') ?? [], adesso, botPerLead),
+    }
 
     // ── Confronto coi funnel del bot ──
     const DETTAGLIO = ['CORSO 10 ORE', 'JOB SIMULATOR', 'TELEGRAM']
@@ -718,6 +902,7 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
             daChiamare: ridatiDaChiamare.length,
         },
         canali,
+        emailAds,
         confronto,
         bot: gruppiBot,
         salesManager,

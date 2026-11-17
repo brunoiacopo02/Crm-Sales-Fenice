@@ -43,6 +43,8 @@ const FILE_ADMIN = [
     // Carico delle Conferme (PO 09/11/2026).
     'app/(dashboard)/admin/carico-conferme/page.tsx',
     'app/actions/caricoConfermeActions.ts',
+    // SIM GDO (PO 14/11/2026).
+    'app/(dashboard)/admin/sim-gdo/page.tsx',
 ]
 
 test('le action e le pagine admin della Diretta non leggono il ruolo dai metadati', () => {

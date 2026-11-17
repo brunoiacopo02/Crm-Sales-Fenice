@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/marketing-coda-bot",
       "schedule": "40 6-19 * * *"
+    },
+    {
+      "path": "/api/cron/sim-gdo",
+      "schedule": "5 7-19 * * 1-6"
     }
   ]
 }
