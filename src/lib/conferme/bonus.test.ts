@@ -90,10 +90,15 @@ test('progressoSquadra: importi con decimali e soglia zero', () => {
     assert.equal(progressoSquadra(-4, { soglia: 0, euroPerUnita: 12 }).euro, 0)
 })
 
-test('periodoBonusBounds: settimana di lunedì 26/10/2026, primo giorno di ora solare', () => {
+test('periodoBonusBounds: settimana lun-sab di lunedì 26/10/2026, primo giorno di ora solare', () => {
     const w = periodoBonusBounds(new Date('2026-10-26T15:00:00Z'), 'settimana')
     assert.equal(w.start.toISOString(), '2026-10-25T23:00:00.000Z')
-    assert.equal(w.end.toISOString(), '2026-11-01T23:00:00.000Z')
+    // Come i premi della settimana (titolare 14/11/2026): la domenica non conta, si chiude sabato a mezzanotte.
+    assert.equal(w.end.toISOString(), '2026-10-31T23:00:00.000Z')
+    // Di domenica resta la settimana appena chiusa.
+    const d = periodoBonusBounds(new Date('2026-11-01T10:00:00Z'), 'settimana')
+    assert.equal(d.start.toISOString(), '2026-10-25T23:00:00.000Z')
+    assert.equal(d.end.toISOString(), '2026-10-31T23:00:00.000Z')
 })
 
 test('periodoBonusBounds: mese di ottobre 2026 (cambio ora dentro il mese)', () => {

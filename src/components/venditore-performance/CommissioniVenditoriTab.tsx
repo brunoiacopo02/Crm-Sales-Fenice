@@ -9,6 +9,7 @@ import { Fragment, useEffect, useState } from "react"
 import { getCommissioniVenditori, type CommissioneVenditore } from "@/app/actions/obiettiviVenditoriActions"
 import { formatEur, formatDate, formatMonth } from "@/components/gestionale/format"
 import { ChevronDown, ChevronRight } from "lucide-react"
+import { BonusIncassiVenditoriTable } from "./BonusIncassiVenditoriTable"
 
 const euro = (eur: number) => formatEur(Math.round(eur * 100))
 
@@ -155,6 +156,8 @@ export function CommissioniVenditoriTab({ mesi, initialYearMonth }: { mesi: stri
                     </table>
                 </div>
             )}
+
+            <BonusIncassiVenditoriTable ym={ym} />
         </div>
     )
 }

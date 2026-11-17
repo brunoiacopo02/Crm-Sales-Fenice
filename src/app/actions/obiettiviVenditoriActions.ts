@@ -13,6 +13,7 @@ import { currentTenant, assertSalesArea, companyScope, type TenantContext } from
 import { validaObiettivi } from "@/lib/venditore/obiettivi"
 import { loadGuadagniMese, loadObiettiviMese, type GuadagnoVenditore, type ObiettiviVenditore } from "@/lib/venditore/obiettiviDb"
 import { incassiCommissioneMese, multeByUser, type IncassoView } from "@/lib/gestionale/queries"
+import { loadBonusIncassiMese, type BonusIncassiVenditore } from "@/lib/gestionale/bonusIncassiDb"
 import { revalidatePath } from "next/cache"
 
 const RUOLI = ["ADMIN", "MANAGER"] as const
@@ -61,6 +62,17 @@ export async function getCommissioniVenditori(ym: string): Promise<CommissioneVe
             .filter(i => i.salesUserId === r.salesUserId)
             .map(i => ({ id: i.id, data: i.data, cliente: i.cliente, importoCents: i.importoCents, voce: i.voce, contaCommissione: i.contaCommissione })),
     }))
+}
+
+/**
+ * Bonus sugli incassi dello stesso mese, per TUTTI i venditori (Performance
+ * venditori): contratti firmati nel mese, quanti pagati per intero entro il
+ * mese, scaglione. Solo lettura, non tocca le commissioni.
+ */
+export async function getBonusIncassiVenditori(ym: string): Promise<BonusIncassiVenditore[]> {
+    const { ctx } = await requireManager()
+    if (!YM.test(ym)) throw new Error("Mese non valido")
+    return loadBonusIncassiMese(ym, { companyFilter: companyScope(ctx, users.companyId) })
 }
 
 /**

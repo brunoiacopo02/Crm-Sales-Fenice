@@ -156,6 +156,7 @@ const FILE_UI = [
     'app/(dashboard)/admin/carico-conferme/page.tsx',
     'app/(dashboard)/admin/carico-conferme/AggiornaCarico.tsx',
     'components/diretta/SalvadanaioMese.tsx',
+    'components/conferme/diretta/SalvadanaioConferme.tsx',
     'app/(dashboard)/admin/citazioni/CitazioniAdminClient.tsx',
     'components/diretta/admin/ui.tsx',
     'components/diretta/MenuAdminGruppi.tsx',

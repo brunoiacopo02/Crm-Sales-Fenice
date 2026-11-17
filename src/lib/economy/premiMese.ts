@@ -13,10 +13,19 @@
 //
 // Se una settimana è registrata (weeklyPrizeRuns) valgono i numeri dello
 // snapshot; altrimenti si ricalcola. Funzioni pure: la lettura è in ./premiMeseDb.ts.
+//
+// Conferme (titolare 14/11/2026): anche Noemi, Andrea e Alberto vedono il loro
+// bonus di squadra (src/lib/conferme/bonus.ts) settimana per settimana. Gli
+// importi sono sempre per persona: nessun totale di squadra in euro, e i
+// totali del mese (totaleMese, totaleInMaturazione, totaleEuro delle
+// settimane) restano quelli dei soli GDO, identici a prima.
 
-import { DEFAULT_CONFERME_BONUS } from '@/lib/conferme/bonus'
+import { DEFAULT_CONFERME_BONUS, type ConfermeBonusConfig } from '@/lib/conferme/bonus'
 import type { GamificationTargets } from '@/lib/diretta/config'
-import { calcolaPremiSettimana, settimanaChiusa, settimanaLunSab, type PremiSettimana, type SettimanaLunSab } from './premiSettimana'
+import {
+    calcolaPremiSettimana, settimanaChiusa, settimanaLunSab, settimanaPrima,
+    type PremioConferme, type PremiSettimana, type SettimanaLunSab,
+} from './premiSettimana'
 import type { EconomyRules } from './rules'
 
 const GIORNO_MS = 86_400_000
@@ -41,6 +50,22 @@ export function settimaneDelMese(mese: string): SettimanaLunSab[] {
 /** Il mese che il GDO vede nel salvadanaio: quello della settimana in corso (o appena chiusa, di domenica). */
 export function meseDelSalvadanaio(now: Date): string {
     return meseDellaSettimana(settimanaLunSab(now))
+}
+
+/**
+ * Parte della chiave di cache (revisione 14/11/2026): cambia quando la
+ * settimana si chiude (domenica 00:00 di Roma) e quando ne parte una nuova
+ * (lunedì 00:00), così un calcolo fatto prima non può essere servito dopo.
+ */
+export function chiaveSettimana(now: Date): string {
+    const s = settimanaLunSab(now)
+    return settimanaChiusa(s, now) ? `${s.lunedi}-chiusa` : s.lunedi
+}
+
+/** L'ultima settimana chiusa: dal lunedì al sabato quella prima, di domenica quella appena finita. */
+export function settimanaScorsa(now: Date): SettimanaLunSab {
+    const s = settimanaLunSab(now)
+    return settimanaChiusa(s, now) ? s : settimanaPrima(s)
 }
 
 const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre']
@@ -71,11 +96,48 @@ export interface GdoDelMese {
 /** Una presenza (n = 1) o un aggiustamento manuale (n = count), nel momento in cui conta. */
 export interface PresenzaGrezza { userId: string; at: Date | string; n: number }
 
+/**
+ * Chi può prendere la quota del bonus di squadra nel ricalcolo del mese
+ * (revisione 14/11/2026). Le persone attive delle Conferme (come
+ * isConfermePersona); le disattivate solo se hanno un nome vero (firstName),
+ * così chi ha lavorato resta pagato ma un account condiviso o di servizio
+ * disattivato ("Team Conferme", senza firstName) no. Nel DB non c'è un segno
+ * affidabile dell'account condiviso: il nome vero è lo stesso criterio dei
+ * GDO "umani" (isTeamMember, leggiRosterGdo).
+ */
+export function prendeQuotaConferme(u: { role: string; isActive: boolean; isBot: boolean | null; firstName: string | null }): boolean {
+    if (u.role !== 'CONFERME' || u.isBot) return false
+    return u.isActive || !!u.firstName?.trim()
+}
+
+/** Una persona delle Conferme. `squadra` = account attivo oggi: compare anche senza bonus. */
+export type PersonaConferme = GdoDelMese
+
+/**
+ * Numeri grezzi delle Conferme sul periodo del mese (lead veri confermati da
+ * un account CONFERME, come ./settimanaDb.ts): si dividono per settimana qui.
+ */
+export interface ConfermeGrezze {
+    /** Tutte le persone delle Conferme, anche disattivate: chi ha lavorato una settimana passata resta. */
+    persone: PersonaConferme[]
+    /** salespersonOutcomeAt dei lead chiusi. */
+    chiusure: Array<Date | string>
+    /** presentedAt dei lead presentati. */
+    presenze: Array<Date | string>
+    /** Chi ha confermato e quando (confirmationsTimestamp): la quota va a chi ne ha almeno una nella settimana. */
+    confermate: Array<{ userId: string; at: Date | string }>
+    regola: ConfermeBonusConfig
+}
+
+export type Ruolo = 'GDO' | 'CONFERME'
+
 export interface InputPremiMese {
     mese: string
     now: Date
     gdo: GdoDelMese[]
     presenze: PresenzaGrezza[]
+    /** Assente = le Conferme non entrano (come prima del 14/11/2026). */
+    conferme?: ConfermeGrezze
     /** Snapshot registrati, per lunedì 'YYYY-MM-DD'. */
     registrate: Record<string, PremiSettimana>
     /** Prima di questo istante i premi nuovi non c'erano: quelle settimane non contano. */
@@ -96,14 +158,18 @@ export interface SettimanaDelMese {
     lunedi: string
     sabato: string
     registrata: boolean
-    /** Per userId; manca chi non ha presenze né premi. */
+    /** Per userId dei GDO; manca chi non ha presenze né premi. */
     voci: Record<string, VoceSettimana>
+    /** Totale dei soli GDO. */
     totaleEuro: number
+    /** Bonus di squadra delle Conferme (euro a testa); null se le Conferme non entrano o la regola non è a settimana. */
+    conferme: PremioConferme | null
 }
 
 export interface RigaMese {
     userId: string
     nome: string
+    ruolo: Ruolo
     euroMese: number
     euroInMaturazione: number
 }
@@ -116,7 +182,9 @@ export interface PremiMese {
     inCorso: SettimanaDelMese | null
     /** Settimane del mese ancora da iniziare (solo le date). */
     future: Array<{ lunedi: string; sabato: string }>
+    /** Prima i GDO, poi le Conferme (una riga per account: Noemi ne ha due). */
     righe: RigaMese[]
+    /** Totali dei soli GDO: per le Conferme gli importi sono solo per persona. */
     totaleMese: number
     totaleInMaturazione: number
 }
@@ -159,6 +227,35 @@ export function calcolaPremiMese(input: InputPremiMese): PremiMese {
         m.set(p.userId, (m.get(p.userId) ?? 0) + (p.n || 0))
     }
 
+    // Conferme: chiusure, presenze e chi ha confermato, per settimana. La domenica non conta.
+    const cg = input.conferme
+    const nomiConferme = new Map((cg?.persone ?? []).map(p => [p.userId, p.nome]))
+    const numeriConferme = new Map(settimane.map(s => [s.lunedi, { chiusure: 0, presenze: 0, chi: new Set<string>() }]))
+    const settimanaDi = (x: Date | string) => {
+        const at = x instanceof Date ? x : new Date(x)
+        const s = settimanaLunSab(at)
+        return at.getTime() < s.end.getTime() ? numeriConferme.get(s.lunedi) : undefined
+    }
+    for (const at of cg?.chiusure ?? []) { const n = settimanaDi(at); if (n) n.chiusure++ }
+    for (const at of cg?.presenze ?? []) { const n = settimanaDi(at); if (n) n.presenze++ }
+    for (const c of cg?.confermate ?? []) {
+        const n = settimanaDi(c.at)
+        if (n && nomiConferme.has(c.userId)) n.chi.add(c.userId)
+    }
+    const premioConferme = (lunedi: string, snapshot: PremiSettimana | undefined): PremioConferme | null => {
+        if (!cg) return null
+        if (snapshot) return snapshot.conferme
+        const n = numeriConferme.get(lunedi)
+        if (!n) return null
+        const persone = [...n.chi].map(userId => ({ userId, nome: nomiConferme.get(userId) ?? userId }))
+            .sort((a, b) => a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' }))
+        return calcolaPremiSettimana(
+            { lunedi, gdo: [], conferme: { chiusure: n.chiusure, presenze: n.presenze, persone } },
+            { economia: regole.economia, obiettivi: regole.obiettivi, conferme: cg.regola },
+        ).conferme
+    }
+
+    // I GDO si calcolano senza le Conferme, come prima del 14/11/2026: i loro numeri non cambiano.
     const conferme = { ...DEFAULT_CONFERME_BONUS, periodo: 'mese' as const }
     const calcola = (s: SettimanaLunSab): SettimanaDelMese => {
         const presenze = perSettimana.get(s.lunedi) ?? new Map<string, number>()
@@ -178,6 +275,7 @@ export function calcolaPremiMese(input: InputPremiMese): PremiMese {
             registrata: !!snapshot,
             voci,
             totaleEuro: arrotonda(Object.values(voci).reduce((t, v) => t + v.euro, 0)),
+            conferme: premioConferme(s.lunedi, snapshot),
         }
     }
 
@@ -188,13 +286,33 @@ export function calcolaPremiMese(input: InputPremiMese): PremiMese {
 
     const ids = new Set(gdo.filter(g => g.squadra).map(g => g.userId))
     for (const s of [...chiuse, ...(inCorso ? [inCorso] : [])]) for (const id of Object.keys(s.voci)) ids.add(id)
-    const righe = [...ids].map(userId => ({
+    const ordine = (a: RigaMese, b: RigaMese) => b.euroMese - a.euroMese || b.euroInMaturazione - a.euroInMaturazione
+        || a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' })
+    const righeGdo: RigaMese[] = [...ids].map(userId => ({
         userId,
         nome: nomi.get(userId) ?? userId,
+        ruolo: 'GDO' as const,
         euroMese: arrotonda(chiuse.reduce((t, s) => t + (s.voci[userId]?.euro ?? 0), 0)),
         euroInMaturazione: inCorso?.voci[userId]?.euro ?? 0,
-    })).sort((a, b) => b.euroMese - a.euroMese || b.euroInMaturazione - a.euroInMaturazione
-        || a.nome.localeCompare(b.nome, 'it', { sensitivity: 'base' }))
+    })).sort(ordine)
+
+    // Conferme: chi è in squadra oggi, più chi ha preso un bonus in una settimana del mese.
+    const idsConferme = new Set((cg?.persone ?? []).filter(p => p.squadra).map(p => p.userId))
+    for (const s of [...chiuse, ...(inCorso ? [inCorso] : [])]) {
+        for (const p of s.conferme?.persone ?? []) {
+            idsConferme.add(p.userId)
+            if (!nomiConferme.has(p.userId)) nomiConferme.set(p.userId, p.nome)
+        }
+    }
+    const euroConferme = (s: SettimanaDelMese | null, userId: string) => s?.conferme?.persone.find(p => p.userId === userId)?.euro ?? 0
+    const righeConferme: RigaMese[] = [...idsConferme].map(userId => ({
+        userId,
+        nome: nomiConferme.get(userId) ?? userId,
+        ruolo: 'CONFERME' as const,
+        euroMese: arrotonda(chiuse.reduce((t, s) => t + euroConferme(s, userId), 0)),
+        euroInMaturazione: euroConferme(inCorso, userId),
+    })).sort(ordine)
+    const righe = [...righeGdo, ...righeConferme]
 
     return {
         mese,
@@ -227,5 +345,86 @@ export function salvadanaioDi(m: PremiMese, userId: string): Salvadanaio {
         euroMese: arrotonda(m.chiuse.reduce((t, s) => t + (s.voci[userId]?.euro ?? 0), 0)),
         settimane: m.chiuse.map(una),
         inCorso: m.inCorso ? una(m.inCorso) : null,
+    }
+}
+
+// ── Il salvadanaio di una persona delle Conferme (titolare 14/11/2026) ──
+
+export interface SettimanaConferme {
+    lunedi: string
+    sabato: string
+    registrata: boolean
+    unita: 'presenze' | 'chiusure'
+    /** Chiusure (o presenze) di squadra; null se quella settimana il bonus non era a settimana. */
+    conteggio: number | null
+    soglia: number
+    oltre: number
+    /** Quanto vale la settimana a testa per chi ha confermato. */
+    euroATesta: number
+    /** Quanto ha preso questa persona (0 se non ha confermato nella settimana). */
+    euro: number
+}
+
+export interface SalvadanaioConferme {
+    mese: string
+    euroMese: number
+    settimane: SettimanaConferme[]
+    inCorso: SettimanaConferme | null
+}
+
+/** Quello che vede una persona delle Conferme nella sua colonna. */
+export interface VistaSalvadanaioConferme {
+    /** L'ultima settimana chiusa, anche se è del mese prima; null se è prima dei premi nuovi. */
+    scorsa: SettimanaConferme | null
+    mese: SalvadanaioConferme
+}
+
+/**
+ * La vista di una persona delle Conferme da uno o due calcoli del mese (`m`
+ * del mese in corso, `mScorsa` del mese della settimana scorsa se diverso).
+ * Robusta a un calcolo più vecchio di `now` (revisione 14/11/2026): se la
+ * settimana "in corso" del calcolo è già finita, conta come chiusa. Non tocca
+ * i calcoli ricevuti.
+ */
+export function vistaSalvadanaioConferme(m: PremiMese, mScorsa: PremiMese | null, userId: string, now: Date): VistaSalvadanaioConferme {
+    const finita = (s: SettimanaDelMese | null) => !!s && now.getTime() >= settimanaLunSab(new Date(`${s.lunedi}T12:00:00Z`)).end.getTime()
+    const chiuseDi = (x: PremiMese) => (finita(x.inCorso) ? [...x.chiuse, x.inCorso as SettimanaDelMese] : x.chiuse)
+
+    const scorsa = settimanaScorsa(now)
+    const s = chiuseDi(mScorsa ?? m).find(x => x.lunedi === scorsa.lunedi)
+    const settimane = chiuseDi(m).map(x => settimanaConfermeDi(x, userId))
+    return {
+        scorsa: s ? settimanaConfermeDi(s, userId) : null,
+        mese: {
+            mese: m.mese,
+            euroMese: arrotonda(settimane.reduce((t, x) => t + x.euro, 0)),
+            settimane,
+            inCorso: m.inCorso && !finita(m.inCorso) ? settimanaConfermeDi(m.inCorso, userId) : null,
+        },
+    }
+}
+
+export function settimanaConfermeDi(s: SettimanaDelMese, userId: string): SettimanaConferme {
+    const c = s.conferme
+    return {
+        lunedi: s.lunedi,
+        sabato: s.sabato,
+        registrata: s.registrata,
+        unita: c?.unita ?? 'chiusure',
+        conteggio: c ? c.conteggio : null,
+        soglia: c?.soglia ?? 0,
+        oltre: c?.oltre ?? 0,
+        euroATesta: c?.euroATesta ?? 0,
+        euro: c?.persone.find(p => p.userId === userId)?.euro ?? 0,
+    }
+}
+
+export function salvadanaioConfermeDi(m: PremiMese, userId: string): SalvadanaioConferme {
+    const settimane = m.chiuse.map(s => settimanaConfermeDi(s, userId))
+    return {
+        mese: m.mese,
+        euroMese: arrotonda(settimane.reduce((t, s) => t + s.euro, 0)),
+        settimane,
+        inCorso: m.inCorso ? settimanaConfermeDi(m.inCorso, userId) : null,
     }
 }

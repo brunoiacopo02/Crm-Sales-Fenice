@@ -73,9 +73,9 @@ export default async function BonusPage() {
                 <BonusCard
                     icon={<Briefcase className="h-5 w-5" />}
                     titolo="Venditori"
-                    valore="+0,5% / +1%"
+                    valore="+0,5% / +1% / +1,5%"
                     sotto="sull'incasso, uguale ogni mese"
-                    testo="Se almeno l'85% di chi firma nel mese paga entro lo stesso mese, +0,5% di provvigione su quei contratti. Se almeno il 90%, +1%."
+                    testo="Conta l'importo, non il numero dei contratti: se almeno l'80% dell'importo firmato nel mese viene incassato entro lo stesso mese (acconti compresi), +0,5% di provvigione su quei contratti. Se almeno l'85%, +1%. Se almeno il 90%, +1,5%."
                 />
             </div>
         </div>
