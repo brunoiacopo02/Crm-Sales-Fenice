@@ -390,6 +390,29 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
         }
     }
 
+    // Lead Sparito che ha riconfermato (titolare 18/11/2026): si toglie l'esito,
+    // poi data e conferma si rifanno dal drawer come sempre.
+    const isSparito = lead?.salespersonOutcome === 'Sparito' || lead?.salespersonOutcome === 'Lead non presenziato'
+    const [savingUndoSparito, setSavingUndoSparito] = useState(false)
+    const handleUndoSparito = async () => {
+        if (!confirm(`${lead.name} ha riconfermato? L'esito Sparito viene tolto. Poi metti la nuova data nei Dati e conferma di nuovo: così partono il Meet e l'avviso al venditore.`)) return
+        setSavingUndoSparito(true)
+        try {
+            const { undoSparitoConferme } = await import('@/app/actions/confermeActions')
+            const result = await undoSparitoConferme(lead.id, localVersion)
+            if (!result.success) {
+                alert(`Errore: ${result.error}`)
+                return
+            }
+            onRefresh()
+            onClose()
+        } catch (error) {
+            alert(`Errore: ${error}`)
+        } finally {
+            setSavingUndoSparito(false)
+        }
+    }
+
     const handleSaveOutcome = async (forceReason?: string) => {
         if (outcome === "confermato") {
             if (!salesperson) return alert("Seleziona venditore assegnato");
@@ -800,6 +823,7 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                         {lead.salespersonOutcome === 'Chiuso' ? 'Chiuso'
                                                             : lead.salespersonOutcome === 'Non chiuso' ? 'Presenziato, non chiuso'
                                                             : lead.salespersonOutcome === 'Lead non presenziato' ? 'Lead non presenziato'
+                                                            : lead.salespersonOutcome === 'Sparito' ? 'Sparito'
                                                             : lead.confirmationsOutcome === 'confermato' ? 'In attesa' : 'Nessuno'}
                                                     </dd>
                                                     {lead.salespersonOutcome === 'Chiuso' && lead.closeAmountEur != null && (
@@ -1125,6 +1149,16 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                 {lead.salespersonAssigned ? <>Esito dell&apos;appuntamento con {lead.salespersonAssigned}</> : <>Esito dell&apos;appuntamento, lead di prova</>}
                                             </h3>
 
+                                            {isSparito && (
+                                                <div className="mt-4 rounded-2xl bg-[var(--d-surface)] p-4">
+                                                    <div className="text-sm font-semibold">Esito registrato: Sparito</div>
+                                                    <div className="mt-1 text-[13px] text-[var(--d-muted)]">Se ha riconfermato togli l&apos;esito, poi metti la nuova data e conferma di nuovo.</div>
+                                                    <button onClick={handleUndoSparito} disabled={savingUndoSparito} type="button" className={`${dUi.btn} mt-3`}>
+                                                        {savingUndoSparito ? "Attendi..." : "Ha riconfermato: togli Sparito"}
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             <div className="mt-4 space-y-4">
                                                 <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} aria-label="Esito finale" className={dUi.input}>
                                                     <option value="">Scegli l&apos;esito finale</option>
@@ -1406,8 +1440,8 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                                 {lead.salespersonOutcome === 'Non chiuso' && (
                                                     <span className="px-2 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">Presenziato (non chiuso)</span>
                                                 )}
-                                                {lead.salespersonOutcome === 'Lead non presenziato' && (
-                                                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">Lead non presenziato</span>
+                                                {isSparito && (
+                                                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">{lead.salespersonOutcome === 'Sparito' ? 'Sparito' : 'Lead non presenziato'}</span>
                                                 )}
                                                 {!lead.salespersonOutcome && lead.confirmationsOutcome === 'confermato' && (
                                                     <span className="px-2 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">In attesa</span>
@@ -1767,6 +1801,21 @@ export function ConfermeDrawer({ isOpen, onClose, item, currentUser, onRefresh, 
                                             <User className="w-4 h-4 text-ash-500" />
                                             Esito Post Appuntamento ({lead.salespersonAssigned || 'lead di prova'})
                                         </h3>
+
+                                        {isSparito && (
+                                            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4">
+                                                <div className="text-sm font-bold text-rose-800">Esito registrato: Sparito</div>
+                                                <div className="mt-1 text-xs text-rose-700">Se ha riconfermato togli l&apos;esito, poi metti la nuova data e conferma di nuovo.</div>
+                                                <button
+                                                    onClick={handleUndoSparito}
+                                                    disabled={savingUndoSparito}
+                                                    type="button"
+                                                    className="mt-3 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800 transition-colors hover:bg-rose-100 disabled:opacity-50"
+                                                >
+                                                    {savingUndoSparito ? "Attendi..." : "Ha riconfermato: togli Sparito"}
+                                                </button>
+                                            </div>
+                                        )}
 
                                         <div className="space-y-4">
                                             <select value={spOutcome} onChange={e => setSpOutcome(e.target.value)} className="w-full px-4 py-3 border-2 border-ash-300 rounded-xl font-bold text-ash-700 outline-none focus:border-ash-500 bg-white shadow-sm transition-colors">

@@ -2123,6 +2123,100 @@ export async function undoConfermeScarto(leadId: string, currentVersion: number)
     }
 }
 
+/**
+ * Toglie l'esito "Sparito" (o "Lead non presenziato") a un lead che ha
+ * riconfermato l'appuntamento (titolare 18/11/2026, caso Alessia 3ffbfa71).
+ *
+ * Prima non c'era strada: riconfermare allo stesso venditore non azzera
+ * l'esito (lo fa solo il riassegno a un venditore diverso), quindi il lead
+ * restava "Sparito", fuori dagli appuntamenti del venditore, e le Conferme
+ * finivano per ri-registrare lo stesso esito creando tentativi doppioni.
+ *
+ * Tocca SOLO l'esito sul lead: il tentativo in salesAttempts resta, perché
+ * quella volta il lead non si è presentato davvero. Il check-in si azzera se
+ * il lead non ha mai presenziato, così "Inizia trattativa" torna disponibile
+ * sul nuovo appuntamento. Data e conferma si rifanno poi dal drawer come
+ * sempre (ed è la conferma a far partire il Meet).
+ */
+export async function undoSparitoConferme(leadId: string, currentVersion: number): Promise<{ success: boolean; error?: string }> {
+    try {
+        const supabase = await createClient();
+        const { data: { user: supabaseUser } } = await supabase.auth.getUser();
+        const role = supabaseUser?.user_metadata?.role;
+        if (!supabaseUser || (role !== "CONFERME" && role !== "MANAGER" && role !== "ADMIN")) {
+            return { success: false, error: "Unauthorized" };
+        }
+
+        const ctx = await currentTenant()
+        assertSalesArea(ctx)
+
+        const oldLead = (await db.select().from(leads).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+        )))[0];
+        if (!oldLead) return { success: false, error: "Lead not found" };
+        const rifiuto = await rifiutoMondoDiverso(oldLead, supabaseUser.id);
+        if (rifiuto) return { success: false, error: rifiuto };
+        if (oldLead.version !== currentVersion) {
+            return { success: false, error: "CONCURRENCY_ERROR" };
+        }
+        if (oldLead.salespersonOutcome !== "Sparito" && oldLead.salespersonOutcome !== "Lead non presenziato") {
+            return { success: false, error: "Si può togliere solo l'esito Sparito o Lead non presenziato." };
+        }
+
+        const resetCheckIn = !oldLead.presentedAt
+
+        const updated = await db.update(leads).set({
+            salespersonOutcome: null,
+            salespersonOutcomeNotes: null,
+            salespersonOutcomeAt: null,
+            followUp1Date: null,
+            followUp2Date: null,
+            inLavorazioneAt: null,
+            ...(resetCheckIn ? { negotiationStartedAt: null } : {}),
+            version: oldLead.version + 1,
+            updatedAt: new Date(),
+        }).where(and(
+            eq(leads.companyId, ctx.companyId),
+            eq(leads.id, leadId),
+            eq(leads.version, oldLead.version),
+        ))
+            .returning({ id: leads.id });
+
+        if (updated.length === 0) {
+            return { success: false, error: "CONCURRENCY_ERROR" };
+        }
+
+        await db.insert(leadEvents).values({
+            id: crypto.randomUUID(),
+            leadId,
+            eventType: "salesperson_outcome_cleared",
+            userId: supabaseUser.id,
+            timestamp: new Date(),
+            metadata: {
+                source: "conferme_riconferma",
+                clearedOutcome: oldLead.salespersonOutcome,
+                clearedOutcomeAt: oldLead.salespersonOutcomeAt,
+                clearedNotes: oldLead.salespersonOutcomeNotes,
+                deletedAttemptId: null,
+                resetCheckIn,
+                clearedNegotiationStartedAt: resetCheckIn ? oldLead.negotiationStartedAt : null,
+            },
+            companyId: ctx.companyId,
+        });
+
+        await releaseFollowUpBlock(db, { leadId })
+
+        await syncLeadPiume(leadId, supabaseUser.id)
+            .catch((e: unknown) => console.error("Economia Piume (Sparito tolto dalle Conferme) err:", e))
+
+        return { success: true };
+    } catch (e: any) {
+        console.error("undoSparitoConferme error:", e);
+        return { success: false, error: e?.message || String(e) };
+    }
+}
+
 // =====================================================================
 // WEBINAR SELF-BOOKED — RIMOSSO 2026-05-12
 // La sezione, il modal e le server action di assegnazione webinar→venditore
