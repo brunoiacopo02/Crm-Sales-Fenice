@@ -419,6 +419,138 @@ test('quota Conferme: persone attive, disattivate solo con un nome vero, mai bot
     assert.equal(p({ role: 'GDO' }), false)
 })
 
+// ── Rettifiche manuali del salvadanaio (titolare 19/11/2026) ───────────
+
+const EXTRA = (userId: string, lunedi = '2026-11-02', euro = 7.5) => ({ userId, lunedi, euro, motivo: 'Premio extra' })
+const MALUS = (userId: string, lunedi = '2026-11-02', euro = -12) => ({ userId, lunedi, euro, motivo: 'Malus presenze' })
+
+test('rettifiche: senza rettifiche il mese è identico a prima, campo assente o vuoto', () => {
+    const prima = calcolaPremiMese(base())
+    assert.deepEqual(calcolaPremiMese(base({ rettifiche: [] })), prima)
+    assert.deepEqual(calcolaPremiMese(base({ rettifiche: undefined })), prima)
+    // Nessuna voce porta i campi delle rettifiche.
+    assert.equal(Object.values(prima.chiuse[0].voci).some(v => 'rettifiche' in v || 'euroRettifiche' in v), false)
+    assert.deepEqual(salvadanaioDi(calcolaPremiMese(base({ rettifiche: [] })), '106'), salvadanaioDi(prima, '106'))
+})
+
+test('rettifiche: premio extra su settimana ricalcolata, si somma sopra e tocca solo quella persona', () => {
+    const prima = calcolaPremiMese(base())
+    const m = calcolaPremiMese(base({ rettifiche: [EXTRA('106')] }))
+    assert.equal(m.chiuse[0].registrata, false)
+    assert.deepEqual(m.chiuse[0].voci['106'], {
+        presenze: 5, euroPresenze: 12, posizione: 3, euroClassifica: 5, euro: 24.5,
+        rettifiche: [{ euro: 7.5, motivo: 'Premio extra' }], euroRettifiche: 7.5,
+    })
+    // Gli altri non cambiano di un centesimo, la regola dei premi è la stessa.
+    for (const id of ['105', '116', '110']) assert.deepEqual(m.chiuse[0].voci[id], prima.chiuse[0].voci[id])
+    assert.equal(m.chiuse[0].totaleEuro, 181 + 7.5)
+    assert.equal(m.totaleMese, 181 + 7.5)
+    assert.equal(m.righe.find(r => r.userId === '106')?.euroMese, 24.5)
+    const s = salvadanaioDi(m, '106')
+    assert.equal(s.euroMese, 24.5)
+    assert.deepEqual(s.settimane[0].rettifiche, [{ euro: 7.5, motivo: 'Premio extra' }])
+    assert.equal(s.settimane[0].euro, 24.5)
+})
+
+test('rettifiche: su settimana registrata si sommano allo snapshot, e registrarla di nuovo non le cancella né le raddoppia', () => {
+    const snap: PremiSettimana = {
+        lunedi: '2026-11-02',
+        classifica: [{ userId: '116', nome: 'Sara', posizione: 1, presenze: 9, fissati: 0, euro: 50 }],
+        presenzeGdo: [{ userId: '116', nome: 'Sara', presenze: 9, pagate: 5, euro: 60 }],
+        conferme: null,
+        totaleEuro: 110,
+    }
+    const m = calcolaPremiMese(base({ registrate: { '2026-11-02': snap }, rettifiche: [EXTRA('116')] }))
+    assert.equal(m.chiuse[0].registrata, true)
+    assert.deepEqual(m.chiuse[0].voci['116'], {
+        presenze: 9, euroPresenze: 60, posizione: 1, euroClassifica: 50, euro: 117.5,
+        rettifiche: [{ euro: 7.5, motivo: 'Premio extra' }], euroRettifiche: 7.5,
+    })
+    assert.equal(m.totaleMese, 117.5)
+    // Lo snapshot non si tocca.
+    assert.equal(snap.totaleEuro, 110)
+    assert.equal(snap.classifica[0].euro, 50)
+    // Nuova registrazione con numeri diversi: la rettifica resta una, sopra ai numeri nuovi.
+    const snap2: PremiSettimana = { ...snap, presenzeGdo: [{ userId: '116', nome: 'Sara', presenze: 8, pagate: 4, euro: 48 }], totaleEuro: 98 }
+    const m2 = calcolaPremiMese(base({ registrate: { '2026-11-02': snap2 }, rettifiche: [EXTRA('116')] }))
+    assert.equal(m2.chiuse[0].voci['116'].euro, 48 + 50 + 7.5)
+    assert.deepEqual(m2.chiuse[0].voci['116'].rettifiche, [{ euro: 7.5, motivo: 'Premio extra' }])
+    // Stessa rettifica, settimana non registrata: si somma al ricalcolo (49 di Sara).
+    assert.equal(calcolaPremiMese(base({ rettifiche: [EXTRA('116')] })).chiuse[0].voci['116'].euro, 49 + 7.5)
+})
+
+test('rettifiche: il malus abbassa il totale e può portarlo sotto zero, senza fermarlo', () => {
+    const m = calcolaPremiMese(base({ rettifiche: [MALUS('106'), MALUS('112')] }))
+    // 106: 17 di premi, meno 12.
+    assert.equal(m.chiuse[0].voci['106'].euro, 5)
+    assert.equal(m.chiuse[0].voci['106'].euroRettifiche, -12)
+    // 112 non ha presenze né premi: compare con la sola rettifica e va in negativo.
+    assert.deepEqual(m.chiuse[0].voci['112'], {
+        presenze: 0, euroPresenze: 0, posizione: null, euroClassifica: 0, euro: -12,
+        rettifiche: [{ euro: -12, motivo: 'Malus presenze' }], euroRettifiche: -12,
+    })
+    assert.equal(m.righe.find(r => r.userId === '112')?.euroMese, -12)
+    assert.equal(salvadanaioDi(m, '112').euroMese, -12)
+    assert.equal(m.totaleMese, 181 - 24)
+    // In fondo alla classifica del mese, dopo chi è a zero o sopra.
+    assert.equal(m.righe[m.righe.length - 1].userId, '112')
+})
+
+test('rettifiche: due nella stessa settimana per la stessa persona, due righe e la somma', () => {
+    const m = calcolaPremiMese(base({ rettifiche: [EXTRA('110'), MALUS('110'), EXTRA('105', '2026-11-02', 20)] }))
+    const v = m.chiuse[0].voci['110']
+    assert.deepEqual(v.rettifiche, [{ euro: 7.5, motivo: 'Premio extra' }, { euro: -12, motivo: 'Malus presenze' }])
+    assert.equal(v.euroRettifiche, -4.5)
+    assert.equal(v.euro, 17 - 4.5)
+    assert.equal(m.chiuse[0].voci['105'].euro, 98 + 20)
+    assert.equal(m.totaleMese, 181 - 4.5 + 20)
+    assert.equal(salvadanaioDi(m, '110').settimane[0].rettifiche?.length, 2)
+})
+
+test('rettifiche: nella settimana in corso restano in maturazione, fuori dal totale del mese', () => {
+    const m = calcolaPremiMese(base({ now: NOW_14_11, rettifiche: [EXTRA('106', '2026-11-09'), MALUS('110', '2026-11-09')] }))
+    assert.equal(m.inCorso?.lunedi, '2026-11-09')
+    assert.deepEqual(m.inCorso?.voci['106'], {
+        presenze: 0, euroPresenze: 0, posizione: null, euroClassifica: 0, euro: 7.5,
+        rettifiche: [{ euro: 7.5, motivo: 'Premio extra' }], euroRettifiche: 7.5,
+    })
+    assert.equal(m.totaleInMaturazione, -4.5)
+    // La settimana chiusa 2-7/11 e il totale del mese sono quelli di prima.
+    assert.equal(m.totaleMese, 181)
+    assert.equal('rettifiche' in m.chiuse[0].voci['106'], false)
+    const r = m.righe.find(x => x.userId === '106')
+    assert.equal(r?.euroMese, 17)
+    assert.equal(r?.euroInMaturazione, 7.5)
+    const s = salvadanaioDi(m, '110')
+    assert.equal(s.euroMese, 17)
+    assert.equal(s.inCorso?.euroRettifiche, -12)
+    // Domenica 15/11 la settimana è chiusa: la stessa rettifica entra nel mese.
+    const dom = calcolaPremiMese(base({ now: new Date('2026-11-15T10:00:00Z'), rettifiche: [EXTRA('106', '2026-11-09')] }))
+    assert.equal(dom.inCorso, null)
+    assert.equal(dom.righe.find(x => x.userId === '106')?.euroMese, 17 + 7.5)
+})
+
+test('rettifiche: contano nel mese del sabato; settimana futura, sconosciuti e importi nulli non contano', () => {
+    const now = new Date('2026-12-07T10:00:00Z')
+    const r = [EXTRA('105', '2026-11-30')]
+    // 30/11-5/12 chiude a dicembre: non a novembre.
+    assert.equal(calcolaPremiMese(base({ now, presenze: [], rettifiche: r })).totaleMese, 0)
+    const dic = calcolaPremiMese(base({ mese: '2026-12', now, presenze: [], rettifiche: r }))
+    assert.equal(dic.chiuse[0].lunedi, '2026-11-30')
+    assert.equal(dic.totaleMese, 7.5)
+    // Settimana 16-21/11 non ancora iniziata il 9/11: non si vede e non conta.
+    const fut = calcolaPremiMese(base({ rettifiche: [EXTRA('105', '2026-11-16')] }))
+    assert.deepEqual(fut, calcolaPremiMese(base()))
+    // Chi non è fra i GDO letti (una persona delle Conferme, un id sbagliato) e gli importi a zero o non numeri.
+    const strani = calcolaPremiMese(base({
+        conferme: conferme(),
+        rettifiche: [EXTRA(ALBERTO), EXTRA('nessuno'), EXTRA('105', '2026-11-02', 0), EXTRA('105', '2026-11-02', Number.NaN)],
+    }))
+    assert.deepEqual(strani.chiuse[0].voci, calcolaPremiMese(base()).chiuse[0].voci)
+    assert.equal(strani.totaleMese, 181)
+    assert.equal(strani.righe.find(x => x.userId === ALBERTO)?.euroMese, 0)
+})
+
 test('testi: nome del mese e date della settimana', () => {
     assert.equal(nomeMese('2026-11'), 'novembre')
     assert.equal(nomeMese('2027-01'), 'gennaio')

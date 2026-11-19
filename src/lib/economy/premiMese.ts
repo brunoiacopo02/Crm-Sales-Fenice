@@ -19,6 +19,19 @@
 // importi sono sempre per persona: nessun totale di squadra in euro, e i
 // totali del mese (totaleMese, totaleInMaturazione, totaleEuro delle
 // settimane) restano quelli dei soli GDO, identici a prima.
+//
+// Rettifiche manuali (titolare 19/11/2026, tabella salvadanaioRettifiche): un
+// premio extra o un malus in euro una tantum per un GDO, attribuito a una
+// settimana. Sono eccezioni, non regole: si sommano SOPRA al risultato della
+// settimana, sia registrata (snapshot) sia ricalcolata, e non entrano nello
+// snapshot, quindi registrare di nuovo la settimana non le cancella e non le
+// raddoppia. Seguono la settimana in tutto: contano nel mese del suo sabato,
+// entrano nel totale quando la settimana è chiusa e restano "in maturazione"
+// finché è in corso. Non si vedono (e non contano) se la settimana deve ancora
+// iniziare, se è prima dei premi nuovi, o se la persona non è fra i GDO letti.
+// Sotto zero: un malus può portare in negativo la settimana e anche il mese.
+// Il numero si mostra com'è, senza fermarlo a zero: così la somma delle righe
+// che il GDO vede torna sempre col totale, e nessuna rettifica sparisce.
 
 import { DEFAULT_CONFERME_BONUS, type ConfermeBonusConfig } from '@/lib/conferme/bonus'
 import type { GamificationTargets } from '@/lib/diretta/config'
@@ -143,7 +156,15 @@ export interface InputPremiMese {
     /** Prima di questo istante i premi nuovi non c'erano: quelle settimane non contano. */
     inizioEconomia: Date
     regole: { economia: EconomyRules; obiettivi: Pick<GamificationTargets, 'presenzeSogliaEuro' | 'euroPerPresenza'> }
+    /** Rettifiche manuali dei GDO (premi extra e malus). Assente = nessuna. */
+    rettifiche?: RettificaGrezza[]
 }
+
+/** Una rettifica manuale come sta nel DB: di chi, di quale settimana (lunedì 'YYYY-MM-DD'), quanto (con segno) e perché. */
+export interface RettificaGrezza { userId: string; lunedi: string; euro: number; motivo: string }
+
+/** Una rettifica nella voce della settimana: quello che legge il GDO. */
+export interface RettificaVoce { euro: number; motivo: string }
 
 export interface VoceSettimana {
     presenze: number
@@ -151,7 +172,12 @@ export interface VoceSettimana {
     /** Posizione in classifica se premiata (pari merito: stessa posizione), altrimenti null. */
     posizione: number | null
     euroClassifica: number
+    /** Presenze + classifica + rettifiche. Con un malus può essere negativo. */
     euro: number
+    /** Rettifiche manuali della settimana, nell'ordine in cui sono state scritte. Assente se non ce ne sono. */
+    rettifiche?: RettificaVoce[]
+    /** Somma delle rettifiche (con segno). Assente se non ce ne sono. */
+    euroRettifiche?: number
 }
 
 export interface SettimanaDelMese {
@@ -160,7 +186,7 @@ export interface SettimanaDelMese {
     registrata: boolean
     /** Per userId dei GDO; manca chi non ha presenze né premi. */
     voci: Record<string, VoceSettimana>
-    /** Totale dei soli GDO. */
+    /** Totale dei soli GDO, rettifiche comprese. */
     totaleEuro: number
     /** Bonus di squadra delle Conferme (euro a testa); null se le Conferme non entrano o la regola non è a settimana. */
     conferme: PremioConferme | null
@@ -227,6 +253,15 @@ export function calcolaPremiMese(input: InputPremiMese): PremiMese {
         m.set(p.userId, (m.get(p.userId) ?? 0) + (p.n || 0))
     }
 
+    // Rettifiche manuali per settimana: solo dei GDO letti, con un importo vero.
+    const rettifichePer = new Map<string, RettificaGrezza[]>()
+    for (const r of input.rettifiche ?? []) {
+        if (!nomi.has(r.userId) || !Number.isFinite(r.euro) || arrotonda(r.euro) === 0) continue
+        const lista = rettifichePer.get(r.lunedi) ?? []
+        lista.push(r)
+        rettifichePer.set(r.lunedi, lista)
+    }
+
     // Conferme: chiusure, presenze e chi ha confermato, per settimana. La domenica non conta.
     const cg = input.conferme
     const nomiConferme = new Map((cg?.persone ?? []).map(p => [p.userId, p.nome]))
@@ -267,6 +302,14 @@ export function calcolaPremiMese(input: InputPremiMese): PremiMese {
             conferme: { chiusure: 0, presenze: 0, persone: [] },
         }, { economia: regole.economia, obiettivi: regole.obiettivi, conferme })
         const voci = vociDaPremi(premi, presenze)
+        // Rettifiche: sopra allo snapshot o al ricalcolo, mai dentro. Chi ha solo la rettifica compare lo stesso.
+        for (const r of rettifichePer.get(s.lunedi) ?? []) {
+            const v = (voci[r.userId] ??= { ...VOCE_VUOTA, presenze: presenze.get(r.userId) ?? 0 })
+            const euro = arrotonda(r.euro)
+            v.rettifiche = [...(v.rettifiche ?? []), { euro, motivo: r.motivo }]
+            v.euroRettifiche = arrotonda((v.euroRettifiche ?? 0) + euro)
+            v.euro = arrotonda(v.euro + euro)
+        }
         // Chi è nello snapshot ma non più fra i GDO letti: il nome dallo snapshot.
         for (const r of [...premi.classifica, ...premi.presenzeGdo]) if (!nomi.has(r.userId)) nomi.set(r.userId, r.nome)
         return {

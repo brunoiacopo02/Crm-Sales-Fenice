@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-    numeroIt, numeroItFino, numeroConSegno, euroIt, partiRoma, oraRoma, giornoMeseRoma, dataOraRoma,
+    numeroIt, numeroItFino, numeroConSegno, euroIt, euroConSegno, partiRoma, oraRoma, giornoMeseRoma, dataOraRoma,
     dataBreveRoma, dataOraBreveRoma, giornoMeseLungo, meseLungo,
 } from './formato'
 
@@ -39,6 +39,11 @@ test('numeri col segno ed euro', () => {
     assert.equal(euroIt(1234), '1.234 €')
     assert.equal(euroIt(12.5), '12,50 €')
     assert.equal(euroIt(0), '0 €')
+    // Rettifiche del salvadanaio: sempre segno e centesimi, il meno è quello tipografico.
+    assert.equal(euroConSegno(7.5), '+7,50 €')
+    assert.equal(euroConSegno(-12), '−12,00 €')
+    assert.equal(euroConSegno(1250), '+1.250,00 €')
+    assert.equal(euroConSegno(Number.NaN), '+0,00 €')
 })
 
 test('date in ora di Roma: ora solare e legale', () => {

@@ -3,7 +3,7 @@
 //
 // Carico: poche query per tutto il mese e per tutti insieme (roster,
 // presenze dei lead, aggiustamenti manuali, settimane registrate, numeri
-// delle Conferme), niente query per persona. Il risultato è lo stesso per
+// delle Conferme, rettifiche manuali in euro), niente query per persona. Il risultato è lo stesso per
 // tutti (la classifica serve intera anche per il salvadanaio di uno solo): in
 // cache 2 minuti per azienda e mese, lo usano la pagina admin, la home di ogni
 // GDO e la colonna delle Conferme. Niente polling: si legge al caricamento.
@@ -21,9 +21,9 @@
 // del sabato e al lunedì un calcolo vecchio non può essere servito.
 
 import { unstable_cache } from 'next/cache'
-import { and, eq, gte, inArray, isNotNull, lt } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNotNull, lt } from 'drizzle-orm'
 import { db } from '@/db'
-import { appSettings, leads, manualAdjustments, users, weeklyPrizeRuns } from '@/db/schema'
+import { appSettings, leads, manualAdjustments, salvadanaioRettifiche, users, weeklyPrizeRuns } from '@/db/schema'
 import { CONFERME_BONUS_KEY, parseConfermeBonus } from '@/lib/conferme/bonus'
 import { isTeamMember, personName } from '@/lib/diretta/config'
 import { readGamificationTargets } from '@/lib/diretta/settings'
@@ -35,7 +35,7 @@ import { inizioEconomia, isConfermePersona } from './rules'
 import {
     calcolaPremiMese, chiaveSettimana, meseDelSalvadanaio, meseDellaSettimana, prendeQuotaConferme, settimanaScorsa, settimaneDelMese,
     vistaSalvadanaioConferme,
-    type ConfermeGrezze, type PremiMese, type PresenzaGrezza, type VistaSalvadanaioConferme,
+    type ConfermeGrezze, type PremiMese, type PresenzaGrezza, type RettificaGrezza, type VistaSalvadanaioConferme,
 } from './premiMese'
 import { parsePremiSettimana, type PremiSettimana } from './premiSettimana'
 import { confermatiDalleConferme, leggiRosterGdo, nomeConferme } from './settimanaDb'
@@ -99,7 +99,7 @@ async function calcola(companyId: string, mese: string, _settimana?: string): Pr
 
     const start = settimane[0].start
     const end = settimane[settimane.length - 1].end
-    const [presentati, aggiustamenti, registrate, conferme] = await Promise.all([
+    const [presentati, aggiustamenti, registrate, conferme, rettificheDb] = await Promise.all([
         ids.length === 0 ? [] : db.select({ userId: leads.assignedToId, at: leads.presentedAt }).from(leads).where(and(
             eq(leads.companyId, companyId),
             inArray(leads.assignedToId, ids),
@@ -123,6 +123,7 @@ async function calcola(companyId: string, mese: string, _settimana?: string): Pr
             inArray(weeklyPrizeRuns.weekStart, settimane.map(s => s.lunedi)),
         )),
         leggiConfermeGrezze(companyId, start, end),
+        leggiRettifiche(companyId, settimane.map(s => s.lunedi), ids),
     ])
 
     const presenze: PresenzaGrezza[] = [
@@ -134,7 +135,36 @@ async function calcola(companyId: string, mese: string, _settimana?: string): Pr
         const p = parsePremiSettimana(r.snapshot)
         if (p) snapshot[r.weekStart] = p
     }
-    return calcolaPremiMese({ ...base, presenze, registrate: snapshot, conferme })
+    return calcolaPremiMese({ ...base, presenze, registrate: snapshot, conferme, rettifiche: rettificheDb })
+}
+
+/**
+ * Rettifiche manuali dei GDO (titolare 19/11/2026) delle settimane date, nell'ordine in cui
+ * sono state scritte. Se la tabella non c'è ancora (codice pubblicato prima della migrazione
+ * 0063) il salvadanaio resta quello di prima; ogni altro errore si propaga, così un malus o
+ * un premio non spariscono in silenzio.
+ */
+async function leggiRettifiche(companyId: string, lunedi: string[], ids: string[]): Promise<RettificaGrezza[]> {
+    if (ids.length === 0 || lunedi.length === 0) return []
+    try {
+        const righe = await db.select({
+            userId: salvadanaioRettifiche.userId, lunedi: salvadanaioRettifiche.weekStart,
+            euro: salvadanaioRettifiche.euro, motivo: salvadanaioRettifiche.motivo,
+        }).from(salvadanaioRettifiche).where(and(
+            eq(salvadanaioRettifiche.companyId, companyId),
+            inArray(salvadanaioRettifiche.weekStart, lunedi),
+            inArray(salvadanaioRettifiche.userId, ids),
+        )).orderBy(asc(salvadanaioRettifiche.createdAt), asc(salvadanaioRettifiche.id))
+        return righe.map(r => ({ userId: r.userId, lunedi: r.lunedi, euro: Number(r.euro), motivo: r.motivo }))
+    } catch (e: unknown) {
+        // 42P01 = undefined_table. Drizzle può incartare l'errore di pg in `cause`.
+        const codice = (x: unknown) => (x as { code?: string } | null)?.code
+        if (codice(e) === '42P01' || codice((e as { cause?: unknown } | null)?.cause) === '42P01') {
+            console.error('[salvadanaio] tabella salvadanaioRettifiche assente: applicare la migrazione 0063')
+            return []
+        }
+        throw e
+    }
 }
 
 /** Lo stesso calcolo senza cache, per gli script di anteprima in sola lettura. */

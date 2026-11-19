@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { conRuoloDb } from "@/lib/auth/ruoloDb"
 import { nextYearMonth, previousYearMonth, toRomeDateStr } from "@/lib/dateUtils"
-import { euroIt } from "@/lib/diretta/formato"
+import { euroConSegno, euroIt } from "@/lib/diretta/formato"
 import { readEconomyRules } from "@/lib/economy/awards"
 import {
     dateSettimana, meseDelSalvadanaio, nomeMese, type PremiMese, type SettimanaDelMese,
@@ -18,6 +18,8 @@ export const dynamic = "force-dynamic"
  * corso provvisoria. Dal 14/11/2026 anche le Conferme, in un gruppo a parte:
  * importi solo per persona, nessun subtotale di squadra. Gli stessi conti di "Premi della settimana"; una
  * settimana conta nel mese del suo sabato (confermata dal PO il 09/11/2026).
+ * Dal 19/11/2026 nella settimana si vedono anche le rettifiche manuali (premio
+ * extra o malus) di ogni GDO, già dentro al suo totale: si inseriscono da script.
  * Solo ADMIN, letto dalla tabella users. Dati in cache 2 minuti.
  */
 export default async function SalvadanaiPage({ searchParams }: { searchParams: Promise<{ mese?: string }> }) {
@@ -87,7 +89,8 @@ export default async function SalvadanaiPage({ searchParams }: { searchParams: P
                     <div className="text-xs text-ash-500">
                         Importi lordi. Le settimane registrate in{" "}
                         <Link href="/admin/diretta/premi-settimana" className="font-semibold underline">Premi della settimana</Link>{" "}
-                        usano i numeri registrati; le altre sono ricalcolate (aggiornate ogni 2 minuti).
+                        usano i numeri registrati; le altre sono ricalcolate (aggiornate ogni 2 minuti). Le rettifiche
+                        manuali (premi extra e malus) si sommano sopra, per singola persona, e non stanno nella registrazione.
                     </div>
                 </>
             )}
@@ -182,6 +185,8 @@ function RigaConferme({ s }: { s: SettimanaDelMese }) {
 
 function Settimana({ s, p, provvisoria }: { s: SettimanaDelMese; p: PremiMese; provvisoria: boolean }) {
     const righe = p.righe.filter(r => r.ruolo === "GDO" && s.voci[r.userId]).map(r => ({ ...r, v: s.voci[r.userId] }))
+    // Rettifiche manuali (titolare 19/11/2026): la colonna c'è solo nelle settimane che ne hanno.
+    const conRettifiche = righe.some(r => (r.v.rettifiche?.length ?? 0) > 0)
     return (
         <section className="rounded-2xl border border-ash-200 bg-white p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -194,13 +199,14 @@ function Settimana({ s, p, provvisoria }: { s: SettimanaDelMese; p: PremiMese; p
                 <div className="mt-2 text-sm text-ash-500">Nessuna presenza.</div>
             ) : (
                 <div className="mt-3 overflow-x-auto">
-                    <table className="w-full min-w-[520px] text-left text-sm tabular-nums">
+                    <table className={`w-full text-left text-sm tabular-nums ${conRettifiche ? "min-w-[680px]" : "min-w-[520px]"}`}>
                         <thead>
                             <tr className="text-ash-500">
                                 <th scope="col" className="py-1 font-medium">GDO</th>
                                 <th scope="col" className="py-1 text-right font-medium">Presenze</th>
                                 <th scope="col" className="py-1 text-right font-medium">Bonus presenze</th>
                                 <th scope="col" className="py-1 text-right font-medium">Classifica{provvisoria ? " (provv.)" : ""}</th>
+                                {conRettifiche && <th scope="col" className="py-1 pl-3 text-right font-medium">Rettifiche</th>}
                                 <th scope="col" className="py-1 text-right font-medium">Totale</th>
                             </tr>
                         </thead>
@@ -213,13 +219,20 @@ function Settimana({ s, p, provvisoria }: { s: SettimanaDelMese; p: PremiMese; p
                                     <td className="py-1.5 text-right">
                                         {r.v.posizione !== null ? `${r.v.posizione}° · ${euroIt(r.v.euroClassifica)}` : "-"}
                                     </td>
+                                    {conRettifiche && (
+                                        <td className="py-1.5 pl-3 text-right">
+                                            {r.v.rettifiche?.length
+                                                ? r.v.rettifiche.map((x, i) => <div key={i}>{x.motivo}: {euroConSegno(x.euro)}</div>)
+                                                : "-"}
+                                        </td>
+                                    )}
                                     <td className="py-1.5 text-right font-semibold">{euroIt(r.v.euro)}</td>
                                 </tr>
                             ))}
                         </tbody>
                         <tfoot>
                             <tr className="border-t-2 border-ash-200">
-                                <th scope="row" colSpan={4} className="py-2 text-left font-bold text-brand-charcoal">Totale GDO della settimana</th>
+                                <th scope="row" colSpan={conRettifiche ? 5 : 4} className="py-2 text-left font-bold text-brand-charcoal">Totale GDO della settimana</th>
                                 <td className="py-2 text-right font-bold text-brand-charcoal">{euroIt(s.totaleEuro)}</td>
                             </tr>
                         </tfoot>

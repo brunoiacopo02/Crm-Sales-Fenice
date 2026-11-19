@@ -1,11 +1,12 @@
 // Salvadanaio del mese nella scheda personale del GDO (PO 09/11/2026): i bonus
 // in euro delle settimane chiuse del mese (presenze + classifica) e la
-// settimana in corso, provvisoria. Solo visualizzazione: i conti sono in
+// settimana in corso, provvisoria, più le eventuali rettifiche manuali (premio
+// extra o malus, titolare 19/11/2026). Solo visualizzazione: i conti sono in
 // src/lib/economy/premiMese.ts, letti sul server al caricamento della pagina.
 
 import type { Salvadanaio, SettimanaSalvadanaio } from "@/lib/economy/premiMese"
 import { dateSettimana, nomeMese } from "@/lib/economy/premiMese"
-import { euroIt } from "@/lib/diretta/formato"
+import { euroConSegno, euroIt } from "@/lib/diretta/formato"
 
 const maiuscola = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -16,13 +17,31 @@ function dettaglio(s: SettimanaSalvadanaio): string {
 }
 
 /**
+ * Rettifiche manuali della settimana (titolare 19/11/2026): una riga per voce,
+ * motivo e importo col segno. «Premio extra: +7,50 €», «Malus presenze: −12,00 €».
+ */
+function Rettifiche({ s }: { s: SettimanaSalvadanaio }) {
+    if (!s.rettifiche?.length) return null
+    return (
+        <>
+            {s.rettifiche.map((r, i) => (
+                <div key={i} className="break-words text-[12px] text-[#BFBFBF]">
+                    {r.motivo}: <span className="whitespace-nowrap tabular-nums">{euroConSegno(r.euro)}</span>
+                </div>
+            ))}
+        </>
+    )
+}
+
+/**
  * `euroPresenzeOra`: il bonus presenze della settimana appena letto dalla
  * Diretta (aggiornato ogni 25 s), così non si vedono due numeri diversi.
  */
 export function SalvadanaioMese({ s, euroPresenzeOra }: { s: Salvadanaio; euroPresenzeOra: number | null }) {
     const mese = nomeMese(s.mese)
     const c = s.inCorso
-    const presenzeOra = c ? (euroPresenzeOra ?? c.euroPresenze) : 0
+    // In maturazione: il bonus presenze di adesso più le rettifiche della settimana (la classifica no, si decide sabato).
+    const presenzeOra = c ? (euroPresenzeOra ?? c.euroPresenze) + (c.euroRettifiche ?? 0) : 0
 
     return (
         <div className="mt-4 rounded-lg bg-[#2E2E2E] px-3 py-3">
@@ -45,6 +64,7 @@ export function SalvadanaioMese({ s, euroPresenzeOra }: { s: Salvadanaio; euroPr
                                 <span className="font-semibold tabular-nums">{euroIt(w.euro)}</span>
                             </div>
                             <div className="text-[12px] text-[#BFBFBF]">{dettaglio(w)}</div>
+                            <Rettifiche s={w} />
                         </li>
                     ))}
                 </ul>
@@ -61,6 +81,7 @@ export function SalvadanaioMese({ s, euroPresenzeOra }: { s: Salvadanaio; euroPr
                             ? `Classifica provvisoria: ora sei ${c.posizione}°, sabato varrebbe ${euroIt(c.euroClassifica)} in più.`
                             : 'Classifica provvisoria: si decide sabato sera.'}
                     </div>
+                    <Rettifiche s={c} />
                 </div>
             )}
         </div>
