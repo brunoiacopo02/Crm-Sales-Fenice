@@ -187,8 +187,27 @@ test('scorta generale: i migliori e i più freschi prima', () => {
         s({ id: 'stella', motivoAccantonamento: 'stella_fuori_selezione', createdAt: giorniFa(30) }),
         s({ id: 'mai_bot', passatoDalBot: false, ultimoMotivo: null }),
     ]
-    assert.deepEqual(daSerbatoio(lista, 10).map(l => l.id), ['stella', 'mai_bot', 'ridato_fresco', 'ridato_vecchio', 'senza_wa'])
+    // Titolare 19/11/2026: il "WhatsApp mai consegnato" non esce più dal serbatoio.
+    assert.deepEqual(daSerbatoio(lista, 10).map(l => l.id), ['stella', 'mai_bot', 'ridato_fresco', 'ridato_vecchio'])
     assert.equal(daSerbatoio(lista, 2).length, 2)
+})
+
+test('scorta generale: i "WhatsApp mai consegnato" restano accantonati, salvo Black Friday', () => {
+    const s = (p: Partial<LeadSerbatoio>): LeadSerbatoio => ({
+        id: p.id!, createdAt: giorniFa(5), ultimoMotivo: 'mai_risposto', ultimoInstradato: null, passatoDalBot: true, motivoAccantonamento: 'mai_risposto_al_bot', ...p,
+    })
+    const lista = [
+        s({ id: 'parcheggiato_dal_bot', ultimoInstradato: 'mai_consegnato', motivoAccantonamento: 'wa_mai_consegnato' }),
+        s({ id: 'tolto_il_19_11', ultimoInstradato: 'mai_consegnato', motivoAccantonamento: 'wa_mai_consegnato_19_11' }),
+        s({ id: 'solo_motivo', motivoAccantonamento: 'wa_mai_consegnato_19_11' }),
+        s({ id: 'accantonato_dopo', ultimoInstradato: 'mai_consegnato', motivoAccantonamento: 'ridati_oltre_8gg_serale' }),
+        s({ id: 'bf', ultimoInstradato: 'mai_consegnato', funnel: 'BLACK FRIDAY' }),
+        s({ id: 'mai_risposto' }),
+        s({ id: 'serale', ultimoInstradato: 'letto', motivoAccantonamento: 'ridati_oltre_8gg_serale' }),
+    ]
+    assert.deepEqual(daSerbatoio(lista, 30).map(l => l.id).sort(), ['bf', 'mai_risposto', 'serale'])
+    // Anche se sono gli unici rimasti, non si danno.
+    assert.deepEqual(daSerbatoio(lista.slice(0, 4), 30), [])
 })
 
 test('ordine vergini (PO 07/11): sopra stelle e "Ti ha cercato", a qualunque età', () => {

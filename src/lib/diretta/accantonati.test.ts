@@ -6,6 +6,8 @@ test('accantonati: motivi in italiano semplice, sconosciuti in "Altro"', () => {
     assert.equal(etichettaMotivo('mai_risposto_al_bot'), 'Non hanno mai risposto in chat')
     assert.equal(etichettaMotivo('stella_fuori_selezione'), 'Chat interrotta, inserzioni meno buone')
     assert.equal(etichettaMotivo('lorenzo_solo_ridati_migliori'), 'Tolti a Lorenzo')
+    assert.equal(etichettaMotivo('wa_mai_consegnato_19_11'), 'WhatsApp mai consegnato')
+    assert.equal(etichettaMotivo('wa_mai_consegnato'), 'WhatsApp mai consegnato')
     assert.equal(etichettaMotivo('qualcosa_di_nuovo'), 'Altro')
     assert.equal(etichettaMotivo(null), 'Altro')
 })

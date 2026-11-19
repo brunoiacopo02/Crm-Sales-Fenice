@@ -34,6 +34,7 @@ import {
     type GdoGiro, type LeadGiro, type LeadSerbatoio, type PianoSerale,
 } from './automatico'
 import { EVENTO_RIDATO_PARCHEGGIATO } from '@/lib/bot-fissatore/iaVocale'
+import { MOTIVI_WA_MAI_CONSEGNATO } from '@/lib/bot-fissatore/maiConsegnato'
 import { LANCIO_FUNNEL } from '@/lib/lancio/intake'
 import { contaNeiKpiSql } from '@/lib/intakeBatch'
 import { notificaBfArrivati } from './notificaBfDb'
@@ -233,7 +234,42 @@ function nelSerbatoio(companyId: string) {
         contaNeiKpiSql(),
         sql`exists (select 1 from "leadEvents" e where e."leadId" = ${leads.id} and e."eventType" = ${EVENTO_RIDATO_PARCHEGGIATO})`,
         sql`not exists (select 1 from "botContactRequests" r where r."leadId" = ${leads.id} and r."status" <> 'closed')`,
+        nonMaiConsegnatoSql(),
     )
+}
+
+/**
+ * Fuori dal serbatoio i "WhatsApp mai consegnato" (titolare 19/11/2026), salvo i
+ * Black Friday: l'ULTIMO REASSIGNED_FROM_BOT ha instradato 'mai_consegnato', o
+ * l'ULTIMO RIDATO_PARCHEGGIATO ha uno dei motivi "mai consegnato". Stessa regola
+ * di `eMaiConsegnatoDaNonRidare`, che daSerbatoio riapplica sui dati letti: qui
+ * serve perché non occupino le righe lette (LETTURA_SERBATOIO) e per il lock.
+ */
+function nonMaiConsegnatoSql() {
+    const motivi = sql.join(MOTIVI_WA_MAI_CONSEGNATO.map(m => sql`${m}`), sql`, `)
+    return sql`(
+        upper(btrim(coalesce(${leads.funnel}, ''))) = 'BLACK FRIDAY'
+        or (
+            not exists (
+                select 1 from "leadEvents" e
+                where e."leadId" = ${leads.id} and e."eventType" = 'REASSIGNED_FROM_BOT'
+                  and e."metadata"->>'instradato' = 'mai_consegnato'
+                  and not exists (
+                      select 1 from "leadEvents" e2
+                      where e2."leadId" = e."leadId" and e2."eventType" = 'REASSIGNED_FROM_BOT' and e2."timestamp" > e."timestamp"
+                  )
+            )
+            and not exists (
+                select 1 from "leadEvents" p
+                where p."leadId" = ${leads.id} and p."eventType" = ${EVENTO_RIDATO_PARCHEGGIATO}
+                  and p."metadata"->>'motivo' in (${motivi})
+                  and not exists (
+                      select 1 from "leadEvents" p2
+                      where p2."leadId" = p."leadId" and p2."eventType" = ${EVENTO_RIDATO_PARCHEGGIATO} and p2."timestamp" > p."timestamp"
+                  )
+            )
+        )
+    )`
 }
 
 /** Quanti candidati si leggono per scegliere i migliori: il serbatoio intero oggi è sotto il migliaio. */
@@ -241,7 +277,7 @@ const LETTURA_SERBATOIO = 1500
 
 /** Il serbatoio con i dati per ordinarlo. */
 export async function leggiSerbatoio(companyId: string, ex: Esecutore = db): Promise<LeadSerbatoio[]> {
-    const righe = await ex.select({ id: leads.id, createdAt: leads.createdAt }).from(leads)
+    const righe = await ex.select({ id: leads.id, createdAt: leads.createdAt, funnel: leads.funnel }).from(leads)
         .where(nelSerbatoio(companyId)).orderBy(desc(leads.createdAt), desc(leads.id)).limit(LETTURA_SERBATOIO)
     if (righe.length === 0) return []
     const ultimo = new Map<string, { t: number; reason: string | null; instradato: string | null }>()
@@ -272,6 +308,7 @@ export async function leggiSerbatoio(companyId: string, ex: Esecutore = db): Pro
         ultimoInstradato: ultimo.get(r.id)?.instradato ?? null,
         passatoDalBot: bot.has(r.id),
         motivoAccantonamento: parcheggio.get(r.id)?.motivo ?? null,
+        funnel: r.funnel,
     }))
 }
 

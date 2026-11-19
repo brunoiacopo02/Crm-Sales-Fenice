@@ -78,9 +78,14 @@
 // punteggio alto" (coda marketing) restano a mano su /import: Bruno ha deciso
 // che "niente parte da solo".
 // Ordine del serbatoio (ordinaSerbatoio): stelle (chat interrotta), poi i mai
-// contattati su WhatsApp, poi i ridati, poi i "WhatsApp mai consegnato";
-// dentro ogni gruppo il più fresco (nato più di recente).
+// contattati su WhatsApp, poi i ridati; dentro ogni gruppo il più fresco (nato
+// più di recente).
+// Fuori dal serbatoio i "WhatsApp mai consegnato" (titolare 19/11/2026: rendono
+// il 2%): né quelli che il bot ridà e che vengono parcheggiati, né i 60 tolti ai
+// GDO quel giorno (motivo wa_mai_consegnato_19_11). Restano nel pool "Lead
+// accantonati" di /import, da dove solo l'admin li può assegnare a mano.
 
+import { eMaiConsegnatoDaNonRidare } from '../bot-fissatore/maiConsegnato'
 import {
     conStella, eBlackFriday, eVergine, gruppoUscita, ordinaScorta, sempreVisibile, SBLOCCO, SOGLIA_SBLOCCO,
     quantiDaChiamare, type LeadScorta,
@@ -353,6 +358,8 @@ export interface LeadSerbatoio {
     passatoDalBot: boolean
     /** metadata.motivo dell'ultimo RIDATO_PARCHEGGIATO. */
     motivoAccantonamento: string | null
+    /** Serve solo all'eccezione Black Friday dei "WhatsApp mai consegnato". */
+    funnel?: string | null
 }
 
 /** Gruppo nel serbatoio, più alto = esce prima (come gruppoUscita della scorta). */
@@ -369,9 +376,12 @@ export function ordinaSerbatoio<T extends LeadSerbatoio>(lista: readonly T[]): T
         || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
-/** I `quanti` da dare dal serbatoio. */
+/**
+ * I `quanti` da dare dal serbatoio. Mai i "WhatsApp mai consegnato" (titolare
+ * 19/11/2026: rendono il 2%, non tornano ai GDO), salvo i Black Friday.
+ */
 export function daSerbatoio<T extends LeadSerbatoio>(lista: readonly T[], quanti = SBLOCCO): T[] {
-    return ordinaSerbatoio(lista).slice(0, quanti)
+    return ordinaSerbatoio(lista.filter(l => !eMaiConsegnatoDaNonRidare(l))).slice(0, quanti)
 }
 
 /** Riepilogo per GDO del piano serale (prova a vuoto e risposta del cron). */
