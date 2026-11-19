@@ -12,7 +12,7 @@ import { leadsPerGdo, noteDelBotPerLead } from "@/lib/diretta/noteBotDb"
 import { notaPerGdo } from "@/lib/diretta/noteBotPerGdo"
 import { eLeadDelLancio } from "@/lib/diretta/instradamento"
 import { dayBoundsRome } from "@/lib/dateUtils"
-import { secondaGiaVisibile } from "@/lib/diretta/secondaDalGiornoDopo"
+import { visibiliNellaColonnaSuccessiva } from "@/lib/diretta/chiamataDalGiornoDopo"
 import { eq, and, ne, isNull, isNotNull, inArray, lt, or, lte, desc, gte, sql } from "drizzle-orm"
 import crypto from "crypto"
 import { determineLeadSection } from "@/lib/eventLogger"
@@ -167,11 +167,14 @@ export async function getPipelineLeads() {
     // Un lead che ci ha cercato sta in 1ª chiamata qualunque sia il suo callCount:
     // è una chiamata da fare adesso, non il secondo tentativo di una sequenza.
     const firstCall = pipelineLeads.filter(l => l.callCount === 0 || cercati.has(l.id))
-    // Al GDO la seconda compare dalle 10:00 del giorno dopo la prima chiamata
-    // (titolare 19/11/2026): admin e manager la vedono subito.
-    const secondCall = pipelineLeads.filter(l =>
-        l.callCount === 1 && !cercati.has(l.id) && (!isGdo || secondaGiaVisibile(l.lastCallDate, now)))
-    const thirdCall = pipelineLeads.filter(l => l.callCount === 2 && !cercati.has(l.id))
+    // Al GDO un lead chiamato oggi compare nella colonna successiva (2ª, 3ª e
+    // più sotto la 4ª "Recupero") dalle 10:00 del giorno dopo l'ultima chiamata
+    // (titolare 19/11/2026): admin e manager lo vedono subito.
+    const vistaColonna = { isGdo, adesso: now }
+    const secondCall = visibiliNellaColonnaSuccessiva(
+        pipelineLeads.filter(l => l.callCount === 1 && !cercati.has(l.id)), vistaColonna)
+    const thirdCall = visibiliNellaColonnaSuccessiva(
+        pipelineLeads.filter(l => l.callCount === 2 && !cercati.has(l.id)), vistaColonna)
 
     // 2ª/3ª chiamata: i lead fermi da più tempo in cima, quelli appena
     // richiamati in fondo (richiesta GDO 2026-06-11). Ordina per lastCallDate
@@ -302,6 +305,9 @@ export async function getPipelineLeads() {
                 // I lead del lancio sono tolti ai GDO (PO 24-25/10/2026), anche
                 // quelli scartati che il recupero rimetterebbe in board.
                 .filter(l => !eLeadDelLancio(l))
+            // Scartato oggi al terzo tentativo vuoto: in recupero dalle 10:00
+            // del giorno dopo, come 2ª e 3ª (titolare 19/11/2026).
+            fourthCallLeads = visibiliNellaColonnaSuccessiva(fourthCallLeads, vistaColonna)
             fourthCallLeads = await leadsPerGdo(fourthCallLeads)
 
         }
