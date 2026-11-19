@@ -52,6 +52,15 @@ export function euroIt(n: number): string {
     return `${numeroIt(n, intero ? 0 : 2)} €`
 }
 
+/**
+ * Euro di una rettifica, sempre col segno e con i centesimi: "+7,50 €",
+ * "−12,00 €" (il meno è il segno tipografico, non il trattino).
+ */
+export function euroConSegno(n: number): string {
+    const v = Number.isFinite(n) ? n : 0
+    return `${v < 0 ? '−' : '+'}${numeroIt(Math.abs(v), 2)} €`
+}
+
 export interface PartiRoma {
     anno: number
     mese: number      // 1-12

@@ -2048,6 +2048,28 @@ export const weeklyPrizeRuns = pgTable('weeklyPrizeRuns', {
     computedBy: text('computedBy').references(() => users.id),
 }, (t) => [primaryKey({ columns: [t.companyId, t.weekStart] })]);
 
+// Rettifiche manuali del salvadanaio dei GDO (migr. 0063, titolare 19/11/2026):
+// un premio extra o un malus in euro una tantum, attribuito a una settimana
+// lun-sab. Eccezioni: non cambiano la regola dei premi e non stanno nello
+// snapshot di weeklyPrizeRuns, si sommano sopra (src/lib/economy/premiMese.ts).
+// `weekStart` è il lunedì, come in weeklyPrizeRuns; `euro` ha il segno;
+// `motivo` lo legge il GDO, `nota` resta interna. Per ora si scrivono da script.
+export const salvadanaioRettifiche = pgTable('salvadanaioRettifiche', {
+    id: text('id').primaryKey(),
+    companyId: text('companyId').default('fenice').notNull().references(() => companies.id, { onUpdate: 'cascade' }),
+    userId: text('userId').notNull().references(() => users.id),
+    weekStart: date('weekStart').notNull(),
+    euro: numeric('euro', { precision: 10, scale: 2 }).notNull(),
+    motivo: text('motivo').notNull(),
+    nota: text('nota'),
+    createdById: text('createdById').notNull().references(() => users.id),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (t) => [
+    index('salvadanaio_rettifiche_company_week_idx').on(t.companyId, t.weekStart),
+    // Una sola voce per persona, settimana e motivo: rilanciare lo script non raddoppia.
+    uniqueIndex('salvadanaio_rettifiche_unica_idx').on(t.companyId, t.userId, t.weekStart, t.motivo),
+]);
+
 // Consigli in chiamata dall'admin al GDO o alle Conferme (PO 26/10/2026, migr. 0054).
 export const callTips = pgTable('callTips', {
     id: text('id').primaryKey(),
