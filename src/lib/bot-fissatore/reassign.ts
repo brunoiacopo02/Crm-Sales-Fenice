@@ -6,7 +6,7 @@ import { isLeadLocked } from './contactRequests';
 import { BATCH_SENSO_UNICO } from '@/lib/intakeBatch';
 import { dayBoundsRome } from '@/lib/dateUtils';
 import { EVENTO_RIDATO_PARCHEGGIATO } from './iaVocale';
-import { eFunnelBlackFriday, instradamentoRidato, isWhatsappMaiConsegnato } from './maiConsegnato';
+import { eFunnelBlackFriday, etichettaInstradato, instradamentoRidato, motivoParcheggio } from './maiConsegnato';
 import { notificaBfArrivati } from '@/lib/diretta/notificaBfDb';
 
 const FENICE = 'fenice';
@@ -62,9 +62,10 @@ type ReassignResult =
  * chat interrotta senza obiezione ferrea). La chat interrotta va a un GDO della
  * squadra col flag Ridati (`botReturnIntake`) e sotto il suo tetto giornaliero
  * se ne ha uno (`dailyReturnCap`), a turno su `botReturnLastAssignedAt`; il mai
- * risposto resta parcheggiato (PO 19/10), tranne il WhatsApp mai consegnato
- * (PO 28/10) e chi ha letto il messaggio (`opzioni.letto`, PO 29/10), che vanno
- * al giro come la chat interrotta.
+ * risposto resta parcheggiato (PO 19/10), tranne chi ha letto il messaggio
+ * (`opzioni.letto`, PO 29/10) e i Black Friday (PO 07/11), che vanno al giro
+ * come la chat interrotta. Il WhatsApp mai consegnato è andato al giro dal
+ * 28/10 al 19/11/2026; da allora (titolare) si parcheggia, salvo Black Friday.
  * Il lead riparte come nuovo (status=NEW, callCount=0).
  *
  * Se non c'è nessun GDO eleggibile: lead lasciato non assegnato (recuperabile da admin).
@@ -181,26 +182,25 @@ async function assegna(
         // presenti il loro tempo va al lancio e ai ridati con chat interrotta. Il
         // lead resta NEW e non assegnato, ripescabile in blocco.
         //
-        // Eccezione (PO 28/10/2026): se il WhatsApp non è mai stato consegnato
-        // (numero senza WhatsApp, nota del bot "WhatsApp mai consegnato ...
-        // chiamare a voce") il lead non ha mai potuto rispondere e va chiamato:
-        // segue il giro dei ridati come la chat interrotta, stessi filtri e
-        // tetti. Nell'evento `reason` resta 'mai_risposto' (statistiche del bot
-        // e stella "Chiama per primo" non cambiano) e `instradato` ne dice il perché.
+        // WhatsApp mai consegnato (numero senza WhatsApp, nota del bot "WhatsApp
+        // mai consegnato ... chiamare a voce"): dal 28/10 al 19/11/2026 seguiva
+        // il giro dei ridati come la chat interrotta; oggi lo fa solo se è un
+        // Black Friday. Nell'evento `reason` resta 'mai_risposto' (statistiche
+        // del bot e stella "Chiama per primo" non cambiano) e `instradato` ne
+        // dice il perché.
         // Dal 29/10/2026 (PO) anche il NON_RISPOSTO che ha LETTO il messaggio va al
         // giro (`letto` nel corpo, contratto v1.11); `instradato` dice perché.
         // Black Friday (PO 07/11/2026): mai parcheggiato, va ai GDO come la chat
         // interrotta; `instradato: 'black_friday'` quando il motivo è solo il funnel.
         const bf = eFunnelBlackFriday(cur.funnel);
         const instradamento = instradamentoRidato(reason, botNote, opzioni.letto, cur.funnel);
+        // Titolare 19/11/2026: il WhatsApp mai consegnato rende il 2% e non va più
+        // ai GDO: si parcheggia (motivo 'wa_mai_consegnato'), tranne i Black Friday.
+        // `instradato: 'mai_consegnato'` resta sull'evento anche da parcheggiato,
+        // così scorta, serbatoio e script continuano a riconoscerlo.
+        const etichetta = etichettaInstradato(reason, botNote, opzioni.letto, instradamento);
         const extraMeta = {
-            ...(reason === 'mai_risposto' && instradamento === 'giro_gdo'
-                ? {
-                    instradato: isWhatsappMaiConsegnato(botNote) ? 'mai_consegnato' as const
-                        : opzioni.letto === true ? 'letto' as const
-                        : 'black_friday' as const,
-                }
-                : {}),
+            ...(etichetta ? { instradato: etichetta } : {}),
             ...(opzioni.letto != null ? { letto: opzioni.letto } : {}),
             ...(opzioni.haRiscritto ? { haRiscritto: true } : {}),
         };
@@ -225,7 +225,7 @@ async function assegna(
                     eventType: EVENTO_RIDATO_PARCHEGGIATO,
                     userId: null,
                     timestamp: now,
-                    metadata: { motivo: 'mai_risposto_al_bot', botNote: botNote ?? null },
+                    metadata: { motivo: motivoParcheggio(botNote), botNote: botNote ?? null },
                     companyId: FENICE,
                 },
             ]);
