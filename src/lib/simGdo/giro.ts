@@ -7,6 +7,12 @@
 // chi usa quale SIM. La riga si aggancia all'unico GDO attivo (non bot, non
 // prova: isRealGdo del canone) il cui nome di persona (users.firstName)
 // corrisponde al NOME del foglio. Nessuno o più di uno = riga non agganciata.
+// AGGANCI FISSI (titolare 20/11/2026): chi cambia spesso il nome nel profilo
+// (GDO 106) si aggancia dal codice GDO, non dal nome. La tabella "NOME del
+// foglio → gdoCode" sta in appSettings (leggiAgganci); se il NOME è in tabella
+// vale solo il codice: se quel codice non è di un GDO attivo la riga resta non
+// agganciata ('aggancio_non_valido'), mai per nome. Un GDO preso da un aggancio
+// fisso non si aggancia anche per nome da un'altra riga.
 // L'interno del centralino (colonna GDO) resta solo un'informazione e la
 // chiave dello stato del cambio SIM: la tabella `pbxExtensions` NON si usa,
 // è ferma all'ultimo import dei tabulati e serve all'attribuzione storica.
@@ -23,7 +29,30 @@ export interface UtenteGdo {
     gdoCode: number | null
 }
 
-export type EsitoRiga = 'agganciato' | 'nessuno' | 'ambiguo' | 'interno_ripetuto' | 'gdo_ripetuto'
+export type EsitoRiga = 'agganciato' | 'nessuno' | 'ambiguo' | 'interno_ripetuto' | 'gdo_ripetuto' | 'aggancio_non_valido'
+
+/** Agganci fissi: nome del foglio normalizzato (normalizzaNome) → gdoCode. */
+export type Agganci = Record<string, number>
+
+/**
+ * Legge la tabella degli agganci fissi da appSettings, JSON tipo { "ZORA": 106 }.
+ * Chiave assente, JSON malformato, non oggetto: tabella vuota. Le voci con
+ * valore non numerico (intero positivo) o nome vuoto si scartano. Non lancia mai.
+ */
+export function leggiAgganci(raw: string | null | undefined): Agganci {
+    if (!raw) return {}
+    let v: unknown
+    try { v = JSON.parse(raw) } catch { return {} }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+    const out: Agganci = {}
+    for (const [nome, codice] of Object.entries(v as Record<string, unknown>)) {
+        const chiave = normalizzaNome(nome)
+        if (!chiave) continue
+        if (typeof codice !== 'number' || !Number.isInteger(codice) || codice <= 0) continue
+        out[chiave] = codice
+    }
+    return out
+}
 
 export interface RigaCalcolata extends RigaFoglio {
     esito: EsitoRiga
@@ -96,7 +125,10 @@ export function calcolaRighe(input: {
     logs: (LogChiamata & { userId: string | null })[]
     soglia: number | null
     adesso: Date
+    /** Agganci fissi nome → gdoCode (leggiAgganci); assente = solo per nome. */
+    agganci?: Agganci
 }): RigaCalcolata[] {
+    const agganci = input.agganci ?? {}
     const { start: mezzanotte } = dayBoundsRome(input.adesso)
     const perUtente = new Map<string, LogChiamata[]>()
     for (const l of input.logs) {
@@ -112,11 +144,22 @@ export function calcolaRighe(input: {
 
     // 1. Ogni riga col suo GDO (o il motivo per cui non ne ha uno).
     const visti = new Set<string>()
+    const fisso: boolean[] = []
     const scelte = input.righe.map((r): RigaCalcolata | UtenteGdo => {
         // L'interno è la chiave dello stato del cambio SIM: due righe con lo
         // stesso interno si confonderebbero, vale la prima.
+        fisso.push(false)
+        const i = fisso.length - 1
         if (visti.has(r.interno)) return vuota(r, 'interno_ripetuto')
         visti.add(r.interno)
+        const codice = Object.prototype.hasOwnProperty.call(agganci, normalizzaNome(r.nome)) ? agganci[normalizzaNome(r.nome)] : undefined
+        if (codice !== undefined) {
+            // Nome in tabella: conta solo il codice, mai il nome del profilo.
+            const utente = input.utenti.find(x => x.gdoCode === codice)
+            if (!utente) return vuota(r, 'aggancio_non_valido')
+            fisso[i] = true
+            return utente
+        }
         const candidati = candidatiPerNome(r.nome, input.utenti)
         if (candidati.length === 0) return vuota(r, 'nessuno')
         if (candidati.length > 1) return vuota(r, 'ambiguo', candidati)
@@ -136,7 +179,15 @@ export function calcolaRighe(input: {
         if ('esito' in s) return s
         const utente = s
         const contese = righeDi.get(utente.id) ?? [i]
-        if (contese.length > 1) {
+        const fissi = contese.filter(j => fisso[j])
+        if (contese.length > 1 && fissi.length > 0) {
+            // Aggancio fisso: batte il nome. Se i fissi sono più d'uno (due nomi
+            // in tabella sullo stesso codice) restano vuoti tutti.
+            if (!(fissi.length === 1 && fissi[0] === i)) {
+                const altre = contese.filter(j => j !== i).map(j => input.righe[j].riga)
+                return vuota(r, 'gdo_ripetuto', [utente], altre)
+            }
+        } else if (contese.length > 1) {
             const uguali = contese.filter(j => nomeUguale(input.righe[j].nome, utente.firstName))
             const tiene = uguali.length === 1 ? uguali[0] : null
             if (tiene !== i) {
