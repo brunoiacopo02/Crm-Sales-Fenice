@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { calcolaRighe, candidatiPerNome, nomiCompatibili, type UtenteGdo } from './giro'
+import { calcolaRighe, candidatiPerNome, leggiAgganci, nomiCompatibili, type UtenteGdo } from './giro'
 
 const ADESSO = new Date('2026-11-14T15:05:00+01:00')
 const ora = (hhmm: string) => new Date(`2026-11-14T${hhmm}:00+01:00`)
@@ -154,4 +154,73 @@ test('stesso GDO su due righe senza nome uguale: restano vuote tutte e due', () 
     })
     assert.deepEqual(righe.map(r => [r.esito, r.stessoGdoDi]), [['gdo_ripetuto', [3]], ['gdo_ripetuto', [2]]])
     assert.ok(righe.every(r => r.tasso === null && r.colore === null))
+})
+
+// ── Agganci fissi nome → gdoCode (titolare 20/11/2026) ───────────────────
+
+const base = { statoSim: {}, soglia: 0.269, adesso: ADESSO }
+
+test('agganci: Zora ha firstName "kanye west", ZORA→106 la aggancia lo stesso', () => {
+    const utenti = [u('u106', 'kanye west', 106)]
+    const input = { ...base, righe: [riga(2, '1017', 'ZORA')], utenti, logs: chiamate('u106', 5, 5) }
+    assert.equal(calcolaRighe(input)[0].esito, 'nessuno') // senza tabella: come prima
+    const [r] = calcolaRighe({ ...input, agganci: leggiAgganci('{ "ZORA": 106 }') })
+    assert.equal(r.esito, 'agganciato')
+    assert.equal(r.utente?.gdoCode, 106)
+    assert.equal(r.tasso, 0.5)
+})
+
+test('agganci: codice inesistente o di utente non attivo, la riga non ricade sul nome', () => {
+    // il 106 non è tra i GDO attivi; un altro GDO si chiama proprio Zora
+    const utenti = [u('uz', 'Zora', 150)]
+    const logs = chiamate('uz', 5, 5)
+    const [r] = calcolaRighe({ ...base, righe: [riga(2, '1017', 'ZORA')], utenti, logs, agganci: { zora: 106 } })
+    assert.equal(r.esito, 'aggancio_non_valido')
+    assert.equal(r.utente, null)
+    assert.equal(r.tasso, null)
+    assert.equal(r.colore, null)
+})
+
+test('agganci: nome in tabella con maiuscole, spazi e accenti diversi', () => {
+    const utenti = [u('u106', 'kanye west', 106)]
+    for (const chiave of ['zora', ' Zòra ', 'Z O R A']) {
+        const agganci = leggiAgganci(JSON.stringify({ [chiave]: 106 }))
+        const [r] = calcolaRighe({ ...base, righe: [riga(2, '1017', ' Zora  ')], utenti, logs: [], agganci })
+        assert.equal(r.esito, 'agganciato', chiave)
+        assert.equal(r.utente?.gdoCode, 106)
+    }
+})
+
+test('agganci: nessuna tabella (assente, vuota, malformata, valori non numerici) = comportamento di prima', () => {
+    const utenti = [u('u116', 'Lavinia', 116), u('u106', 'kanye west', 106)]
+    const input = { ...base, righe: [riga(2, '1007', 'LAVINIA'), riga(3, '1017', 'ZORA')], utenti, logs: chiamate('u116', 10, 10) }
+    const prima = calcolaRighe(input)
+    for (const raw of [null, undefined, '', '{', '[]', '"x"', 'null', '{"ZORA":"106"}', '{"ZORA":1.5}', '{"ZORA":-1}', '{"":106}', '{"ZORA":null}']) {
+        assert.deepEqual(leggiAgganci(raw), {}, String(raw))
+        assert.deepEqual(calcolaRighe({ ...input, agganci: leggiAgganci(raw) }), prima)
+    }
+    assert.deepEqual(calcolaRighe({ ...input, agganci: {} }), prima)
+    assert.deepEqual(prima.map(r => r.esito), ['agganciato', 'nessuno'])
+})
+
+test('agganci: una riga per tabella e una per nome sullo stesso utente, vince l\'aggancio fisso', () => {
+    // "ZORETTA" per nome sarebbe di Zora (prefisso "zor"), ma il 106 è già preso da ZORA in tabella
+    const utenti = [u('u106', 'Zora', 106)]
+    const righe = calcolaRighe({
+        ...base, righe: [riga(2, '1017', 'ZORETTA'), riga(3, '1018', 'ZORA')], utenti,
+        logs: chiamate('u106', 10, 10), agganci: { zora: 106 },
+    })
+    assert.equal(righe[0].esito, 'gdo_ripetuto')
+    assert.deepEqual(righe[0].stessoGdoDi, [3])
+    assert.equal(righe[0].tasso, null)
+    assert.equal(righe[1].esito, 'agganciato')
+    assert.equal(righe[1].tasso, 0.5)
+})
+
+test('agganci: due nomi in tabella sullo stesso codice restano vuoti tutti e due', () => {
+    const righe = calcolaRighe({
+        ...base, righe: [riga(2, '1017', 'ZORA'), riga(3, '1018', 'ZORINA')], utenti: [u('u106', 'x', 106)],
+        logs: chiamate('u106', 10, 10), agganci: { zora: 106, zorina: 106 },
+    })
+    assert.deepEqual(righe.map(r => [r.esito, r.stessoGdoDi]), [['gdo_ripetuto', [3]], ['gdo_ripetuto', [2]]])
 })

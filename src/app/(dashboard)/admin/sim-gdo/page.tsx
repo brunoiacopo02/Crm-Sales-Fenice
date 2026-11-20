@@ -134,6 +134,7 @@ const MOTIVO: Record<Exclude<RigaCalcolata["esito"], "agganciato">, string> = {
     nessuno: "Nessun GDO attivo del CRM ha un nome che corrisponde a quello del foglio. La cella resta vuota.",
     ambiguo: "Più GDO attivi del CRM corrispondono a questo nome: non so a chi agganciare la riga. La cella resta vuota.",
     interno_ripetuto: "Lo stesso interno compare in più righe: vale solo la prima.",
+    aggancio_non_valido: "Il nome è tra gli agganci fissi (sim_gdo_agganci) ma il codice GDO indicato non è di un GDO attivo: non si ricade sul nome. La cella resta vuota.",
     gdo_ripetuto: "Lo stesso GDO risulta su più righe del foglio: tiene la riga col nome uguale, se è una sola; altrimenti restano vuote tutte.",
 }
 
@@ -156,7 +157,7 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
                             <td className={TD_SX}>{r.nome || "—"}</td>
                             <td className={TD_SX}>
                                 {nomeCrm(r)}
-                                {r.esito !== "agganciato" && <Piccolo arancio>{r.esito === "nessuno" ? "nessun GDO con questo nome" : r.esito === "ambiguo" ? "nome ambiguo" : r.esito === "gdo_ripetuto" ? `stesso GDO di riga ${r.stessoGdoDi.join(", ")}` : "interno ripetuto"}</Piccolo>}
+                                {r.esito !== "agganciato" && <Piccolo arancio>{r.esito === "nessuno" ? "nessun GDO con questo nome" : r.esito === "ambiguo" ? "nome ambiguo" : r.esito === "aggancio_non_valido" ? "aggancio fisso: codice GDO non valido" : r.esito === "gdo_ripetuto" ? `stesso GDO di riga ${r.stessoGdoDi.join(", ")}` : "interno ripetuto"}</Piccolo>}
                             </td>
                             <td className={TD_SX}>
                                 {r.numero || "—"}

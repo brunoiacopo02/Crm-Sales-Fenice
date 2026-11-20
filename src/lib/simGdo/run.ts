@@ -15,7 +15,7 @@ import { isRealGdo } from '@/lib/kpi/canon'
 import { dayBoundsRome, monthBoundsRome } from '@/lib/dateUtils'
 import { impronta, leggiFoglio, lettereColonna } from './intestazioni'
 import { aggiornaStatoSim, leggiStatoSim, type StatoSim } from './cambioSim'
-import { calcolaRighe, type RigaCalcolata, type UtenteGdo } from './giro'
+import { calcolaRighe, leggiAgganci, type RigaCalcolata, type UtenteGdo } from './giro'
 import { contaCelle, richiesteScrittura } from './celle'
 import { contaGruppi, eGdoDellaMedia, ESITI_CHIAMATA, MEDIA_DAL_MESE, sogliaRossa, tasso, type Conteggio } from './tasso'
 import { leggiFoglioSim, scriviFoglioSim } from './foglio'
@@ -23,6 +23,8 @@ import { leggiFoglioSim, scriviFoglioSim } from './foglio'
 const FENICE = 'fenice'
 /** Ultimo numero visto per ogni interno e istante del cambio (vedi cambioSim.ts). */
 export const STATO_SIM_KEY = 'sim_gdo_stato_sim'
+/** Agganci fissi nome del foglio → gdoCode, JSON { "ZORA": 106 } (vedi giro.ts). */
+export const AGGANCI_KEY = 'sim_gdo_agganci'
 /** Ora ed esito dell'ultimo giro orario. */
 export const ULTIMO_GIRO_KEY = 'sim_gdo_ultimo_giro'
 const AUTORE = 'cron:sim-gdo'
@@ -163,10 +165,11 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
     const lettura = leggiFoglio(foglio.valori)
     if (!lettura.ok) return vuoto(adesso, lettura.errore)
 
-    const [utenti, media, statoPrima] = await Promise.all([
+    const [utenti, media, statoPrima, agganci] = await Promise.all([
         leggiGdoAttivi(),
         leggiMedia(),
         leggiSetting(STATO_SIM_KEY).then(leggiStatoSim),
+        leggiSetting(AGGANCI_KEY).then(leggiAgganci),
     ])
     const { stato, cambiati } = aggiornaStatoSim(statoPrima, lettura.righe, adesso)
 
@@ -174,7 +177,7 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
     const soglia = mediaTasso === null ? null : sogliaRossa(mediaTasso)
     // Le chiamate di oggi di tutti i GDO attivi: pochi e poche righe, e così l'aggancio resta tutto in giro.ts.
     const logs = await leggiLogsDiOggi(utenti.map(u => u.id), adesso)
-    const righe = calcolaRighe({ righe: lettura.righe, statoSim: stato, utenti, logs, soglia, adesso })
+    const righe = calcolaRighe({ righe: lettura.righe, statoSim: stato, utenti, logs, soglia, adesso, agganci })
 
     const esito: EsitoSimGdo = {
         ok: true, adesso: adesso.toISOString(), media, mediaTasso, soglia,
