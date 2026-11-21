@@ -7,6 +7,7 @@ import { GAME_CONSTANTS } from "@/lib/gamificationEngine";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
+import { nonUpsellSql } from "@/lib/kpi/chiusureSql";
 
 /**
  * Measure a lifetime metric for a user.
@@ -134,7 +135,8 @@ export async function measureAchievementMetric(userId: string, metric: string): 
                 .where(and(
                     eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
-                    eq(leads.salespersonOutcome, 'Chiuso')
+                    eq(leads.salespersonOutcome, 'Chiuso'),
+                    nonUpsellSql() // upsell (migr. 0064): euro sì, chiusura no
                 ));
             return result[0]?.value ?? 0;
         }
@@ -160,7 +162,8 @@ export async function measureAchievementMetric(userId: string, metric: string): 
                 .where(and(
                     eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
-                    isNotNull(leads.salespersonOutcome)
+                    isNotNull(leads.salespersonOutcome),
+                    nonUpsellSql() // l'upsell non è una trattativa: fuori da numeratore e denominatore
                 ));
             const totalEsiti = Number(result[0]?.totale) || 0;
             if (totalEsiti === 0) return 0;

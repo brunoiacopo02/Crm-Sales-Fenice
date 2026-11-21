@@ -30,6 +30,11 @@ export function buildLeadAssenteRow(input: {
     phone: string;
     sheet: LeadAssenteSheet;
     salesUserId: string;
+    /**
+     * Upsell di un già cliente (migr. 0064, titolare 21/11/2026): la scheda porta
+     * euro nel fatturato del mese ma NON conta come chiusura. Default false.
+     */
+    upsell?: boolean;
 }) {
     const { leadId, companyId, phone, sheet, salesUserId } = input;
     return {
@@ -44,6 +49,7 @@ export function buildLeadAssenteRow(input: {
         salespersonOutcome: 'Chiuso',
         salespersonOutcomeAt: sheet.signedAt,
         closeAmountEur: sheet.amountEur,
+        closeIsUpsell: input.upsell === true,
         salespersonAssigned: sheet.salesCode,
         salespersonUserId: salesUserId,
     };

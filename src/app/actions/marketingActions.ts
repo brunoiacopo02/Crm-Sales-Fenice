@@ -516,6 +516,7 @@ export async function getInboundSpontaneiStats(monthString: string) {
             appuntamento: leads.appointmentCreatedAt,
             conferma: leads.confirmationsOutcome,
             incasso: leads.closeAmountEur,
+            closeIsUpsell: leads.closeIsUpsell,
         })
         .from(leadEvents)
         .innerJoin(leads, eq(leads.id, leadEvents.leadId))
@@ -539,7 +540,8 @@ export async function getInboundSpontaneiStats(monthString: string) {
         const scrivono = g.length;
         const fissati = g.filter(r => r.appuntamento !== null).length;
         const confermati = g.filter(r => r.conferma === 'confermato').length;
-        const chiusi = g.filter(r => (r.incasso ?? 0) > 0).length;
+        // Upsell (migr. 0064): negli euro, non nel numero di chiusi.
+        const chiusi = g.filter(r => (r.incasso ?? 0) > 0 && r.closeIsUpsell !== true).length;
         const fatturato = g.reduce((somma, r) => somma + (r.incasso ?? 0), 0);
         // Percentuali sempre sul totale di chi ha scritto, mai a cascata: così le
         // quattro cifre si leggono in colonna senza doverle moltiplicare fra loro.

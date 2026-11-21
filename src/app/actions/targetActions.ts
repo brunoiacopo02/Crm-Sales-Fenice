@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { isStatsGdo, apptSetAt as canonApptSetAt } from '@/lib/kpi/canon';
 import { contaNeiKpi } from '@/lib/intakeBatch';
+import { contaComeChiusura } from '@/lib/kpi/chiusure';
 import { leadVero } from '@/lib/prova/sql';
 import { monthBoundsRome, dayBoundsRome, toRomeDateStr } from '@/lib/dateUtils';
 import { countWorkingDaysInMonth, countWorkingDaysElapsed } from '@/lib/workingDaysUtils';
@@ -421,14 +422,18 @@ export async function getManagerTargetsData(monthString: string, testTodayOverri
         }
 
         // Chiuso: salespersonOutcome='Chiuso', outcome date nel mese
+        // Upsell (migr. 0064): il valore entra, il contratto non si conta.
         if (lead.salespersonOutcome === 'Chiuso' && inMonth(lead.salespersonOutcomeAt)) {
-            actClosed++;
-            bucket.closed++;
+            const conta = contaComeChiusura(lead);
+            if (conta) {
+                actClosed++;
+                bucket.closed++;
+            }
             if (lead.closeAmountEur) {
                 actValoreContratti += lead.closeAmountEur;
                 bucket.valoreContratti += lead.closeAmountEur;
             }
-            if (inToday(lead.salespersonOutcomeAt)) {
+            if (conta && inToday(lead.salespersonOutcomeAt)) {
                 todayClosed++;
             }
         }

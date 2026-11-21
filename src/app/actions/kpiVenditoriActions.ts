@@ -7,6 +7,7 @@ import { dayBoundsRome, weekBoundsRome, monthBoundsRome } from "@/lib/dateUtils"
 import { currentYearMonthRome } from "@/lib/workingDaysUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy';
 import { cohortClosing } from "@/lib/kpi/salesCohort"
+import { riepilogoFirme } from "@/lib/kpi/chiusure"
 import { personName } from "@/lib/diretta/config"
 import { obiettiviPerVenditori } from "@/lib/venditore/obiettiviDb"
 import { haRuoloDb } from "@/lib/auth/ruoloDb"
@@ -102,6 +103,7 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         outcomeAt: leads.salespersonOutcomeAt,
         presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
+        closeIsUpsell: leads.closeIsUpsell,
         funnel: leads.funnel
     }).from(leads).where(
         and(
@@ -138,16 +140,9 @@ export async function getVenditoriKpi(period: 'oggi' | 'settimana' | 'mese' | 'c
         const vRows = scopedRows.filter(r => r.salespersonUserId === v.id)
         const vOutcomes = vRows.filter(isSignedInPeriod)
 
-        const chiusi = vOutcomes.filter(o => o.salespersonOutcome === 'Chiuso').length
-        const nonChiusi = vOutcomes.filter(o => o.salespersonOutcome === 'Non chiuso').length
-        const sparito = vOutcomes.filter(o => o.salespersonOutcome === 'Sparito').length
-        const perso = vOutcomes.filter(o => o.salespersonOutcome === 'Perso').length
-
-        const totalEsitati = chiusi + nonChiusi + sparito + perso
-
-        const fatturato = vOutcomes
-            .filter(o => o.salespersonOutcome === 'Chiuso')
-            .reduce((sum, o) => sum + (o.amount || 0), 0)
+        // Upsell (titolare 21/11/2026): euro nel fatturato, NON nel numero di chiusi
+        // né in totalEsitati (lib/kpi/chiusure).
+        const { chiusi, nonChiusi, sparito, perso, totalEsitati, fatturato } = riepilogoFirme(vOutcomes)
 
         // Closing rate di coorte: denominatore = presenze del periodo.
         const coorte = cohortClosing(vRows, startDate, endDate)

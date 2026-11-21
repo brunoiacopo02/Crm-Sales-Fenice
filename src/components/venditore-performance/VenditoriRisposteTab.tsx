@@ -123,7 +123,7 @@ export function VenditoriRisposteTab({ venditori, initialYearMonth }: Props) {
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">
                                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${OUTCOME_BADGE[r.outcome] ?? 'bg-gray-100 text-gray-600'}`}>
-                                            {r.outcome}
+                                            {r.outcome}{r.closeIsUpsell ? ' · Upsell' : ''}
                                         </span>
                                     </td>
                                     <td className="px-3 py-2 text-ash-600">{r.notClosedReason ?? '—'}</td>

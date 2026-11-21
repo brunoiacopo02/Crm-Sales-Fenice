@@ -121,6 +121,7 @@ async function leggiAltriFunnel(inizio: Date, adesso: Date): Promise<(chiusureAl
             confirmationsOutcome: leads.confirmationsOutcome, confirmationsTimestamp: leads.confirmationsTimestamp,
             salespersonOutcome: leads.salespersonOutcome, salespersonOutcomeAt: leads.salespersonOutcomeAt,
             presentedAt: leads.presentedAt, closeAmountEur: leads.closeAmountEur,
+            closeIsUpsell: leads.closeIsUpsell,
         }).from(leads).where(and(
             eq(leads.companyId, FENICE), leadVero(), nonBf,
             or(
@@ -196,7 +197,7 @@ async function leggi(): Promise<MonitorBf> {
             assignedToId: leads.assignedToId, appointmentDate: leads.appointmentDate,
             confirmationsOutcome: leads.confirmationsOutcome, confirmationsDiscardReason: leads.confirmationsDiscardReason,
             presentedAt: leads.presentedAt, salespersonOutcome: leads.salespersonOutcome,
-            closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct,
+            closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct, closeIsUpsell: leads.closeIsUpsell,
             appointmentCreatedAt: leads.appointmentCreatedAt, confirmationsTimestamp: leads.confirmationsTimestamp,
             salespersonOutcomeAt: leads.salespersonOutcomeAt, phone: leads.phone,
             convertitoAt: conversioneBfAt,
@@ -262,7 +263,7 @@ async function leggi(): Promise<MonitorBf> {
         // cifre: nessuna regexp sui telefoni in SQL (già andata in timeout altrove).
         db.select({
             id: leads.id, phone: leads.phone, at: leads.salespersonOutcomeAt,
-            closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct,
+            closeAmountEur: leads.closeAmountEur, closeProduct: leads.closeProduct, closeIsUpsell: leads.closeIsUpsell,
         }).from(leads).where(and(
             eq(leads.companyId, FENICE), leadVero(),
             eq(leads.salespersonOutcome, 'Chiuso'), gte(leads.salespersonOutcomeAt, INIZIO_BF),
@@ -297,12 +298,12 @@ async function leggi(): Promise<MonitorBf> {
         id: l.id, createdAt: l.createdAt, utmSource: l.utmSource, utmMedium: l.utmMedium, status: l.status, assignedToId: l.assignedToId,
         appointmentDate: l.appointmentDate, confirmationsOutcome: l.confirmationsOutcome,
         confirmationsDiscardReason: l.confirmationsDiscardReason, presentedAt: l.presentedAt,
-        salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct,
+        salespersonOutcome: l.salespersonOutcome, closeAmountEur: l.closeAmountEur, closeProduct: l.closeProduct, closeIsUpsell: l.closeIsUpsell,
         appointmentCreatedAt: l.appointmentCreatedAt, confirmationsTimestamp: l.confirmationsTimestamp,
         salespersonOutcomeAt: l.salespersonOutcomeAt, persona: chiavePersona(l.phone), giaNelCrm: giaNelCrm.has(l.id),
     }))
     const chiusureAltrove = chiusiDal.flatMap(c => (c.at ? [{
-        leadId: c.id, persona: chiavePersona(c.phone), at: c.at, closeAmountEur: c.closeAmountEur, closeProduct: c.closeProduct,
+        leadId: c.id, persona: chiavePersona(c.phone), at: c.at, closeAmountEur: c.closeAmountEur, closeProduct: c.closeProduct, closeIsUpsell: c.closeIsUpsell,
     }] : []))
     // Le chiusure passate al Black Friday escono dagli altri funnel: una vendita, un posto solo.
     const alBf = new Set(attribuisciChiusureAltrove(leadsBf, chiusureAltrove).attribuite.map(a => a.leadChiusuraId))

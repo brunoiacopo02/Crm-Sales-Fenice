@@ -13,6 +13,7 @@ import { and, eq, gte, inArray, or, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { leadEvents, leads, users } from '@/db/schema'
 import { leadVero } from '@/lib/prova/sql'
+import { contaComeChiusura } from '@/lib/kpi/chiusure'
 import { signPayload } from '@/lib/marketing-webhooks/signing'
 import {
     FUNNEL_PROFESSIONI, UTM_BROCHURE_PG, calcolaBrochure, inizioRisposte, ingressoBrochure, nomeProfessione, professioneDaFrase, utmDaBrochure,
@@ -121,6 +122,7 @@ async function leggi(): Promise<Brochure> {
         assignedToId: leads.assignedToId, appointmentDate: leads.appointmentDate,
         appointmentCreatedAt: leads.appointmentCreatedAt, confirmationsOutcome: leads.confirmationsOutcome,
         presentedAt: leads.presentedAt, salespersonOutcome: leads.salespersonOutcome, closeAmountEur: leads.closeAmountEur,
+        closeIsUpsell: leads.closeIsUpsell,
         scrittoIl: scrittoIlFrase, frase: fraseScritta, nota: notaIngresso,
     }).from(leads).where(and(
         eq(leads.companyId, FENICE),
@@ -152,7 +154,7 @@ async function leggi(): Promise<Brochure> {
             appuntamento: r.appointmentCreatedAt !== null || r.appointmentDate !== null,
             confermato: r.confirmationsOutcome === 'confermato',
             presente: r.presentedAt !== null,
-            chiuso: r.salespersonOutcome === 'Chiuso',
+            chiuso: contaComeChiusura(r), // upsell (migr. 0064): euro sì, chiusura no
             euro: r.salespersonOutcome === 'Chiuso' ? r.closeAmountEur ?? 0 : 0,
             phone: r.phone,
             inizioRisposte: inizioRisposte(ingresso, scrittoIl),

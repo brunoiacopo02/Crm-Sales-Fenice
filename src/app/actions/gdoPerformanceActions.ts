@@ -13,6 +13,8 @@ import { getMinCallsPerDay } from "@/app/actions/managerAdvancedActions";
 import { accountVero, leadVero } from "@/lib/prova/sql";
 import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
 import { sqlLeadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount";
+import { nonUpsellSql } from "@/lib/kpi/chiusureSql";
+import { contaComeChiusura } from "@/lib/kpi/chiusure";
 
 export interface GamificationTargetInput {
     month: string;
@@ -204,6 +206,7 @@ export async function getManagerGdoTables(monthString: string) {
                 eq(leads.companyId, ctx.companyId),
                 leadSuo,
                 sql`LOWER(${leads.salespersonOutcome}) = 'chiuso'`,
+                nonUpsellSql(), // upsell (migr. 0064): non è una chiusura
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, startObj),
                 lt(leads.salespersonOutcomeAt, endObj)
@@ -481,6 +484,7 @@ async function getConfermeWeeklyState(
             isNotNull(leads.confirmationsUserId),
             eq(leads.confirmationsOutcome, 'confermato'),
             eq(leads.salespersonOutcome, 'Chiuso'),
+            nonUpsellSql(), // upsell (migr. 0064): non conta per le soglie del bonus di squadra
             isNotNull(leads.salespersonOutcomeAt),
             gte(leads.salespersonOutcomeAt, currentWeekStart),
             lte(leads.salespersonOutcomeAt, currentWeekEnd)
@@ -549,6 +553,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         confirmationsOutcome: leads.confirmationsOutcome,
         salespersonOutcome: leads.salespersonOutcome,
         presentedAt: leads.presentedAt,
+        closeIsUpsell: leads.closeIsUpsell,
     }).from(leads).where(
         and(
             eq(leads.companyId, ctx.companyId),
@@ -572,7 +577,7 @@ export async function getGdoLeadOutcomeMetrics(gdoUserId: string) {
         // Conta solo se confermato (PO 2026-10-13): le presenze del lancio senza
         // passaggio dalle Conferme non sono merito del fissaggio.
         const isPresenziatoFlag = lead.presentedAt !== null && isConfermato;
-        const isChiuso = lead.salespersonOutcome?.toLowerCase() === 'chiuso';
+        const isChiuso = contaComeChiusura(lead); // upsell (migr. 0064) escluso
 
         const apptAt = lead.appointmentDate ? new Date(lead.appointmentDate) : null;
         const inMonth = apptAt && apptAt >= monthStart && apptAt < monthEnd;

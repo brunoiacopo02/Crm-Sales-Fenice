@@ -20,6 +20,15 @@ test('il lead creato dalla riconciliazione porta il venditore (salespersonUserId
     assert.equal(row.funnel, 'FUORI FUNNEL');
 });
 
+test('upsell (titolare 21/11/2026): la scheda porta closeIsUpsell, di default false', () => {
+    const normale = buildLeadAssenteRow({ leadId: 'l1', companyId: 'fenice', phone: '3330000000', sheet, salesUserId: 'u-008' });
+    assert.equal(normale.closeIsUpsell, false);
+    const upsell = buildLeadAssenteRow({ leadId: 'l2', companyId: 'fenice', phone: '3330000000', sheet, salesUserId: 'u-008', upsell: true });
+    assert.equal(upsell.closeIsUpsell, true);
+    assert.equal(upsell.salespersonOutcome, 'Chiuso');
+    assert.equal(upsell.closeAmountEur, 1074);
+});
+
 test('non entra nel funnel GDO/Conferme: niente presenza, appuntamento, GDO o Conferme', () => {
     const row = buildLeadAssenteRow({ leadId: 'l1', companyId: 'fenice', phone: '3330000000', sheet, salesUserId: 'u-008' }) as Record<string, unknown>;
     for (const k of ['presentedAt', 'appointmentDate', 'assignedToId', 'confermeUserId', 'status', 'confirmationsOutcome']) {

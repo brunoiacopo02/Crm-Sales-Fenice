@@ -30,14 +30,20 @@ export interface FunnelStageLead {
     salespersonOutcomeAt: Date | null
     presentedAt: Date | null
     closeAmountEur: number | null
+    /** Upsell (migr. 0064): euro nel fatturato, ma `close` resta false. */
+    closeIsUpsell?: boolean | null
 }
 
 export interface FunnelStageHits {
     app: boolean
     conferme: boolean
     trattative: boolean
+    /** Chiusura da CONTARE (upsell esclusi, titolare 21/11/2026). */
     close: boolean
-    /** Fatturato da sommare: valorizzato solo quando `close` è true. */
+    /**
+     * Fatturato da sommare: valorizzato per ogni 'Chiuso' firmato nel mese,
+     * upsell compresi. Sommarlo a prescindere da `close`.
+     */
     fatturato: number
 }
 
@@ -56,15 +62,15 @@ export function stageHits(
     monthStart: Date,
     monthEnd: Date,
 ): FunnelStageHits {
-    const close = lead.salespersonOutcome === 'Chiuso'
+    const firma = lead.salespersonOutcome === 'Chiuso'
         && inRange(lead.salespersonOutcomeAt, monthStart, monthEnd)
 
     return {
         app: !!lead.appointmentDate && inRange(apptSetAt(lead), monthStart, monthEnd),
         conferme: lead.confirmationsOutcome === 'confermato'
             && inRange(lead.confirmationsTimestamp, monthStart, monthEnd),
-        trattative: inRange(lead.presentedAt, monthStart, monthEnd),
-        close,
-        fatturato: close ? (lead.closeAmountEur || 0) : 0,
+        trattative: lead.closeIsUpsell !== true && inRange(lead.presentedAt, monthStart, monthEnd),
+        close: firma && lead.closeIsUpsell !== true,
+        fatturato: firma ? (lead.closeAmountEur || 0) : 0,
     }
 }

@@ -57,6 +57,8 @@ export async function getVenditoreAppointments(sellerId: string) {
             version: leads.version,
             closeProduct: leads.closeProduct,
             closeAmountEur: leads.closeAmountEur,
+            // Etichetta "Upsell" nell'elenco (migr. 0064).
+            closeIsUpsell: leads.closeIsUpsell,
             notClosedReason: leads.notClosedReason,
             negotiationStartedAt: leads.negotiationStartedAt,
             salesCycleStartAt: leads.salesCycleStartAt,
@@ -737,6 +739,8 @@ export async function getVenditoreStorico(sellerId: string) {
         version: leads.version,
         closeProduct: leads.closeProduct,
         closeAmountEur: leads.closeAmountEur,
+        // Etichetta "Upsell" nello storico (migr. 0064).
+        closeIsUpsell: leads.closeIsUpsell,
         notClosedReason: leads.notClosedReason,
         negotiationStartedAt: leads.negotiationStartedAt,
     })

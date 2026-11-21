@@ -1,4 +1,5 @@
 import { cohortClosing } from '@/lib/kpi/salesCohort';
+import { tentativoContaComeChiusura } from '@/lib/kpi/chiusure';
 
 export interface AttemptInput {
     leadId: string;
@@ -16,7 +17,16 @@ export interface AttemptInput {
      * con `presentedAt` ha almeno un attempt: verificato in produzione).
      */
     presentedAt: Date | null;
+    /**
+     * `leads.closeIsUpsell` del LEAD (migr. 0064, titolare 21/11/2026): i tentativi di
+     * una scheda upsell portano euro nel fatturato ma non contano come chiusure.
+     * Facoltativo per i dati di test; l'action lo legge sempre dal join col lead.
+     */
+    closeIsUpsell?: boolean | null;
 }
+
+// Tentativo 'Chiuso' che conta come chiusura (upsell esclusi): lib/kpi/chiusure.
+const contaChiusura = (a: AttemptInput) => tentativoContaComeChiusura({ outcome: a.outcome, closeIsUpsell: a.closeIsUpsell ?? false });
 
 const inRange = (a: AttemptInput, start: Date, end: Date) =>
     a.outcomeAt >= start && a.outcomeAt < end;
@@ -45,7 +55,7 @@ export function followUpFunnel(attempts: AttemptInput[], start: Date, end: Date)
     const enteredLeads = new Set(
         attempts.filter(a => inRange(a, start, end) && a.outcome === 'Non chiuso').map(a => a.leadId),
     );
-    const closedLeads = new Set(attempts.filter(a => a.outcome === 'Chiuso').map(a => a.leadId));
+    const closedLeads = new Set(attempts.filter(contaChiusura).map(a => a.leadId));
     let closed = 0;
     for (const id of enteredLeads) if (closedLeads.has(id)) closed++;
     return { enteredFollowUp: enteredLeads.size, closed, conversionPct: roundPct(closed, enteredLeads.size) };
@@ -79,13 +89,16 @@ export function closingStats(attempts: AttemptInput[], start: Date, end: Date) {
 
     // Coorte: il modulo canonico filtra su `presentedAt` e scompone per esito corrente.
     const cohort = cohortClosing(
-        latest.map(a => ({ presentedAt: a.presentedAt, salespersonOutcome: a.outcome })),
+        latest.map(a => ({ presentedAt: a.presentedAt, salespersonOutcome: a.outcome, closeIsUpsell: a.closeIsUpsell })),
         start, end,
     );
 
     // Soldi: mese della firma, non mese della presenza (vedi nota sopra).
-    const chiusiNelMese = latest.filter(a => a.outcome === 'Chiuso' && inRange(a, start, end));
-    const fatturato = chiusiNelMese.reduce((s, a) => s + (a.closeAmountEur ?? 0), 0);
+    // Upsell (titolare 21/11/2026): gli euro entrano nel fatturato, la riga NON conta
+    // come chiusura (né nel top prodotto né nel denominatore del ticket medio).
+    const firmeNelMese = latest.filter(a => a.outcome === 'Chiuso' && inRange(a, start, end));
+    const fatturato = firmeNelMese.reduce((s, a) => s + (a.closeAmountEur ?? 0), 0);
+    const chiusiNelMese = firmeNelMese.filter(contaChiusura);
     const prodCounts = new Map<string, number>();
     for (const a of chiusiNelMese) if (a.closeProduct) prodCounts.set(a.closeProduct, (prodCounts.get(a.closeProduct) ?? 0) + 1);
     const topProduct = [...prodCounts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
@@ -105,7 +118,7 @@ export function closingStats(attempts: AttemptInput[], start: Date, end: Date) {
 }
 
 export function attemptsToClose(attempts: AttemptInput[], start: Date, end: Date) {
-    const closed = attempts.filter(a => inRange(a, start, end) && a.outcome === 'Chiuso');
+    const closed = attempts.filter(a => inRange(a, start, end) && contaChiusura(a));
     if (!closed.length) return { avgAttempts: 0, firstShotPct: 0 };
     const avg = closed.reduce((s, a) => s + (a.attemptNumber + 1), 0) / closed.length;
     const firstShot = closed.filter(a => a.attemptNumber === 0).length;

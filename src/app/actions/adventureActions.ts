@@ -5,6 +5,7 @@ import { adventureProgress, adventureBosses, users, coinTransactions, callLogs, 
 import { eq, and, gte, sql, count } from "drizzle-orm";
 import { dropCreature } from "./creatureActions";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
+import { nonUpsellSql } from "@/lib/kpi/chiusureSql";
 
 // Stage completion requirements (what it takes to advance 1 stage)
 // Requirements grow with stage number for ~4 month longevity
@@ -309,6 +310,7 @@ export async function countTodayActions(userId: string, metric: string): Promise
                     eq(leads.companyId, ctx.companyId),
                     eq(leads.assignedToId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso'),
+                    nonUpsellSql(), // upsell (migr. 0064): non è una chiusura
                     gte(leads.salespersonOutcomeAt, todayStart)
                 ));
             return result?.c ?? 0;

@@ -8,6 +8,7 @@ import { weekBoundsRome, monthBoundsRome, dayBoundsRome, toRomeDateStr, previous
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isConfermeTl } from '@/lib/confermeTl'
 import { isFunnelClosure } from '@/lib/kpi/canon'
+import { contaComeChiusura, isUpsell } from '@/lib/kpi/chiusure'
 import { leadDelMondoDiAccount, leadVero } from '@/lib/prova/sql'
 import { isConfermaAutomatica } from '@/lib/conferme/confermaAutomatica'
 
@@ -206,8 +207,10 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
     }
     const closedThisWeekRows = await db.select({
         amount: leads.closeAmountEur,
+        closeIsUpsell: leads.closeIsUpsell,
     }).from(leads).where(and(...closedWeekConditions))
-    const closedCountWeek = closedThisWeekRows.length
+    // Upsell (migr. 0064): euro sì, chiusura (e soglia bonus) no.
+    const closedCountWeek = closedThisWeekRows.filter(r => !isUpsell(r)).length
     const revenueEurWeek = closedThisWeekRows.reduce((sum, r) => sum + (r.amount || 0), 0)
 
     // === STORICO CHIUSURE SETTIMANALI (8 settimane chiuse precedenti) ===
@@ -239,8 +242,9 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         if (confermeUserId) {
             conds.push(eq(leads.confirmationsUserId, confermeUserId))
         }
-        const rows = await db.select({ amount: leads.closeAmountEur }).from(leads).where(and(...conds))
-        const cnt = rows.length
+        const rows = await db.select({ amount: leads.closeAmountEur, closeIsUpsell: leads.closeIsUpsell }).from(leads).where(and(...conds))
+        // Upsell (migr. 0064): fuori dal numero che decide i tier del bonus.
+        const cnt = rows.filter(r => !isUpsell(r)).length
         const rev = rows.reduce((s, r) => s + (r.amount || 0), 0)
         const t1 = cnt >= weeklyTier1Target
         const t2 = cnt >= weeklyTier2Target
@@ -316,6 +320,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
         outcomeAt: leads.salespersonOutcomeAt,
         presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
+        closeIsUpsell: leads.closeIsUpsell,
         confirmationsOutcome: leads.confirmationsOutcome,
         confirmationsUserId: leads.confirmationsUserId,
     }).from(leads).where(and(
@@ -344,7 +349,7 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             const pa = r.presentedAt ? new Date(r.presentedAt) : null
             const ca = r.outcomeAt ? new Date(r.outcomeAt) : null
             if (pa && pa >= start && pa < end) automaticiLancio.presenze++
-            if (r.outcome === 'Chiuso' && ca && ca >= start && ca < end) automaticiLancio.chiusure++
+            if (contaComeChiusura({ salespersonOutcome: r.outcome, closeIsUpsell: r.closeIsUpsell }) && ca && ca >= start && ca < end) automaticiLancio.chiusure++
             continue
         }
         const presAt = r.presentedAt ? new Date(r.presentedAt) : null
@@ -354,7 +359,8 @@ export async function getConfermeKpiStats(monthDate: Date = new Date(), conferme
             if (toRomeDateStr(presAt) === todayStr) todayTrat++
         }
         const closeAt = r.outcomeAt ? new Date(r.outcomeAt) : null
-        if (r.outcome === 'Chiuso' && closeAt && closeAt >= start && closeAt < end) {
+        // Upsell (migr. 0064): non è un contratto in più.
+        if (contaComeChiusura({ salespersonOutcome: r.outcome, closeIsUpsell: r.closeIsUpsell }) && closeAt && closeAt >= start && closeAt < end) {
             actClosedMonth++
             if (toRomeDateStr(closeAt) === todayStr) todayClosedReal++
         }
@@ -525,6 +531,8 @@ type TlLeadRow = {
     salespersonOutcome: string | null
     salespersonOutcomeAt: Date | null
     amount: number | null
+    /** Upsell (migr. 0064): euro nel fatturato, non nelle chiusure. */
+    closeIsUpsell: boolean | null
     /** Conferma automatica del bot del lancio (isConfermaAutomatica): fuori dal merito delle Conferme. */
     auto?: boolean
 }
@@ -566,7 +574,8 @@ function accumulate(acc: TlFunnelRow, r: TlLeadRow, s: Date, e: Date): void {
     // Solo presenze di appuntamenti confermati: pres/conf resta un rapporto vero.
     if (r.confirmationsOutcome === 'confermato' && inRange(r.presentedAt, s, e)) acc.presenziati++
     if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, s, e)) {
-        acc.chiusi++
+        // Upsell (migr. 0064): euro sì, chiusura no.
+        if (contaComeChiusura(r)) acc.chiusi++
         acc.fatturatoEur += r.amount || 0
         // Chiusura senza presenza (riconciliazione fatturato): vera per i
         // soldi (fatturatoEur sopra), esclusa dal numeratore dei tassi.
@@ -606,6 +615,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             salespersonOutcome: leads.salespersonOutcome,
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
             amount: leads.closeAmountEur,
+            closeIsUpsell: leads.closeIsUpsell,
         }).from(leads).where(and(
             companyScope(ctx, leads.companyId),
             // Lead di prova (migr. 0050) fuori dalla panoramica del TL.
@@ -628,7 +638,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             if (!r.auto) continue
             if (inRange(r.confirmationsTimestamp, start, end)) automaticiLancio.confermati++
             if (inRange(r.presentedAt, start, end)) automaticiLancio.presentati++
-            if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, start, end)) automaticiLancio.chiusure++
+            if (contaComeChiusura(r) && inRange(r.salespersonOutcomeAt, start, end)) automaticiLancio.chiusure++
         }
 
         // ── Totali mese + breakdown per funnel ──────────────────────────────
@@ -778,7 +788,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
             for (const r of rows) {
                 if (r.auto) continue
                 if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, wk.start, wk.end)) {
-                    chiusureSettimana++
+                    if (contaComeChiusura(r)) chiusureSettimana++ // upsell: euro sì, chiusura no
                     fatturatoSettimana += r.amount || 0
                 }
             }
@@ -820,7 +830,7 @@ export async function getConfermeTlOverview(yearMonth?: string): Promise<Conferm
                 }
                 if (r.confirmationsOutcome === 'confermato' && inRange(r.presentedAt, start, end)) presenziati++
                 if (r.salespersonOutcome === 'Chiuso' && inRange(r.salespersonOutcomeAt, start, end)) {
-                    chiusure++
+                    if (contaComeChiusura(r)) chiusure++ // upsell: euro sì, chiusura no
                     fatturatoEur += r.amount || 0
                 }
             }
@@ -922,6 +932,7 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
         presentedAt: leads.presentedAt,
         amount: leads.closeAmountEur,
+        closeIsUpsell: leads.closeIsUpsell,
     }).from(leads).where(and(
         companyScope(ctx, leads.companyId),
         leadVero(),
@@ -958,6 +969,14 @@ export async function getConfermeSalesList(monthDate: Date = new Date()) {
         seenLeadIds.set(sid, seen)
 
         const cur = statsMap.get(sid) || { assigned: 0, trattative: 0, chiusure: 0, revenue: 0 }
+        // Upsell (migr. 0064): non è un lead assegnato né una chiusura, solo euro.
+        if (isUpsell(r)) {
+            const firmaNelMese = r.salespersonOutcome === 'Chiuso' && r.salespersonOutcomeAt
+                && new Date(r.salespersonOutcomeAt) >= start && new Date(r.salespersonOutcomeAt) < end
+            if (firmaNelMese) cur.revenue += r.amount || 0
+            statsMap.set(sid, cur)
+            continue
+        }
         cur.assigned++
         // Trattative: latch presentedAt (PO 2026-07-17) — contano nel mese del giorno
         // dell'appuntamento presenziato. Chiusure: contano nel mese dell'esito venditore.

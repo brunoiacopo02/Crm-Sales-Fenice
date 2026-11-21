@@ -30,6 +30,7 @@ import { leggiSerie } from './serieDb'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati, leggiMembriSquadra } from '@/lib/diretta/fissatiDb'
 import { creditOnce, reverseOnce } from './ledger'
+import { contaComeChiusura } from '@/lib/kpi/chiusure'
 import { settimanaDaLunedi, settimanaLunSab } from './premiSettimana'
 import {
     ECONOMY_RULES_KEY, parseEconomyRules, inizioEconomia,
@@ -705,6 +706,7 @@ async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end:
         presentedAt: leads.presentedAt,
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
+        closeIsUpsell: leads.closeIsUpsell,
     }).from(leads).where(and(
         eq(leads.confirmationsOutcome, 'confermato'),
         leadDelMondoDiAccount(userId),
@@ -739,7 +741,8 @@ async function leggiLeadObiettivi(tx: Lettore, userId: string, start: Date, end:
             confermaUtile: confermaUtile(c) || !!confermaRegistrata(delLead, c.id),
             autoreEsito: autoreUltimoEsito(suoi),
             presentedAt: c.presentedAt,
-            chiusoAt: c.salespersonOutcome === 'Chiuso' ? c.salespersonOutcomeAt : null,
+            // Upsell (migr. 0064): non è una chiusura per gli obiettivi/piume.
+            chiusoAt: contaComeChiusura(c) ? c.salespersonOutcomeAt : null,
             presenzaVerificata: verificati.presenza,
             chiusuraVerificata: verificati.chiusura,
         }

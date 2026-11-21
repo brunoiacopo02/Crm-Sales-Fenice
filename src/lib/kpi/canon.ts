@@ -85,8 +85,12 @@ export function isAnsweredLog(outcome: string | null, discardReason: string | nu
  * un tasso di conversione: altrimenti un GDO/team può leggere un tasso di
  * chiusura oltre il 100% (chiuso ma mai presentato). Vedi task 10 riconciliazione.
  */
-export function isFunnelClosure(lead: { salespersonOutcome: string | null; presentedAt: Date | null }): boolean {
-    return (lead.salespersonOutcome ?? '').toLowerCase() === 'chiuso' && lead.presentedAt !== null
+//
+// Upsell (titolare 21/11/2026, migr. 0064): una scheda `closeIsUpsell` non è mai
+// una chiusura di funnel, anche se avesse una presenza. Il campo è facoltativo qui
+// perché la scheda upsell nasce sempre senza `presentedAt` (vedi lib/kpi/chiusure).
+export function isFunnelClosure(lead: { salespersonOutcome: string | null; presentedAt: Date | null; closeIsUpsell?: boolean | null }): boolean {
+    return (lead.salespersonOutcome ?? '').toLowerCase() === 'chiuso' && lead.presentedAt !== null && lead.closeIsUpsell !== true
 }
 
 // Filtro standard per GDO "veri" nelle classifiche/medie (esclude il bot

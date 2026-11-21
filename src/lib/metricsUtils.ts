@@ -24,6 +24,7 @@ import { db } from "@/db";
 import { leads } from "@/db/schema";
 import { and, eq, gte, lt, sql, isNotNull } from "drizzle-orm";
 import { monthBoundsRome, dayBoundsRome, weekBoundsRome } from "./dateUtils";
+import { nonUpsellSql } from "./kpi/chiusureSql";
 
 // =====================================================================
 // Types
@@ -120,6 +121,9 @@ function buildConditions(metric: MetricId, scope: MetricScope | undefined, start
         case 'M6_FATTURATO':
             conds.push(eq(leads.salespersonOutcome, 'Chiuso'));
             conds.push(gte(leads.salespersonOutcomeAt, start), lt(leads.salespersonOutcomeAt, end));
+            // Upsell (titolare 21/11/2026): fuori dal NUMERO di chiusure. In M6 la
+            // riga resta per la somma degli euro e il count esclude l'upsell.
+            if (metric === 'M5_CHIUSURE') conds.push(nonUpsellSql());
             break;
     }
 
@@ -156,7 +160,7 @@ export async function getMetric(
 
     if (metric === 'M6_FATTURATO') {
         const [row] = await db.select({
-            c: sql<number>`count(*)::int`,
+            c: sql<number>`(count(*) FILTER (WHERE ${nonUpsellSql()}))::int`,
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(...conditions));
         return { count: Number(row?.c ?? 0), amountEur: Number(row?.s ?? 0) };
@@ -192,7 +196,7 @@ export async function getMetricGrouped(
     if (metric === 'M6_FATTURATO') {
         const rows = await db.select({
             k: groupCol,
-            c: sql<number>`count(*)::int`,
+            c: sql<number>`(count(*) FILTER (WHERE ${nonUpsellSql()}))::int`,
             s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
         }).from(leads).where(and(...conditions)).groupBy(groupCol);
 

@@ -10,6 +10,7 @@ import { currentTenant, assertSalesArea, assertSingleCompany, type TenantContext
 import { pickAndAssignBuckets, acGet, AC_KEY } from "@/lib/launchPoolShared"
 import { normalizePhoneStrict, normalizePhoneLenient, isPlausiblePhone } from "@/lib/phoneNormalize"
 import { LANCIO_BUCKET, isLancioIntakeEnabled } from "@/lib/lancio/intake"
+import { chiusuraContataSql } from "@/lib/kpi/chiusureSql"
 
 const DB_POOL_COMPANY = 'fenice'
 const DB_POOL_FUNNEL = 'Database' // valore canonico: 13.734 lead storici lo usano già
@@ -387,7 +388,8 @@ export async function getDatabasePoolStats(): Promise<DatabasePoolRow[] | null> 
             chiamati: sql<number>`count(*) FILTER (WHERE ${leads.callCount} >= 1)::int`,
             fissati: sql<number>`count(*) FILTER (WHERE ${leads.appointmentCreatedAt} IS NOT NULL)::int`,
             confermati: sql<number>`count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato')::int`,
-            chiusi: sql<number>`count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso')::int`,
+            // Upsell (migr. 0064): negli euro, non nel numero di chiusi.
+            chiusi: sql<number>`count(*) FILTER (WHERE ${chiusuraContataSql()})::int`,
             fatturatoEur: sql<number>`COALESCE(sum(${leads.closeAmountEur}) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso'), 0)::float`,
         })
         .from(leads)

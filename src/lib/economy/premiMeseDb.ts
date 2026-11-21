@@ -30,6 +30,7 @@ import { readGamificationTargets } from '@/lib/diretta/settings'
 import { sqlLeadConta, sqlRigaConta } from '@/lib/diretta/inizioAccount'
 import { leggiInizioAccount } from '@/lib/diretta/vistaDa'
 import { accountVero } from '@/lib/prova/sql'
+import { nonUpsellSql } from '@/lib/kpi/chiusureSql'
 import { readEconomyRules } from './awards'
 import { inizioEconomia, isConfermePersona } from './rules'
 import {
@@ -58,6 +59,7 @@ async function leggiConfermeGrezze(companyId: string, start: Date, end: Date): P
         db.select({ at: leads.salespersonOutcomeAt }).from(leads).where(and(
             confermati,
             eq(leads.salespersonOutcome, 'Chiuso'),
+            nonUpsellSql(), // upsell (migr. 0064): non è una chiusura del bonus Conferme
             gte(leads.salespersonOutcomeAt, start),
             lt(leads.salespersonOutcomeAt, end),
         )),

@@ -508,7 +508,7 @@ export function VenditoreDashboardClient({ sellerId }: { sellerId: string }) {
                                                         {app.salespersonOutcome === 'Chiuso' ? <CheckCircle2 className="w-3.5 h-3.5" /> :
                                                             app.salespersonOutcome === 'Sparito' ? <HelpCircle className="w-3.5 h-3.5" /> :
                                                                 <AlertCircle className="w-3.5 h-3.5" />}
-                                                        {app.salespersonOutcome}
+                                                        {app.salespersonOutcome}{app.closeIsUpsell ? ' · Upsell' : ''}
                                                     </div>
                                                 ) : (
                                                     <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200/50">

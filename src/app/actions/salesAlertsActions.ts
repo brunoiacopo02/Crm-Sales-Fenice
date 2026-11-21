@@ -20,6 +20,7 @@ import { and, eq, gte, lt, lte, inArray, isNull, isNotNull, or } from "drizzle-o
 import { currentTenant, assertSalesArea, type TenantContext } from '@/lib/tenancy';
 import { isConfermeTl } from "@/lib/confermeTl";
 import { accountVero, leadVero } from "@/lib/prova/sql";
+import { isUpsell } from "@/lib/kpi/chiusure";
 import {
     countWorkingDaysInMonth,
     countWorkingDaysElapsed,
@@ -232,6 +233,7 @@ async function cardsForCompany(
         db.select({
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
             closeAmountEur: leads.closeAmountEur,
+            closeIsUpsell: leads.closeIsUpsell,
         })
             .from(leads)
             .where(and(
@@ -260,7 +262,7 @@ async function cardsForCompany(
     for (const r of closeRows) {
         const d = dayIndex(r.salespersonOutcomeAt);
         if (d === null) continue;
-        closeByDay[d] += 1;
+        if (!isUpsell(r)) closeByDay[d] += 1; // upsell (migr. 0064): valore sì, chiusura no
         valoreByDay[d] += r.closeAmountEur || 0;
     }
 

@@ -17,6 +17,7 @@ import { currentTenant, assertSalesArea } from '@/lib/tenancy';
 import { workingDaysBetween, currentYearMonthRome } from "@/lib/workingDaysUtils";
 import { MANAGER_TARGET_APP_PER_GDO_DAY as TARGET_APP_PER_GDO_DAY } from "@/lib/kpi/canon";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
+import { isUpsell } from "@/lib/kpi/chiusure";
 import { nonToltoAlBotSql } from "@/lib/toltiAlBot";
 import { accountVero, leadVero } from "@/lib/prova/sql";
 import { leggiInizioAccount } from "@/lib/diretta/vistaDa";
@@ -139,6 +140,7 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         const closeRows = await db.select({
             salespersonOutcomeAt: leads.salespersonOutcomeAt,
             closeAmountEur: leads.closeAmountEur,
+            closeIsUpsell: leads.closeIsUpsell,
         })
             .from(leads)
             .where(and(
@@ -153,7 +155,8 @@ export async function getManagerOverview(): Promise<ManagerOverviewResult> {
         let fatturatoSettimana = 0;
         for (const r of closeRows) {
             const t = new Date(r.salespersonOutcomeAt!);
-            if (t >= monthStart && t < monthEnd) chiusureMtd++;
+            // Upsell (migr. 0064): euro nel fatturato, non nel numero di chiusure.
+            if (t >= monthStart && t < monthEnd && !isUpsell(r)) chiusureMtd++;
             if (t >= weekStart) fatturatoSettimana += r.closeAmountEur || 0;
         }
 
