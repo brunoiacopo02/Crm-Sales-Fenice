@@ -48,6 +48,8 @@ export interface LeadBf {
     persona?: string | null
     /** La persona era già nel CRM prima dell'ingresso BF (vedi personeGiaNelCrm). */
     giaNelCrm?: boolean
+    /** Upsell (migr. 0064, titolare 21/11/2026): euro nei totali, NON nel numero di chiusi. */
+    closeIsUpsell?: boolean | null
 }
 
 /**
@@ -61,6 +63,8 @@ export interface ChiusuraAltrove {
     at: Date
     closeAmountEur: number | null
     closeProduct: string | null
+    /** La scheda è un upsell (migr. 0064): portata sulla scheda BF resta upsell. */
+    closeIsUpsell?: boolean | null
 }
 
 /** Stato della chat del lead BF, dal bot. */
@@ -159,7 +163,7 @@ export function chiavePersona(telefono: string | null | undefined): string | nul
 }
 
 /** Una chiusura su un'altra scheda contata per il Black Friday. */
-export interface ChiusuraAttribuita { leadBfId: string; leadChiusuraId: string; at: Date; closeAmountEur: number | null; closeProduct: string | null }
+export interface ChiusuraAttribuita { leadBfId: string; leadChiusuraId: string; at: Date; closeAmountEur: number | null; closeProduct: string | null; closeIsUpsell?: boolean | null }
 
 /**
  * Porta sulla scheda BF le chiusure fatte su un'altra scheda della stessa persona.
@@ -193,14 +197,15 @@ export function attribuisciChiusureAltrove(leads: LeadBf[], chiusure: ChiusuraAl
             .filter(c => c.at >= prima.createdAt)
             .sort((a, b) => a.at.getTime() - b.at.getTime())[0]
         if (!valida) continue
-        attribuite.push({ leadBfId: prima.id, leadChiusuraId: valida.leadId, at: valida.at, closeAmountEur: valida.closeAmountEur, closeProduct: valida.closeProduct })
+        attribuite.push({ leadBfId: prima.id, leadChiusuraId: valida.leadId, at: valida.at, closeAmountEur: valida.closeAmountEur, closeProduct: valida.closeProduct, closeIsUpsell: valida.closeIsUpsell === true })
     }
     if (attribuite.length === 0) return { leads, attribuite }
     const perLead = new Map(attribuite.map(a => [a.leadBfId, a]))
     return {
         leads: leads.map(l => {
             const a = perLead.get(l.id)
-            return a ? { ...l, salespersonOutcome: 'Chiuso', salespersonOutcomeAt: a.at, closeAmountEur: a.closeAmountEur, closeProduct: a.closeProduct } : l
+            // Un upsell portato sulla scheda BF resta upsell: euro sì, chiusura no.
+            return a ? { ...l, salespersonOutcome: 'Chiuso', salespersonOutcomeAt: a.at, closeAmountEur: a.closeAmountEur, closeProduct: a.closeProduct, closeIsUpsell: a.closeIsUpsell === true } : l
         }),
         attribuite,
     }
@@ -309,7 +314,9 @@ export function stadiSm(righe: (FunnelStageLead & { confirmationsOutcome: string
             s.presenze++
             if (l.confirmationsOutcome === 'confermato') s.presenzeConfermate++
         }
-        if (h.close) { s.chiusi++; s.euro += h.fatturato }
+        // Upsell: euro sì, chiusura no (stageHits).
+        if (h.close) s.chiusi++
+        s.euro += h.fatturato
     }
     return s
 }
@@ -543,7 +550,9 @@ function imbuto(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): 
     }
     // Sui lead, non sugli appuntamenti: una vendita firmata su un'altra scheda della
     // persona (attribuisciChiusureAltrove) arriva su una scheda BF senza appuntamento.
-    const chiusi = a.filter(l => l.salespersonOutcome === 'Chiuso')
+    // Upsell (migr. 0064): negli euro, non nel numero di chiusi.
+    const firmati = a.filter(l => l.salespersonOutcome === 'Chiuso')
+    const chiusi = firmati.filter(l => l.closeIsUpsell !== true)
     return {
         entrati: a.length,
         conChat, consegnato, risposto,
@@ -556,7 +565,7 @@ function imbuto(a: LeadBf[], adesso: Date, bot: Map<string, BotLeadBf> | null): 
         inAttesa: app.length - confermati - scart.length,
         presenti: app.filter(l => l.presentedAt !== null).length,
         chiusi: chiusi.length,
-        euroChiusi: chiusi.reduce((s, l) => s + (l.closeAmountEur ?? 0), 0),
+        euroChiusi: firmati.reduce((s, l) => s + (l.closeAmountEur ?? 0), 0),
         nonChiusi: app.filter(l => l.salespersonOutcome === 'Non chiuso').length,
         futuri: app.filter(l => l.appointmentDate !== null && l.appointmentDate > adesso).length,
     }
@@ -718,7 +727,7 @@ export function calcolaMonitorBf(input: InputMonitorBf): MonitorBf {
             chiave: c, nome: NOMI_CANALE[c], lead: a.length,
             risposto, pctRisposto: risposto === null ? null : pct(risposto, a.length),
             appuntamenti: app.length, pctAppuntamenti: pct(app.length, a.length),
-            presenti: app.filter(l => l.presentedAt !== null).length, chiusi: a.filter(l => l.salespersonOutcome === 'Chiuso').length,
+            presenti: app.filter(l => l.presentedAt !== null).length, chiusi: a.filter(l => l.salespersonOutcome === 'Chiuso' && l.closeIsUpsell !== true).length,
         }
     })
 

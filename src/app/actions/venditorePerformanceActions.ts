@@ -59,6 +59,7 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
         // Latch presenza del lead: serve al closing rate di coorte (stesso valore su
         // tutte le righe dello stesso lead).
         presentedAt: leads.presentedAt,
+        closeIsUpsell: leads.closeIsUpsell,
     }).from(salesAttempts)
       .innerJoin(leads, eq(leads.id, salesAttempts.leadId))
       .where(and(
@@ -76,6 +77,7 @@ export async function getVenditorePerformance(input: { salesUserId: string; year
         closeAmountEur: r.closeAmountEur,
         outcomeAt: new Date(r.outcomeAt),
         presentedAt: r.presentedAt ? new Date(r.presentedAt) : null,
+        closeIsUpsell: r.closeIsUpsell,
     }))
 
     const { start, end } = monthBoundsRome(input.yearMonth)
@@ -116,6 +118,8 @@ export interface VenditoreRispostaRow {
     notClosedReason: string | null;
     nextFollowUpDate: string | null;           // ISO
     closeProduct: string | null; closeAmountEur: number | null;
+    /** Scheda upsell (migr. 0064): solo per l'etichetta "Upsell" nell'elenco. */
+    closeIsUpsell: boolean;
     notes: string | null;                      // leads.salespersonOutcomeNotes
 }
 
@@ -151,6 +155,7 @@ export async function getVenditoriRisposte(input: { yearMonth: string; salesUser
             attemptNumber: salesAttempts.attemptNumber, outcome: salesAttempts.outcome,
             notClosedReason: salesAttempts.notClosedReason, nextFollowUpDate: salesAttempts.nextFollowUpDate,
             closeProduct: salesAttempts.closeProduct, closeAmountEur: salesAttempts.closeAmountEur,
+            closeIsUpsell: leads.closeIsUpsell,
             notes: leads.salespersonOutcomeNotes,
         }).from(salesAttempts)
           .innerJoin(leads, eq(leads.id, salesAttempts.leadId))

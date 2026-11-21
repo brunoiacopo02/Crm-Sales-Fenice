@@ -8,6 +8,7 @@ import { getStreakMultiplier } from "@/lib/streakUtils";
 import { getActiveEventMultipliers } from "@/lib/seasonalEventUtils";
 import { currentTenant, assertSalesArea } from "@/lib/tenancy";
 import { VECCHIA_ECONOMIA_CONGELATA } from "@/lib/economy/legacy";
+import { nonUpsellSql } from "@/lib/kpi/chiusureSql";
 
 // --- Helpers ---
 
@@ -285,6 +286,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
                     isNotNull(leads.confirmationsUserId),
                     eq(leads.confirmationsOutcome, 'confermato'),
                     eq(leads.salespersonOutcome, 'Chiuso'),
+                    nonUpsellSql(), // upsell (migr. 0064): non è una chiusura
                     isNotNull(leads.salespersonOutcomeAt),
                     gte(leads.salespersonOutcomeAt, start),
                     lte(leads.salespersonOutcomeAt, end)
@@ -299,6 +301,7 @@ async function measureMetric(userId: string, metric: string, start: Date, end: D
                     eq(leads.companyId, companyId),
                     eq(leads.salespersonUserId, userId),
                     eq(leads.salespersonOutcome, 'Chiuso'),
+                    nonUpsellSql(), // upsell (migr. 0064): euro sì (fatturato_eur), chiusura no
                     isNotNull(leads.salespersonOutcomeAt),
                     gte(leads.salespersonOutcomeAt, start),
                     lte(leads.salespersonOutcomeAt, end)

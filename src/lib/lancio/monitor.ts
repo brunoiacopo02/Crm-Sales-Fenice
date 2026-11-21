@@ -11,6 +11,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { leadEvents, leads } from '@/db/schema'
 import { DELIVERED_PUSH_RESULTS_SQL } from '@/lib/bot-fissatore/pushAudit'
+import { chiusuraContataSql } from '@/lib/kpi/chiusureSql'
 import { LANCIO_WEBDEV, CALL_NOW_MAX_ATTEMPTS, type LancioConfig } from './config'
 
 export interface LancioMonitor {
@@ -38,7 +39,8 @@ export async function getLancioMonitor(
         pulsantePremuto: sql<number>`count(*) filter (where ${leads.lancioIngresso} = 'pulsante_webinar' or ${leads.lancioScelta} is not null)::int`,
         csAssegnate: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'chiamata_subito')::int`,
         csEsitate: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'chiamata_subito' and ${leads.salespersonOutcome} is not null)::int`,
-        csChiuse: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'chiamata_subito' and ${leads.salespersonOutcome} = 'Chiuso')::int`,
+        // Upsell (migr. 0064): negli euro (csEuro), non nel numero di chiuse.
+        csChiuse: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'chiamata_subito' and ${chiusuraContataSql()})::int`,
         csEuro: sql<number>`coalesce(sum(${leads.closeAmountEur}) filter (where ${leads.lancioScelta} = 'chiamata_subito' and ${leads.salespersonOutcome} = 'Chiuso'), 0)::float`,
         csConferme: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'chiamata_subito' and ${leads.lancioCallNowAttempts} >= ${CALL_NOW_MAX_ATTEMPTS} and ${leads.salespersonUserId} is null)::int`,
         mattina: sql<number>`count(*) filter (where ${leads.lancioScelta} = 'app_mattina')::int`,

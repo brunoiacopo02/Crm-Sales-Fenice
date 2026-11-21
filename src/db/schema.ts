@@ -315,6 +315,12 @@ export const leads = pgTable('leads', {
     presentedAt: timestamp('presentedAt', { withTimezone: true, mode: 'date' }),
     closeProduct: text('closeProduct'), // 'advance' | 'gold' | 'exclusive'
     closeAmountEur: real('closeAmountEur'),
+    // Upsell di un già cliente (migr. 0064, titolare 21/11/2026): la scheda è un
+    // "Chiuso" che porta EURO nel fatturato del mese ma NON conta come chiusura
+    // (né numero di chiusure, né closing rate, né bonus/premi a numero).
+    // Leggere sempre tramite @/lib/kpi/chiusure (contaComeChiusura) o
+    // @/lib/kpi/chiusureSql (chiusuraContataSql / nonUpsellSql).
+    closeIsUpsell: boolean('closeIsUpsell').default(false).notNull(),
     notClosedReason: text('notClosedReason'),
     followUp1Date: timestamp('followUp1Date', { withTimezone: true, mode: 'date' }),
     followUp2Date: timestamp('followUp2Date', { withTimezone: true, mode: 'date' }),

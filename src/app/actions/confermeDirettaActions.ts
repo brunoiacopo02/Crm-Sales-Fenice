@@ -18,6 +18,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { conRuoloDb, haRuoloDb } from "@/lib/auth/ruoloDb"
 import { writeSetting } from "@/lib/diretta/settings"
 import { accountVero, leadDelMondoDi, leadVero } from "@/lib/prova/sql"
+import { contaComeChiusura } from "@/lib/kpi/chiusure"
 import {
     CONFERME_BONUS_KEY, parseConfermeBonus, validateConfermeBonus,
     type BonusPeriodo, type BonusUnita, type ConfermeBonusConfig,
@@ -57,6 +58,7 @@ async function leggiConfermeRows(companyIds: string[], since: Date, prova: { use
         presentedAt: leads.presentedAt,
         outcome: leads.salespersonOutcome,
         outcomeAt: leads.salespersonOutcomeAt,
+        closeIsUpsell: leads.closeIsUpsell,
     }).from(leads).where(and(
         inArray(leads.companyId, companyIds),
         eq(leads.confirmationsOutcome, 'confermato'),
@@ -78,7 +80,8 @@ async function leggiConfermeRows(companyIds: string[], since: Date, prova: { use
         userId: r.userId,
         confirmedAt: r.confirmedAt ? r.confirmedAt.getTime() : null,
         presentedAt: r.presentedAt ? r.presentedAt.getTime() : null,
-        chiusoAt: r.outcome === 'Chiuso' && r.outcomeAt ? r.outcomeAt.getTime() : null,
+        // Upsell (migr. 0064): non è una chiusura del bonus Conferme.
+        chiusoAt: contaComeChiusura({ salespersonOutcome: r.outcome, closeIsUpsell: r.closeIsUpsell }) && r.outcomeAt ? r.outcomeAt.getTime() : null,
     }))
 }
 

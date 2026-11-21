@@ -8,6 +8,8 @@ import { dayBoundsRome, weekBoundsRome } from "@/lib/dateUtils"
 import { currentTenant, assertSalesArea, companyScope } from '@/lib/tenancy'
 import { isRealGdo, apptSetAt, isNeverAnsweredLog, isAnsweredLog } from '@/lib/kpi/canon'
 import { contaNeiKpiSql } from '@/lib/intakeBatch'
+import { isUpsell } from '@/lib/kpi/chiusure'
+import { nonUpsellSql } from '@/lib/kpi/chiusureSql'
 import { leadVero } from '@/lib/prova/sql'
 import { leggiInizioAccount } from '@/lib/diretta/vistaDa'
 import { leadConta, rigaConta, sqlLeadConta, sqlRigaConta } from '@/lib/diretta/inizioAccount'
@@ -497,7 +499,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
     // Chiusure Settimanali (lead originariamente assegnati a questo GDO,
     // chiusi dal venditore nella settimana corrente — basato su
     // salespersonOutcomeAt, che ora è editabile dal venditore)
-    const weeklyClosedRows = await db.select({ amount: leads.closeAmountEur })
+    const weeklyClosedRows = await db.select({ amount: leads.closeAmountEur, closeIsUpsell: leads.closeIsUpsell })
         .from(leads)
         .where(and(
             companyScope(ctx, leads.companyId),
@@ -508,7 +510,7 @@ export const getGdoTargetsProgress = async (gdoId: string) => {
             gte(leads.salespersonOutcomeAt, weekStart),
             lt(leads.salespersonOutcomeAt, weekEnd)
         ))
-    const weeklyClosedCount = weeklyClosedRows.length
+    const weeklyClosedCount = weeklyClosedRows.filter(r => !isUpsell(r)).length // upsell: euro sì, chiusura no
     const weeklyRevenueEur = weeklyClosedRows.reduce((sum, r) => sum + (r.amount || 0), 0)
 
     const res = {
@@ -743,6 +745,7 @@ export async function getGdoThroughputMetrics30d(): Promise<GdoThroughputMetrics
             companyScope(ctx, leads.companyId),
             isNotNull(leads.assignedToId),
             eq(leads.salespersonOutcome, 'Chiuso'),
+            nonUpsellSql(), // upsell (migr. 0064): non è una chiusura
             gte(leads.salespersonOutcomeAt, startBound),
             lt(leads.salespersonOutcomeAt, end),
         ))

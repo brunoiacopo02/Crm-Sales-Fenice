@@ -54,6 +54,7 @@ import { currentTenant, assertSalesArea, companyScope } from "@/lib/tenancy"
 import { computeDayMetrics, median, type DayCall } from "@/lib/cdr/dayMetrics"
 import { shiftBoundsFor, lateAndEarly, trainingAllowanceSec, isCollectiveTrainingDay, fermoTotalSeconds, SATURDAY_TRAINING_ALLOWANCE_MIN, WEEKDAY_DAYS_SHORT_THRESHOLD_MIN, SATURDAY_DAYS_SHORT_THRESHOLD_MIN, romeDowOf } from "@/lib/cdr/shift"
 import { apptSetAt, isFunnelClosure } from "@/lib/kpi/canon"
+import { isUpsell } from "@/lib/kpi/chiusure"
 import { dayBoundsRome, toRomeDateStr } from "@/lib/dateUtils"
 import { nomeVeroOppure } from "@/lib/diretta/nomeSql"
 import { accountVero, leadVero } from "@/lib/prova/sql"
@@ -692,6 +693,7 @@ export async function getApptQuality(
         salespersonOutcome: leads.salespersonOutcome,
         salespersonOutcomeAt: leads.salespersonOutcomeAt,
         closeAmountEur: leads.closeAmountEur,
+        closeIsUpsell: leads.closeIsUpsell,
     })
         .from(leads)
         .innerJoin(users, eq(users.id, leads.assignedToId))
@@ -730,7 +732,7 @@ export async function getApptQuality(
         const confermato = r.confirmationsOutcome === 'confermato'
         if (confermato && inRange(r.presentedAt)) s.presenziati += 1
         if (r.salespersonOutcome?.toLowerCase() === 'chiuso' && inRange(r.salespersonOutcomeAt)) {
-            s.chiusi += 1
+            if (!isUpsell(r)) s.chiusi += 1 // upsell (migr. 0064): euro sì, chiusura no
             s.fatturato += r.closeAmountEur || 0
             // Numeratore di chiusuraPct: solo chiusure con presenza vera (la
             // riconciliazione fatturato può chiudere un lead scartato dal GDO,

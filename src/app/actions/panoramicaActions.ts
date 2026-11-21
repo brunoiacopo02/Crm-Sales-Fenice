@@ -13,6 +13,7 @@ import {
     parseYearMonth,
 } from "@/lib/workingDaysUtils";
 import { stageHits } from "@/lib/kpi/funnelStages";
+import { nonUpsellSql } from "@/lib/kpi/chiusureSql";
 import { contaNeiKpiSql } from "@/lib/intakeBatch";
 import { leadVero } from "@/lib/prova/sql";
 import { LANCIO_BUCKET } from "@/lib/lancio/intake";
@@ -601,6 +602,7 @@ async function metricsOverviewForCompany(ctx: TenantContext, ym: string): Promis
                 gte(leads.salespersonOutcomeAt, todayStart),
                 lt(leads.salespersonOutcomeAt, todayEnd),
                 eq(leads.salespersonOutcome, 'Chiuso'),
+                nonUpsellSql(), // upsell (migr. 0064): euro sì (riga sotto), chiusura no
             )),
             db.select({
                 s: sql<number>`COALESCE(SUM(${leads.closeAmountEur}), 0)::real`,
@@ -1009,17 +1011,17 @@ async function getCrmFunnelCounts(
             if (split) split.trattative++;
             if (self) self.trattative++;
         }
+        // Upsell (migr. 0064): `fatturato` è valorizzato anche per l'upsell,
+        // `close` no: gli euro entrano, la chiusura non si conta.
         if (hits.close) {
             bucket.close++;
+            if (split) split.close++;
+            if (self) self.close++;
+        }
+        if (hits.fatturato) {
             bucket.fatturato += hits.fatturato;
-            if (split) {
-                split.close++;
-                split.fatturato += hits.fatturato;
-            }
-            if (self) {
-                self.close++;
-                self.fatturato += hits.fatturato;
-            }
+            if (split) split.fatturato += hits.fatturato;
+            if (self) self.fatturato += hits.fatturato;
         }
     }
     return map;

@@ -32,6 +32,11 @@ export interface CohortLead {
     presentedAt: Date | null
     /** Esito corrente del venditore sul lead ('Chiuso' | 'Non chiuso' | 'Sparito' | 'Perso' | null). */
     salespersonOutcome: string | null
+    /**
+     * Scheda upsell (migr. 0064): non è una trattativa, esce dalla coorte. Nasce
+     * sempre senza `presentedAt`, quindi ne sarebbe già fuori: il filtro è una cintura.
+     */
+    closeIsUpsell?: boolean | null
 }
 
 export interface CohortClosing {
@@ -54,7 +59,7 @@ function inRange(d: Date | null | undefined, start: Date, end: Date): boolean {
 
 /** Il lead è una presenza del mese `[monthStart, monthEnd)`? */
 export function isCohortPresence(lead: CohortLead, monthStart: Date, monthEnd: Date): boolean {
-    return inRange(lead.presentedAt, monthStart, monthEnd)
+    return lead.closeIsUpsell !== true && inRange(lead.presentedAt, monthStart, monthEnd)
 }
 
 /**

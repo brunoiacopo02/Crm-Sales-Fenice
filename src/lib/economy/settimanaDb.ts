@@ -14,6 +14,7 @@ import { isTeamMember, personName } from '@/lib/diretta/config'
 import { contaFissati } from '@/lib/diretta/fissati'
 import { leggiFissati } from '@/lib/diretta/fissatiDb'
 import { accountVero, leadVero } from '@/lib/prova/sql'
+import { nonUpsellSql } from '@/lib/kpi/chiusureSql'
 import { isConfermePersona } from './rules'
 import type { NumeriSettimana, SettimanaLunSab } from './premiSettimana'
 
@@ -76,6 +77,7 @@ export async function leggiNumeriSettimana(companyId: string, s: SettimanaLunSab
         db.select({ id: leads.id }).from(leads).where(and(
             confermati,
             eq(leads.salespersonOutcome, 'Chiuso'),
+            nonUpsellSql(), // upsell (migr. 0064): non è una chiusura del bonus di squadra
             gte(leads.salespersonOutcomeAt, s.start),
             lt(leads.salespersonOutcomeAt, s.end),
         )),

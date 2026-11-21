@@ -169,7 +169,7 @@ export function StoricoTrattativeTab({ sellerId, reloadToken = 0, onChanged, onO
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${outcomeBadgeClass(outcome)}`}>
-                                            {outcome}
+                                            {outcome}{r.closeIsUpsell ? " · Upsell" : ""}
                                         </div>
                                         <div onClick={e => e.stopPropagation()}>
                                             <button

@@ -24,6 +24,7 @@
 import { db } from "@/db"
 import { leads, callLogs } from "@/db/schema"
 import { and, eq, gte, lt, or, sql, type SQL } from "drizzle-orm"
+import { chiusuraContataSql } from "@/lib/kpi/chiusureSql"
 
 /** Perimetro di un lancio: azienda + funnel + (opzionale) bucket del pool. */
 export type LaunchPerimeter = {
@@ -87,10 +88,11 @@ export async function getLaunchPipelineStats(
             chiamatiTot: sql<number>`count(*) FILTER (WHERE ${leads.callCount} >= 1)::int`,
             fissatiTot: sql<number>`count(*) FILTER (WHERE ${leads.appointmentCreatedAt} IS NOT NULL)::int`,
             confermatiTot: sql<number>`count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato')::int`,
-            chiusiTot: sql<number>`count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso')::int`,
+            // Upsell (migr. 0064): negli euro (fatturato*), non nel numero di chiusi.
+            chiusiTot: sql<number>`count(*) FILTER (WHERE ${chiusuraContataSql()})::int`,
             fissatiOggi: sql<number>`count(*) FILTER (WHERE ${leads.appointmentCreatedAt} >= ${dayStart} AND ${leads.appointmentCreatedAt} < ${dayEndExclusive})::int`,
             confermatiOggi: sql<number>`count(*) FILTER (WHERE ${leads.confirmationsOutcome} = 'confermato' AND ${leads.confirmationsTimestamp} >= ${dayStart} AND ${leads.confirmationsTimestamp} < ${dayEndExclusive})::int`,
-            chiusiOggi: sql<number>`count(*) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso' AND ${leads.salespersonOutcomeAt} >= ${dayStart} AND ${leads.salespersonOutcomeAt} < ${dayEndExclusive})::int`,
+            chiusiOggi: sql<number>`count(*) FILTER (WHERE ${chiusuraContataSql()} AND ${leads.salespersonOutcomeAt} >= ${dayStart} AND ${leads.salespersonOutcomeAt} < ${dayEndExclusive})::int`,
             fatturatoTot: sql<number>`COALESCE(sum(${leads.closeAmountEur}) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso'), 0)::float`,
             fatturatoOggi: sql<number>`COALESCE(sum(${leads.closeAmountEur}) FILTER (WHERE ${leads.salespersonOutcome} = 'Chiuso' AND ${leads.salespersonOutcomeAt} >= ${dayStart} AND ${leads.salespersonOutcomeAt} < ${dayEndExclusive}), 0)::float`,
         })

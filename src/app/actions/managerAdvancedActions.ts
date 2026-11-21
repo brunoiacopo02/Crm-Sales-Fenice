@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/server"
 import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { isRealGdo, isAnsweredLog } from "@/lib/kpi/canon"
 import { contaNeiKpi } from "@/lib/intakeBatch"
+import { nonUpsellSql } from "@/lib/kpi/chiusureSql"
 import { operativaPeriodBounds } from "@/lib/kpi/periodBounds"
 import { leggiInizioAccount } from "@/lib/diretta/vistaDa"
 import { sqlLeadConta, sqlRigaConta } from "@/lib/diretta/inizioAccount"
@@ -196,6 +197,7 @@ export async function getManagerOperativaData(period: 'OGGI' | 'MESE' | 'TRIMEST
         }).from(leads)
             .where(and(
                 sql`LOWER(${leads.salespersonOutcome}) = 'chiuso'`,
+                nonUpsellSql(), // upsell (migr. 0064): non è un contratto in più
                 isNotNull(leads.salespersonOutcomeAt),
                 gte(leads.salespersonOutcomeAt, startDate),
                 lt(leads.salespersonOutcomeAt, endDate),
