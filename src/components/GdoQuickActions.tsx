@@ -12,6 +12,7 @@ import { avvisoOraAffollata, type ContaOre } from "@/lib/conferme/oreOccupate"
 import { oreOccupateDelGiorno } from "@/app/actions/oreOccupateActions"
 import { emettiAppuntamentoDiretta } from "@/lib/diretta/eventi"
 import { useDirettaUi } from "./diretta/DirettaUi"
+import { useGiorniAppuntamentoGdo, fuoriFinestraAppuntamento } from "./useGiorniAppuntamentoGdo"
 
 type GdoQuickActionsProps = {
     leadId: string
@@ -54,6 +55,8 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
     const [loading, setLoading] = useState(false)
     // Diretta (PO 25/10/2026): stessa logica degli esiti, cambia solo la veste.
     const direttaUi = useDirettaUi()
+    // Titolare 24/11/2026: il GDO fissa solo per i due giorni dopo oggi (domenica esclusa).
+    const giorniAppuntamento = useGiorniAppuntamentoGdo()
 
     // Popover states
     const [activePopover, setActivePopover] = useState<'scartato' | 'richiamo' | 'appuntamento' | null>(null)
@@ -222,7 +225,8 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
     const isSubmitDisabled = 
         loading || 
         (activePopover === 'scartato' && !discardReason) || 
-        ((activePopover === 'richiamo' || activePopover === 'appuntamento') && !dateStr)
+        ((activePopover === 'richiamo' || activePopover === 'appuntamento') && !dateStr) ||
+        (activePopover === 'appuntamento' && fuoriFinestraAppuntamento(dateStr, giorniAppuntamento))
 
     // ── Veste Diretta: stessi gestori, stessi controlli, solo la grafica scura.
     // Il lead in cima alla coda ("aperto") ha i bottoni grandi su una riga.
@@ -235,7 +239,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
             : 'h-9 gap-1.5 px-3 text-[13px]'}`
         const neutro = (attivo: boolean) => `${base} bg-transparent text-[#F2F2F2] hover:border-[#8C8C8C] ${attivo ? 'border-[#F2F2F2]' : 'border-[#3D3D3D]'}`
         const icona = grande ? 'h-[18px] w-[18px] shrink-0' : 'h-4 w-4 shrink-0'
-        const avviso = activePopover === 'appuntamento' && dateStr ? appointmentSlotWarning(dateStr, new Date()) : null
+        const avviso = activePopover === 'appuntamento' && dateStr && !fuoriFinestraAppuntamento(dateStr, giorniAppuntamento) ? appointmentSlotWarning(dateStr, new Date()) : null
         const popover = `absolute right-0 ${popoverPositionClass} z-50 w-80 max-w-[calc(100vw-2rem)] whitespace-normal rounded-2xl border-2 border-[#3D3D3D] bg-[#262626] p-4 text-left text-[#F2F2F2]`
         return (
             <div className={grande ? "relative grid w-full grid-cols-4 gap-2 @max-[560px]:grid-cols-2" : "relative flex flex-wrap items-center gap-1.5"} ref={containerRef}>
@@ -298,7 +302,7 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                         <div className="mb-1 text-[13px] text-[#BFBFBF]">Data e ora</div>
                         <div className="mb-3">
                             {activePopover === 'appuntamento' ? (
-                                <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact impilato />
+                                <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact impilato giorniAmmessi={giorniAppuntamento} />
                             ) : (
                                 <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact impilato />
                             )}
@@ -403,13 +407,13 @@ export function GdoQuickActions({ leadId, leadVersion, onSettled, recallPrefillN
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-ash-400 mb-1">Data e Ora *</label>
                     <div className="mb-3">
                         {activePopover === 'appuntamento' ? (
-                            <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact />
+                            <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} compact giorniAmmessi={giorniAppuntamento} />
                         ) : (
                             <RecallDateTimePicker value={dateStr} onChange={setDateStr} compact />
                         )}
                     </div>
 
-                    {activePopover === 'appuntamento' && dateStr && appointmentSlotWarning(dateStr, new Date()) && (
+                    {activePopover === 'appuntamento' && dateStr && !fuoriFinestraAppuntamento(dateStr, giorniAppuntamento) && appointmentSlotWarning(dateStr, new Date()) && (
                         <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-700">
                             ⚠️ {appointmentSlotWarning(dateStr, new Date())}
                         </div>

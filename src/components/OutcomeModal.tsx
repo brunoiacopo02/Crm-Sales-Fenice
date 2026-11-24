@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { AppointmentDateTimePicker, RecallDateTimePicker } from "./DateTimePickers"
 import { GDO_DISCARD_REASONS } from "@/lib/surveys/questions"
 import { emettiAppuntamentoDiretta } from "@/lib/diretta/eventi"
+import { useGiorniAppuntamentoGdo, fuoriFinestraAppuntamento } from "./useGiorniAppuntamentoGdo"
 
 type OutcomeModalProps = {
     leadId: string
@@ -23,6 +24,8 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
     const [discardReason, setDiscardReason] = useState("")
     const [loading, setLoading] = useState(false)
     const [scriptCompleted, setScriptCompleted] = useState(false)
+    // Titolare 24/11/2026: il GDO fissa solo per i due giorni dopo oggi (domenica esclusa).
+    const giorniAppuntamento = useGiorniAppuntamentoGdo()
 
     // Listen for script_completed event from ScriptWidget
     useEffect(() => {
@@ -107,7 +110,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
 
     const isDateRequired = outcome === 'RICHIAMO' || outcome === 'APPUNTAMENTO'
     const isDiscardReasonRequired = outcome === 'DA_SCARTARE'
-    const isSubmitDisabled = !outcome || (isDateRequired && !dateStr) || (isDiscardReasonRequired && !discardReason) || loading
+    const isSubmitDisabled = !outcome || (isDateRequired && !dateStr) || (isDiscardReasonRequired && !discardReason) || (outcome === 'APPUNTAMENTO' && fuoriFinestraAppuntamento(dateStr, giorniAppuntamento)) || loading
 
     return (
         <>
@@ -189,7 +192,7 @@ export function OutcomeModal({ leadId, leadVersion, isOpen, onClose }: OutcomeMo
                                         <CalendarClock className="h-4 w-4 text-ash-400" /> Data e Ora *
                                     </label>
                                     {outcome === 'APPUNTAMENTO' ? (
-                                        <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} />
+                                        <AppointmentDateTimePicker value={dateStr} onChange={setDateStr} giorniAmmessi={giorniAppuntamento} />
                                     ) : (
                                         <RecallDateTimePicker value={dateStr} onChange={setDateStr} />
                                     )}

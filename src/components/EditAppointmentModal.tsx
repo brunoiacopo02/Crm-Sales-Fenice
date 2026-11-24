@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Calendar, Clock, X, Save } from "lucide-react"
+import { etichettaGiornoAppuntamento } from "@/lib/appointmentWindow"
+import { useGiorniAppuntamentoGdo, fuoriFinestraAppuntamento } from "./useGiorniAppuntamentoGdo"
 
 type EditAppointmentModalProps = {
     isOpen: boolean
@@ -30,6 +32,11 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
     const [time, setTime] = useState(getInitialTimeStr())
     const [note, setNote] = useState(initialNote || "")
     const [isSaving, setIsSaving] = useState(false)
+    // Titolare 24/11/2026: il GDO (re)fissa solo per i due giorni dopo oggi (domenica esclusa).
+    // Salvare senza toccare data e ora (solo la nota) non e' un nuovo fissaggio: non si blocca.
+    const giorni = useGiorniAppuntamentoGdo()
+    const dataOraCambiata = date !== getInitialDateStr() || time !== getInitialTimeStr()
+    const fuoriFinestra = dataOraCambiata && fuoriFinestraAppuntamento(date, giorni)
 
     useEffect(() => {
         if (isOpen) {
@@ -91,6 +98,8 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
                             <input
                                 type="date"
                                 value={date}
+                                min={giorni ? giorni[0] : undefined}
+                                max={giorni ? giorni[1] : undefined}
                                 onChange={e => setDate(e.target.value)}
                                 className="input-fenice text-sm"
                             />
@@ -107,6 +116,12 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
                             />
                         </div>
                     </div>
+
+                    {giorni && (
+                        <div className={`text-xs ${fuoriFinestra ? 'font-semibold text-red-600' : 'text-ash-500'}`}>
+                            {fuoriFinestra ? 'Data non ammessa. ' : ''}Si può fissare solo per {etichettaGiornoAppuntamento(giorni[0])} o {etichettaGiornoAppuntamento(giorni[1])}.
+                        </div>
+                    )}
 
                     <div className="space-y-1.5">
                         <label className="text-sm font-semibold text-gray-700">Note per le Conferme / GDO</label>
@@ -130,7 +145,7 @@ export function EditAppointmentModal({ isOpen, onClose, onSave, initialDate, ini
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={isSaving || !date || !time}
+                        disabled={isSaving || !date || !time || fuoriFinestra}
                         className="btn-primary text-sm py-2 px-4 disabled:opacity-50"
                     >
                         {isSaving ? <span className="h-4 w-4 border-2 border-brand-charcoal/30 border-t-brand-charcoal rounded-full animate-spin"></span> : <Save className="h-4 w-4" />}

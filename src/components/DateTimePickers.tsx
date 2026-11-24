@@ -4,6 +4,8 @@
 // AppointmentDateTimePicker: only whole hours 10:00 → 21:00
 // RecallDateTimePicker: hours + minutes in 5-minute increments
 
+import { etichettaGiornoAppuntamento } from "@/lib/appointmentWindow"
+
 function getTodayStr() {
     const d = new Date()
     const year = d.getFullYear()
@@ -12,11 +14,11 @@ function getTodayStr() {
     return `${year}-${month}-${day}`
 }
 
-function parseValue(value: string): { date: string; hour: string; minute: string } {
-    if (!value) return { date: getTodayStr(), hour: '', minute: '00' }
+function parseValue(value: string, defaultDate: string = getTodayStr()): { date: string; hour: string; minute: string } {
+    if (!value) return { date: defaultDate, hour: '', minute: '00' }
     const [datePart, timePart] = value.split('T')
     const [h, m] = (timePart || '').split(':')
-    return { date: datePart || getTodayStr(), hour: h || '', minute: m || '00' }
+    return { date: datePart || defaultDate, hour: h || '', minute: m || '00' }
 }
 
 function buildValue(date: string, hour: string, minute: string): string {
@@ -33,16 +35,20 @@ const FIVE_MIN_STEPS = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '4
  * l'ora sotto. Nei popover stretti la data in una colonna di griglia si
  * leggeva solo come "…/2026".
  */
-export function AppointmentDateTimePicker({ value, onChange, compact = false, impilato = false }: { value: string; onChange: (v: string) => void; compact?: boolean; impilato?: boolean }) {
-    const { date, hour } = parseValue(value)
+export function AppointmentDateTimePicker({ value, onChange, compact = false, impilato = false, giorniAmmessi }: { value: string; onChange: (v: string) => void; compact?: boolean; impilato?: boolean; giorniAmmessi?: [string, string] }) {
+    // `giorniAmmessi` (titolare 24/11/2026): solo per il GDO, i due giorni in cui puo' fissare.
+    const { date, hour } = parseValue(value, giorniAmmessi ? giorniAmmessi[0] : undefined)
     const inputClass = compact ? "input-fenice !text-xs !py-2 !px-2.5" : "input-fenice text-sm"
+    const fuori = !!giorniAmmessi && !giorniAmmessi.includes(date)
 
     return (
+        <div>
         <div className={impilato ? "grid grid-cols-1 gap-2" : "grid grid-cols-2 gap-2"}>
             <input
                 type="date"
                 value={date}
-                min={getTodayStr()}
+                min={giorniAmmessi ? giorniAmmessi[0] : getTodayStr()}
+                max={giorniAmmessi ? giorniAmmessi[1] : undefined}
                 onChange={(e) => onChange(buildValue(e.target.value, hour || '09', '00'))}
                 className={inputClass}
                 aria-label="Data"
@@ -60,6 +66,14 @@ export function AppointmentDateTimePicker({ value, onChange, compact = false, im
                     <option key={h} value={h}>{h}:00</option>
                 ))}
             </select>
+        </div>
+        {giorniAmmessi && (
+            <div className={`mt-1.5 ${compact ? 'text-[11px]' : 'text-xs'} ${fuori ? 'font-semibold text-red-600' : 'opacity-70'}`}>
+                {fuori
+                    ? `Data non ammessa. Puoi fissare solo per ${etichettaGiornoAppuntamento(giorniAmmessi[0])} o ${etichettaGiornoAppuntamento(giorniAmmessi[1])}.`
+                    : `Si può fissare solo per ${etichettaGiornoAppuntamento(giorniAmmessi[0])} o ${etichettaGiornoAppuntamento(giorniAmmessi[1])}.`}
+            </div>
+        )}
         </div>
     )
 }
