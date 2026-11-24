@@ -17,6 +17,7 @@ import { isSelfBooked } from "@/lib/salesPipeline/sentinel"
 import { appointmentMoveStamp } from "@/lib/conferme/boardWindow";
 import { reverseFissato, riallineaScaliniDopoUscita, syncLeadPiume } from "@/lib/economy/awards";
 import { leadDelMondoDiAccount } from "@/lib/prova/sql";
+import { controllaAppuntamentoGdo } from "@/lib/appointmentWindow";
 import { daRifissareDalleConferme, dividiRifissaggi, notaConfermePerGdo } from "@/lib/diretta/daRifissare";
 import { leadsPerGdo, noteDelBotSulLead } from "@/lib/diretta/noteBotDb";
 import { notaDaSalvareDalGdo } from "@/lib/diretta/noteBotPerGdo";
@@ -122,6 +123,17 @@ export async function updateGdoAppointment(leadId: string, appointmentDate: Date
 
     // Assicurarsi che appointmentDate sia un oggetto Date valido se Next lo passasse come stringa in JSON
     const dateObj = new Date(appointmentDate);
+
+    // Titolare 24/11/2026: il GDO fissa solo per i due giorni successivi a oggi
+    // (domenica esclusa). Se la data e' quella gia' salvata (si cambia solo la
+    // nota o si salva senza toccarla) non e' un nuovo fissaggio: non si blocca.
+    const dataInvariata = !!lead.appointmentDate && lead.appointmentDate.getTime() === dateObj.getTime();
+    if (!dataInvariata) {
+        const finestra = controllaAppuntamentoGdo(dateObj, new Date());
+        if (!finestra.ok) {
+            return { success: false, error: 'FUORI_FINESTRA_APPUNTAMENTO', message: finestra.error };
+        }
+    }
 
     // Rifissaggio GDO (QA Conferme 2026-06-12):
     // - lead scartato dalle Conferme → azzera lo scarto e il ciclo NR, così

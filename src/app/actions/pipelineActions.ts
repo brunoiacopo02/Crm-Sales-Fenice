@@ -25,6 +25,7 @@ import { currentTenant, assertSalesArea } from "@/lib/tenancy"
 import { LANCIO_BUCKET } from "@/lib/lancio/intake"
 import { leadDelMondoDiAccount, rifiutoMondoDiverso } from "@/lib/prova/sql"
 import { daRifissareDalleConferme } from "@/lib/diretta/daRifissare"
+import { controllaAppuntamentoGdo } from "@/lib/appointmentWindow"
 import { finestraFissaggioQuarta, mostraQuartaChiamata, scartiDalQuarta, MIN_LEAD_CHIAMATI_QUARTA } from "@/lib/diretta/quartaChiamata"
 import { applicaScritti, deveSbloccare, eBlackFriday, PESO_ONDATA, prioritaScorta, rangoOndata, visibileInPrimaChiamata, type LeadScorta } from "@/lib/diretta/scorta"
 import { classificaEScrivi, dopoEsitoPrimaChiamata, sbloccaSeVuota, scortaAccesa } from "@/lib/diretta/scortaDb"
@@ -752,6 +753,16 @@ export async function updateLeadOutcome(
     // richiami). Conferme, manager e admin non passano da questo blocco.
     if (!serviceCtx && actorRole === 'GDO' && outcome === 'APPUNTAMENTO' && daRifissareDalleConferme(lead)) {
         return { success: false, error: "Questo appuntamento lo stanno rifissando le Conferme: la data nuova la mettono loro." }
+    }
+
+    // Titolare 24/11/2026: un GDO fissa solo per i due giorni successivi a oggi
+    // (domenica esclusa). Il ruolo e' quello dell'utente in sessione, mai
+    // quello passato dal client. Fuori dal vincolo: bot e IA vocale (hanno
+    // `serviceCtx`, e li' `actorRole` e' un 'GDO' di comodo), Conferme,
+    // Manager, Admin, TL. I richiami non sono appuntamenti: non si toccano.
+    if (!serviceCtx && actorRole === 'GDO' && outcome === 'APPUNTAMENTO') {
+        const finestra = controllaAppuntamentoGdo(date ?? null, new Date())
+        if (!finestra.ok) return { success: false, error: finestra.error }
     }
 
     // Optimistic locking check

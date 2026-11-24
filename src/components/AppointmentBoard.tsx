@@ -48,6 +48,10 @@ export function AppointmentBoard({
             router.refresh()
             return
         }
+        if (result && !result.success && result.error === 'FUORI_FINESTRA_APPUNTAMENTO') {
+            alert(result.message)
+            return
+        }
         if (result && !result.success && result.error === 'CONCURRENCY_ERROR') {
             alert("Questo lead è stato modificato da un altro utente. La pagina verrà aggiornata.")
             router.refresh()
