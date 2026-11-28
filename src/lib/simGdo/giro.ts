@@ -18,6 +18,7 @@
 // è ferma all'ultimo import dei tabulati e serve all'attribuzione storica.
 
 import { contaChiamate, coloreCella, tasso, type Colore, type LogChiamata } from './tasso'
+import { contaEventiConferme, type EventoConferme } from './conferme'
 import { inizioConteggio, type StatoSim } from './cambioSim'
 import type { RigaFoglio } from './intestazioni'
 import { dayBoundsRome } from '@/lib/dateUtils'
@@ -27,15 +28,23 @@ export interface UtenteGdo {
     /** Nome di persona (users.firstName); name/displayName sono "GDO 1xx". */
     firstName: string | null
     gdoCode: number | null
+    /** 'CONFERME' = persona delle Conferme (titolare 28/11/2026); assente = GDO. */
+    ruolo?: 'CONFERME'
 }
 
 export type EsitoRiga = 'agganciato' | 'nessuno' | 'ambiguo' | 'interno_ripetuto' | 'gdo_ripetuto' | 'aggancio_non_valido'
 
-/** Agganci fissi: nome del foglio normalizzato (normalizzaNome) → gdoCode. */
-export type Agganci = Record<string, number>
+/**
+ * Agganci fissi: nome del foglio normalizzato (normalizzaNome) → gdoCode, oppure
+ * { conferme: nome } per una persona delle Conferme (JSON "conferme:Alberto").
+ */
+export type Agganci = Record<string, number | { conferme: string }>
+
+const PREFISSO_CONFERME = 'conferme:'
 
 /**
- * Legge la tabella degli agganci fissi da appSettings, JSON tipo { "ZORA": 106 }.
+ * Legge la tabella degli agganci fissi da appSettings, JSON tipo
+ * { "ZORA": 106, "ANDRY": "conferme:Andrea" }.
  * Chiave assente, JSON malformato, non oggetto: tabella vuota. Le voci con
  * valore non numerico (intero positivo) o nome vuoto si scartano. Non lancia mai.
  */
@@ -48,6 +57,11 @@ export function leggiAgganci(raw: string | null | undefined): Agganci {
     for (const [nome, codice] of Object.entries(v as Record<string, unknown>)) {
         const chiave = normalizzaNome(nome)
         if (!chiave) continue
+        if (typeof codice === 'string' && codice.toLowerCase().startsWith(PREFISSO_CONFERME)) {
+            const persona = codice.slice(PREFISSO_CONFERME.length).trim()
+            if (normalizzaNome(persona)) out[chiave] = { conferme: persona }
+            continue
+        }
         if (typeof codice !== 'number' || !Number.isInteger(codice) || codice <= 0) continue
         out[chiave] = codice
     }
@@ -124,11 +138,16 @@ export function calcolaRighe(input: {
     utenti: UtenteGdo[]
     logs: (LogChiamata & { userId: string | null })[]
     soglia: number | null
+    /** Persone delle Conferme attive (non bot, non prova), con i loro eventi di oggi e la loro soglia rossa. */
+    conferme?: UtenteGdo[]
+    eventiConferme?: (EventoConferme & { userId: string | null })[]
+    sogliaConferme?: number | null
     adesso: Date
     /** Agganci fissi nome → gdoCode (leggiAgganci); assente = solo per nome. */
     agganci?: Agganci
 }): RigaCalcolata[] {
     const agganci = input.agganci ?? {}
+    const conferme = input.conferme ?? []
     const { start: mezzanotte } = dayBoundsRome(input.adesso)
     const perUtente = new Map<string, LogChiamata[]>()
     for (const l of input.logs) {
@@ -136,6 +155,14 @@ export function calcolaRighe(input: {
         const lista = perUtente.get(l.userId)
         if (lista) lista.push(l)
         else perUtente.set(l.userId, [l])
+    }
+
+    const perUtenteConferme = new Map<string, EventoConferme[]>()
+    for (const e of input.eventiConferme ?? []) {
+        if (!e.userId) continue
+        const lista = perUtenteConferme.get(e.userId)
+        if (lista) lista.push(e)
+        else perUtenteConferme.set(e.userId, [e])
     }
 
     const vuota = (r: RigaFoglio, esito: EsitoRiga, candidati: UtenteGdo[] = [], stessoGdoDi: number[] = []): RigaCalcolata => ({
@@ -153,6 +180,13 @@ export function calcolaRighe(input: {
         if (visti.has(r.interno)) return vuota(r, 'interno_ripetuto')
         visti.add(r.interno)
         const codice = Object.prototype.hasOwnProperty.call(agganci, normalizzaNome(r.nome)) ? agganci[normalizzaNome(r.nome)] : undefined
+        if (typeof codice === 'object') {
+            // Nome in tabella verso una persona delle Conferme: conta solo quella.
+            const trovati = candidatiPerNome(codice.conferme, conferme)
+            if (trovati.length !== 1) return vuota(r, 'aggancio_non_valido')
+            fisso[i] = true
+            return trovati[0]
+        }
         if (codice !== undefined) {
             // Nome in tabella: conta solo il codice, mai il nome del profilo.
             const utente = input.utenti.find(x => x.gdoCode === codice)
@@ -160,8 +194,19 @@ export function calcolaRighe(input: {
             fisso[i] = true
             return utente
         }
+        // Una persona delle Conferme che si chiama proprio come la riga batte i
+        // GDO (Noemi ha ancora l'account GDO 107, da ignorare). Per un nome solo
+        // simile (ANDREA ↔ Andre) i GDO hanno la precedenza e le Conferme si
+        // guardano solo se nessun GDO corrisponde.
+        const confermeUguali = conferme.filter(c => nomeUguale(r.nome, c.firstName))
+        if (confermeUguali.length === 1) return confermeUguali[0]
         const candidati = candidatiPerNome(r.nome, input.utenti)
-        if (candidati.length === 0) return vuota(r, 'nessuno')
+        if (candidati.length === 0) {
+            const simili = candidatiPerNome(r.nome, conferme)
+            if (simili.length === 1) return simili[0]
+            if (simili.length > 1) return vuota(r, 'ambiguo', simili)
+            return vuota(r, 'nessuno')
+        }
         if (candidati.length > 1) return vuota(r, 'ambiguo', candidati)
         return candidati[0]
     })
@@ -198,7 +243,10 @@ export function calcolaRighe(input: {
         const candidati = [utente]
 
         const dal = inizioConteggio(input.statoSim[r.interno]?.dal ?? null, input.adesso)
-        const c = contaChiamate(perUtente.get(utente.id) ?? [], dal)
+        const eConferme = utente.ruolo === 'CONFERME'
+        const c = eConferme
+            ? contaEventiConferme(perUtenteConferme.get(utente.id) ?? [], dal)
+            : contaChiamate(perUtente.get(utente.id) ?? [], dal)
         return {
             ...r,
             esito: 'agganciato',
@@ -208,7 +256,7 @@ export function calcolaRighe(input: {
             chiamate: c.chiamate,
             risposte: c.risposte,
             tasso: tasso(c),
-            colore: coloreCella(c, input.soglia),
+            colore: coloreCella(c, eConferme ? (input.sogliaConferme ?? null) : input.soglia),
             ripartitoDal: dal > mezzanotte ? dal.toISOString() : null,
         }
     })

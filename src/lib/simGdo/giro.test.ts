@@ -224,3 +224,76 @@ test('agganci: due nomi in tabella sullo stesso codice restano vuoti tutti e due
     })
     assert.deepEqual(righe.map(r => [r.esito, r.stessoGdoDi]), [['gdo_ripetuto', [3]], ['gdo_ripetuto', [2]]])
 })
+// ── Persone delle Conferme nel foglio (titolare 28/11/2026) ──────────────
+
+const c = (id: string, firstName: string): UtenteGdo => ({ id, firstName, gdoCode: null, ruolo: 'CONFERME' })
+const ev = (userId: string, eventType: string, hhmm = '10:00', outcome: string | null = null, discardReason: string | null = null) =>
+    ({ userId, eventType, outcome, discardReason, createdAt: ora(hhmm) })
+const nr = (userId: string, n: number) => Array.from({ length: n }, () => ev(userId, 'conferme_no_answer'))
+const esiti = (userId: string, n: number) => Array.from({ length: n }, () => ev(userId, 'conferme_outcome_set', '10:00', 'confermato'))
+
+test('conferme: Noemi (nome uguale) è la persona delle Conferme, il vecchio GDO 107 si ignora', () => {
+    const [r] = calcolaRighe({
+        ...base, righe: [riga(2, '1007', 'NOEMI')],
+        utenti: [u('g107', 'Noemi', 107)], logs: chiamate('g107', 90, 10),
+        conferme: [c('cn', 'Noemi')], eventiConferme: [...nr('cn', 30), ...esiti('cn', 10)], sogliaConferme: 0.2,
+    })
+    assert.equal(r.esito, 'agganciato')
+    assert.equal(r.utente?.ruolo, 'CONFERME')
+    assert.equal(r.chiamate, 40)
+    assert.equal(r.risposte, 10)
+    assert.equal(r.tasso, 0.25)
+    assert.equal(r.colore, 'grigio') // sotto 50 chiamate
+})
+
+test('conferme: nome solo simile (ANDREA ~ Andre) e persona senza firstName (Alberto, da name)', () => {
+    const righe = calcolaRighe({
+        ...base, righe: [riga(2, '1001', 'ANDREA'), riga(3, '1002', 'ALBERTO')], utenti: [u('u105', 'Antony', 105)], logs: [],
+        conferme: [c('ca', 'Andre'), c('cb', 'Alberto')],
+        eventiConferme: [...nr('ca', 60), ...esiti('ca', 10), ...nr('cb', 55), ...esiti('cb', 45)], sogliaConferme: 0.3,
+    })
+    assert.deepEqual(righe.map(r => r.utente?.id), ['ca', 'cb'])
+    assert.deepEqual(righe.map(r => r.colore), ['rosso', 'verde']) // 10/70 sotto 0,3; 45/100 sopra
+})
+
+test('conferme: un GDO simile per nome batte la persona delle Conferme solo simile (GDO invariati)', () => {
+    const [r] = calcolaRighe({
+        ...base, righe: [riga(2, '1016', 'ANTHONY')], utenti: [u('u105', 'Antony', 105)], logs: chiamate('u105', 10, 10),
+        conferme: [c('ca', 'Anthony Conferme')], eventiConferme: nr('ca', 5), sogliaConferme: 0.3,
+    })
+    assert.equal(r.utente?.gdoCode, 105)
+    assert.equal(r.tasso, 0.5)
+})
+
+test('conferme: soglia rossa propria, non quella dei GDO', () => {
+    const eventi = [...nr('cn', 60), ...esiti('cn', 20)] // 20/80 = 25%
+    const input = { ...base, righe: [riga(2, '1007', 'NOEMI')], utenti: [], logs: [], conferme: [c('cn', 'Noemi')], eventiConferme: eventi }
+    assert.equal(calcolaRighe({ ...input, sogliaConferme: 0.2 })[0].colore, 'verde') // sopra 0,2 anche se sotto la soglia GDO 0,269
+    assert.equal(calcolaRighe({ ...input, sogliaConferme: 0.3 })[0].colore, 'rosso')
+    assert.equal(calcolaRighe({ ...input, sogliaConferme: null })[0].colore, 'verde')
+})
+
+test('conferme: il cambio SIM fa ripartire il conteggio dalle ore del cambio', () => {
+    const statoSim = { '1007': { dataCambio: '27/11/2026', dal: ora('12:00').toISOString() } }
+    const [r] = calcolaRighe({
+        ...base, statoSim, righe: [riga(2, '1007', 'NOEMI')], utenti: [], logs: [],
+        conferme: [c('cn', 'Noemi')],
+        eventiConferme: [ev('cn', 'conferme_no_answer', '11:00'), ev('cn', 'conferme_no_answer', '13:00'), ev('cn', 'conferme_outcome_set', '14:00', 'confermato')],
+        sogliaConferme: 0.3,
+    })
+    assert.equal(r.chiamate, 2)
+    assert.equal(r.risposte, 1)
+})
+
+test('conferme: aggancio fisso "conferme:Nome", sconosciuto = non valido, senza persone nessun cambio per i GDO', () => {
+    const agganci = leggiAgganci('{"ANDRY":"conferme:Andrea","XX":"conferme:","YY":"altro"}')
+    assert.deepEqual(agganci, { andry: { conferme: 'Andrea' } })
+    const input = { ...base, utenti: [], logs: [], conferme: [c('ca', 'Andre')], eventiConferme: nr('ca', 3), agganci }
+    const [fisso] = calcolaRighe({ ...input, righe: [riga(2, '1001', 'ANDRY')] })
+    assert.equal(fisso.utente?.id, 'ca')
+    assert.equal(fisso.chiamate, 3)
+    const [nonValido] = calcolaRighe({ ...input, righe: [riga(2, '1001', 'ANDRY')], conferme: [c('cz', 'Zeno')] })
+    assert.equal(nonValido.esito, 'aggancio_non_valido')
+    const [vecchio] = calcolaRighe({ ...base, righe: [riga(2, '1007', 'NOEMI')], utenti: [u('g107', 'Noemi', 107)], logs: chiamate('g107', 5, 5) })
+    assert.equal(vecchio.utente?.gdoCode, 107)
+})

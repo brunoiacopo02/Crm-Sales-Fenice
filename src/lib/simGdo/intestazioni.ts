@@ -20,7 +20,7 @@ export interface ColonneFoglio {
 export interface RigaFoglio {
     /** Numero di riga nel foglio, da 1 (la riga 1 è l'intestazione). */
     riga: number
-    /** Interno del centralino (colonna GDO), es. "1020". */
+    /** Interno del centralino (colonna UTENTI, già GDO), es. "1020". */
     interno: string
     nome: string
     /** Come è scritto: può essere vuoto, "/" o "da ins". */
@@ -33,9 +33,17 @@ export type LetturaFoglio =
     | { ok: true; colonne: ColonneFoglio; righe: RigaFoglio[] }
     | { ok: false; errore: string }
 
+/**
+ * Nomi della colonna A (l'interno del centralino), già normalizzati. Nel foglio
+ * si chiamava "GDO"; dal 28/11/2026 è "UTENTI" perché ci stanno anche le
+ * persone delle Conferme. Le due intestazioni valgono uguale; se ci sono
+ * entrambe la colonna è ambigua.
+ */
+export const ALIAS_COLONNA_UTENTI = ['UTENTI', 'GDO'] as const
+
 /** Nomi delle colonne, già normalizzati. */
 export const INTESTAZIONI = {
-    gdo: 'GDO',
+    gdo: 'UTENTI',
     nome: 'NOME',
     numero: 'NUMERO',
     stato: 'STATO',
@@ -73,7 +81,8 @@ export function lettereColonna(indice: number): string {
 export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
     const intestazione = (valori[0] ?? []).map(normalizzaIntestazione)
     const trova = (nome: string): number | null | 'doppia' => {
-        const posti = intestazione.flatMap((h, i) => (h === nome ? [i] : []))
+        const nomi: readonly string[] = nome === INTESTAZIONI.gdo ? ALIAS_COLONNA_UTENTI : [nome]
+        const posti = intestazione.flatMap((h, i) => (nomi.includes(h) ? [i] : []))
         if (posti.length > 1) return 'doppia'
         return posti[0] ?? null
     }
@@ -81,12 +90,12 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
     const trovate: Partial<Record<keyof typeof INTESTAZIONI, number | null>> = {}
     for (const [chiave, nome] of Object.entries(INTESTAZIONI) as [keyof typeof INTESTAZIONI, string][]) {
         const i = trova(nome)
-        if (i === 'doppia') return { ok: false, errore: `La colonna "${nome}" compare due volte nell'intestazione: non so quale usare.` }
+        if (i === 'doppia') return { ok: false, errore: `La colonna "${nome}" compare due volte nell'intestazione: non so quale usare.${nome === INTESTAZIONI.gdo ? ' ("UTENTI" e "GDO" valgono uguale: ne basta una.)' : ''}` }
         trovate[chiave] = i
     }
     const mancanti = (['gdo', 'nome', 'numero', 'dataCambio', 'tasso'] as const).filter(k => trovate[k] === null || trovate[k] === undefined)
     if (mancanti.length > 0) {
-        return { ok: false, errore: `Nell'intestazione mancano le colonne ${mancanti.map(k => `"${INTESTAZIONI[k]}"`).join(', ')}.` }
+        return { ok: false, errore: `Nell'intestazione mancano le colonne ${mancanti.map(k => (k === 'gdo' ? '"UTENTI" (o "GDO")' : `"${INTESTAZIONI[k]}"`)).join(', ')}.` }
     }
 
     const colonne: ColonneFoglio = {
@@ -102,7 +111,7 @@ export function leggiFoglio(valori: CellaFoglio[][]): LetturaFoglio {
     const righe: RigaFoglio[] = []
     valori.slice(1).forEach((r, i) => {
         const interno = cella(r, colonne.gdo)
-        // È una riga della tabella solo se GDO è un interno di sole cifre: note
+        // È una riga della tabella solo se UTENTI è un interno di sole cifre: note
         // e totali scritti sotto o accanto non si toccano mai, nemmeno per svuotarli.
         if (!/^\d+$/.test(interno)) return
         righe.push({
