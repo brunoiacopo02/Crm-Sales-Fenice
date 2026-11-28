@@ -10,13 +10,14 @@
 
 import { and, eq, gte, inArray, sql } from 'drizzle-orm'
 import { db } from '@/db'
-import { appSettings, callLogs, users } from '@/db/schema'
+import { appSettings, callLogs, leadEvents, leads, users } from '@/db/schema'
 import { isRealGdo } from '@/lib/kpi/canon'
 import { dayBoundsRome, monthBoundsRome } from '@/lib/dateUtils'
 import { impronta, leggiFoglio, lettereColonna } from './intestazioni'
 import { aggiornaStatoSim, leggiStatoSim, type StatoSim } from './cambioSim'
 import { calcolaRighe, leggiAgganci, type RigaCalcolata, type UtenteGdo } from './giro'
 import { contaCelle, richiesteScrittura } from './celle'
+import { contaGruppiConferme, EVENTI_CONFERME, type EventoConferme } from './conferme'
 import { contaGruppi, eGdoDellaMedia, ESITI_CHIAMATA, MEDIA_DAL_MESE, sogliaRossa, tasso, type Conteggio } from './tasso'
 import { leggiFoglioSim, scriviFoglioSim } from './foglio'
 
@@ -47,6 +48,10 @@ export interface EsitoSimGdo {
     media: Conteggio
     mediaTasso: number | null
     soglia: number | null
+    /** Stessa cosa per le persone delle Conferme (media separata, vedi conferme.ts). */
+    mediaConferme: Conteggio
+    mediaTassoConferme: number | null
+    sogliaConferme: number | null
     colonnaTasso: string | null
     righe: RigaCalcolata[]
     /** Interni con un cambio SIM segnato nel foglio (DATA ULTIMO CAMBIO nuova) visto in questo giro. */
@@ -129,6 +134,61 @@ async function leggiMedia(): Promise<Conteggio> {
     return contaGruppi(gruppi.filter(eGdoDellaMedia).map(g => ({ ...g, n: Number(g.n) })))
 }
 
+/**
+ * Persone delle Conferme a cui si può agganciare una riga: attive, non bot, non
+ * prova. Il nome di persona è firstName, o name se manca (Alberto non ha firstName).
+ */
+async function leggiConfermeAttive(): Promise<UtenteGdo[]> {
+    const righe = await db.select({ id: users.id, firstName: users.firstName, name: users.name })
+        .from(users)
+        .where(and(
+            eq(users.companyId, FENICE), eq(users.role, 'CONFERME'),
+            eq(users.isActive, true), eq(users.isBot, false), eq(users.isTest, false),
+        ))
+    return righe.map(r => ({ id: r.id, firstName: r.firstName ?? r.name, gdoCode: null, ruolo: 'CONFERME' as const }))
+}
+
+const ESITO_EVENTO = sql<string | null>`${leadEvents.metadata}->>'outcome'`
+
+/** Media delle Conferme dal 1 giugno 2026: tutte le persone CONFERME, anche uscite, no prova, no bot. */
+async function leggiMediaConferme(): Promise<Conteggio> {
+    const dal = monthBoundsRome(MEDIA_DAL_MESE).start
+    const gruppi = await db.select({
+        eventType: leadEvents.eventType,
+        outcome: ESITO_EVENTO,
+        discardReason: leads.confirmationsDiscardReason,
+        n: sql<number>`count(*)::int`,
+    }).from(leadEvents)
+        .innerJoin(users, eq(users.id, leadEvents.userId))
+        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+        .where(and(
+            gte(leadEvents.timestamp, dal),
+            inArray(leadEvents.eventType, [...EVENTI_CONFERME]),
+            eq(users.role, 'CONFERME'), eq(users.isBot, false), eq(users.isTest, false),
+            eq(users.companyId, FENICE),
+        ))
+        .groupBy(leadEvents.eventType, ESITO_EVENTO, leads.confirmationsDiscardReason)
+    return contaGruppiConferme(gruppi.map(g => ({ ...g, n: Number(g.n) })))
+}
+
+async function leggiEventiConfermeDiOggi(userIds: string[], adesso: Date): Promise<(EventoConferme & { userId: string | null })[]> {
+    if (userIds.length === 0) return []
+    const { start } = dayBoundsRome(adesso)
+    return db.select({
+        userId: leadEvents.userId,
+        eventType: leadEvents.eventType,
+        outcome: ESITO_EVENTO,
+        discardReason: leads.confirmationsDiscardReason,
+        createdAt: leadEvents.timestamp,
+    }).from(leadEvents)
+        .innerJoin(leads, eq(leads.id, leadEvents.leadId))
+        .where(and(
+            gte(leadEvents.timestamp, start),
+            inArray(leadEvents.userId, userIds),
+            inArray(leadEvents.eventType, [...EVENTI_CONFERME]),
+        ))
+}
+
 async function leggiLogsDiOggi(userIds: string[], adesso: Date) {
     if (userIds.length === 0) return []
     const { start } = dayBoundsRome(adesso)
@@ -146,7 +206,7 @@ async function leggiLogsDiOggi(userIds: string[], adesso: Date) {
 
 const vuoto = (adesso: Date, errore: string): EsitoSimGdo => ({
     ok: false, errore, adesso: adesso.toISOString(), media: { chiamate: 0, risposte: 0 },
-    mediaTasso: null, soglia: null, colonnaTasso: null, righe: [], cambiati: [], celleConValore: 0, celleSvuotate: 0,
+    mediaTasso: null, soglia: null, mediaConferme: { chiamate: 0, risposte: 0 }, mediaTassoConferme: null, sogliaConferme: null, colonnaTasso: null, righe: [], cambiati: [], celleConValore: 0, celleSvuotate: 0,
 })
 
 /**
@@ -165,9 +225,11 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
     const lettura = leggiFoglio(foglio.valori)
     if (!lettura.ok) return vuoto(adesso, lettura.errore)
 
-    const [utenti, media, statoPrima, agganci] = await Promise.all([
+    const [utenti, conferme, media, mediaConferme, statoPrima, agganci] = await Promise.all([
         leggiGdoAttivi(),
+        leggiConfermeAttive(),
         leggiMedia(),
+        leggiMediaConferme(),
         leggiSetting(STATO_SIM_KEY).then(leggiStatoSim),
         leggiSetting(AGGANCI_KEY).then(leggiAgganci),
     ])
@@ -177,10 +239,13 @@ export async function calcolaSimGdo(opts: { scrivi: boolean; adesso?: Date }): P
     const soglia = mediaTasso === null ? null : sogliaRossa(mediaTasso)
     // Le chiamate di oggi di tutti i GDO attivi: pochi e poche righe, e così l'aggancio resta tutto in giro.ts.
     const logs = await leggiLogsDiOggi(utenti.map(u => u.id), adesso)
-    const righe = calcolaRighe({ righe: lettura.righe, statoSim: stato, utenti, logs, soglia, adesso, agganci })
+    const mediaTassoConferme = tasso(mediaConferme)
+    const sogliaConferme = mediaTassoConferme === null ? null : sogliaRossa(mediaTassoConferme)
+    const eventiConferme = await leggiEventiConfermeDiOggi(conferme.map(u => u.id), adesso)
+    const righe = calcolaRighe({ righe: lettura.righe, statoSim: stato, utenti, logs, soglia, adesso, agganci, conferme, eventiConferme, sogliaConferme })
 
     const esito: EsitoSimGdo = {
-        ok: true, adesso: adesso.toISOString(), media, mediaTasso, soglia,
+        ok: true, adesso: adesso.toISOString(), media, mediaTasso, soglia, mediaConferme, mediaTassoConferme, sogliaConferme,
         colonnaTasso: lettereColonna(lettura.colonne.tasso), righe, cambiati, celleConValore: 0, celleSvuotate: 0,
     }
     if (!opts.scrivi) return esito

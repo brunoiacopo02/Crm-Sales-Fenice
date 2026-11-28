@@ -54,7 +54,7 @@ const pc = (v: number | null) => (v === null ? "—" : `${numeroItFino(v * 100, 
 const NOME_COLORE: Record<Colore, string> = { grigio: "grigia", rosso: "rossa", verde: "verde" }
 
 function persona(u: UtenteGdo): string {
-    const codice = u.gdoCode ? `GDO ${u.gdoCode}` : "GDO"
+    const codice = u.ruolo === "CONFERME" ? "Conferme" : u.gdoCode ? `GDO ${u.gdoCode}` : "GDO"
     return u.firstName ? `${u.firstName} (${codice})` : codice
 }
 
@@ -131,10 +131,10 @@ function UltimoGiroUi({ g }: { g: UltimoGiro | null }) {
 // ── Pagina ───────────────────────────────────────────────────────────────
 
 const MOTIVO: Record<Exclude<RigaCalcolata["esito"], "agganciato">, string> = {
-    nessuno: "Nessun GDO attivo del CRM ha un nome che corrisponde a quello del foglio. La cella resta vuota.",
-    ambiguo: "Più GDO attivi del CRM corrispondono a questo nome: non so a chi agganciare la riga. La cella resta vuota.",
+    nessuno: "Nessun GDO attivo né persona delle Conferme ha un nome che corrisponde a quello del foglio. La cella resta vuota.",
+    ambiguo: "Più utenti attivi del CRM corrispondono a questo nome: non so a chi agganciare la riga. La cella resta vuota.",
     interno_ripetuto: "Lo stesso interno compare in più righe: vale solo la prima.",
-    aggancio_non_valido: "Il nome è tra gli agganci fissi (sim_gdo_agganci) ma il codice GDO indicato non è di un GDO attivo: non si ricade sul nome. La cella resta vuota.",
+    aggancio_non_valido: "Il nome è tra gli agganci fissi (sim_gdo_agganci) ma il codice GDO (o la persona delle Conferme) indicato non è di un utente attivo: non si ricade sul nome. La cella resta vuota.",
     gdo_ripetuto: "Lo stesso GDO risulta su più righe del foglio: tiene la riga col nome uguale, se è una sola; altrimenti restano vuote tutte.",
 }
 
@@ -143,10 +143,11 @@ function Contenuto({ e }: { e: EsitoSimGdo }) {
     const fuori = e.righe.filter(r => r.esito !== "agganciato")
     return (
         <>
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Numero forte valore={pc(e.mediaTasso)} etichetta={<>media di squadra dal 1 giugno 2026 a oggi ({n(e.media.risposte)} risposte su {n(e.media.chiamate)} chiamate)</>} />
                 <Numero valore={pc(e.soglia)} etichetta={<>soglia rossa: sotto questo tasso, con almeno {MIN_CHIAMATE} chiamate, la cella è rossa ({numeroItFino(FATTORE_ROSSO * 100, 0)}% della media)</>} />
-                <Numero valore={`${n(agganciate.length)} su ${n(e.righe.length)}`} etichetta={<>righe del foglio collegate per nome a un GDO attivo; colonna del tasso: {e.colonnaTasso}</>} />
+                <Numero valore={pc(e.mediaTassoConferme)} etichetta={<>media delle Conferme dal 1 giugno 2026 ({n(e.mediaConferme.risposte)} risposte su {n(e.mediaConferme.chiamate)} chiamate), soglia rossa {pc(e.sogliaConferme)}</>} />
+                <Numero valore={`${n(agganciate.length)} su ${n(e.righe.length)}`} etichetta={<>righe del foglio collegate per nome a un GDO o a una persona delle Conferme; colonna del tasso: {e.colonnaTasso}</>} />
             </div>
 
             <Sezione titolo={`Oggi, alle ${oraDi(e.adesso)}`} className="mt-4">
@@ -205,6 +206,7 @@ function ComeSiConta() {
                 <div>La riga del foglio si collega al GDO attivo il cui nome corrisponde al NOME del foglio: uguale, o con almeno {PREFISSO_MINIMO} lettere iniziali in comune senza accenti e senza «h» (RICCARDINO è Riccardo). Nessuno o più di uno: la riga resta vuota. L&apos;interno (colonna GDO) serve solo a riconoscere la riga.</div>
                 <div>Quando nella colonna DATA ULTIMO CAMBIO compare un valore nuovo (qualunque cosa ci sia scritto), il conteggio di quella riga riparte dal giro che lo vede: per il resto della giornata contano solo le chiamate fatte da lì. Se la cella viene svuotata non riparte niente. Cambiare solo il numero non fa ripartire il conteggio. Il CRM non scrive mai in quella colonna.</div>
                 <div>Cella grigia: meno di {MIN_CHIAMATE} chiamate oggi, il numero è scritto ma è presto per giudicare. Rossa: sotto il {numeroItFino(FATTORE_ROSSO * 100, 0)}% della media di squadra. Verde chiaro: tutto il resto. Vuota: riga non collegata o nessuna chiamata.</div>
+                <div>Le persone delle Conferme (Noemi, Alberto, Andrea) non usano il registro chiamate dei GDO: il loro conto viene dagli esiti che mettono sul loro account oggi. Chiamata senza risposta = NR (meno gli NR annullati) e scarto «non risponde»; chiamata con risposta = lead confermato, lead scartato (non «numero inesistente», che resta fuori) e richiamo fissato. Un nome del foglio uguale a quello di una persona delle Conferme la sceglie anche se esiste un vecchio account GDO con lo stesso nome (Noemi, GDO 107). Per i colori hanno una media tutta loro, calcolata allo stesso modo dal 1 giugno 2026 su tutte le persone delle Conferme.</div>
                 <div>La media di squadra è lo stesso conto su tutti i GDO dal 1 giugno 2026 a oggi (risposte totali ÷ chiamate totali), senza il bot, gli account di prova e il GDO 108.</div>
             </div>
         </Sezione>

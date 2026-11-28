@@ -16,12 +16,13 @@ async function main() {
         process.exit(1)
     }
     console.log(`Media di squadra dal 1/6: ${pc(e.mediaTasso)} (${e.media.risposte}/${e.media.chiamate}), soglia rossa ${pc(e.soglia)}, colonna ${e.colonnaTasso}`)
+    console.log(`Media Conferme dal 1/6: ${pc(e.mediaTassoConferme)} (${e.mediaConferme.risposte}/${e.mediaConferme.chiamate}), soglia rossa ${pc(e.sogliaConferme)}`)
     console.table(e.righe.map(r => ({
         riga: r.riga,
         interno: r.interno,
         foglio: r.nome,
         crm: r.utente
-            ? `${r.utente.firstName ?? ''} (${r.utente.gdoCode ?? '?'})`
+            ? `${r.utente.firstName ?? ''} (${r.utente.ruolo === 'CONFERME' ? 'Conferme' : r.utente.gdoCode ?? '?'})`
             : r.candidati.map(c => `${c.firstName} (${c.gdoCode})`).join(' / '),
         numero: r.numero,
         dataCambio: r.dataCambio,

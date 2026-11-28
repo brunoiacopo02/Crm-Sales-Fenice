@@ -95,3 +95,21 @@ test('foglio: senza la colonna DATA ULTIMO CAMBIO (fa ripartire il conteggio) il
     assert.equal(r.ok, false)
     if (!r.ok) assert.match(r.errore, /"DATA ULTIMO CAMBIO"/)
 })
+test('foglio: la colonna A può chiamarsi UTENTI (dal 28/11/2026) o GDO, uguale', () => {
+    const resto = ['NOME', 'NUMERO', 'STATO', 'DATA ULTIMO CAMBIO', 'TASSO DI RSP']
+    const r = leggiFoglio([['UTENTI', ...resto], ['1007', 'NOEMI', '3522595107']])
+    assert.ok(r.ok)
+    assert.equal(r.colonne.gdo, 0)
+    assert.deepEqual(r.righe.map(x => [x.riga, x.interno, x.nome]), [[2, '1007', 'NOEMI']])
+    assert.ok(leggiFoglio([[' Utenti ', ...resto], ['1007', 'NOEMI']]).ok)
+    assert.ok(leggiFoglio([['GDO', ...resto], ['1007', 'NOEMI']]).ok)
+})
+
+test('foglio: UTENTI e GDO insieme = ambiguo; nessuna delle due = manca', () => {
+    const doppia = leggiFoglio([['UTENTI', 'GDO', 'NOME', 'NUMERO', 'DATA ULTIMO CAMBIO', 'TASSO DI RSP']])
+    assert.equal(doppia.ok, false)
+    if (!doppia.ok) assert.match(doppia.errore, /due volte/)
+    const senza = leggiFoglio([['NOME', 'NUMERO', 'DATA ULTIMO CAMBIO', 'TASSO DI RSP']])
+    assert.equal(senza.ok, false)
+    if (!senza.ok) assert.match(senza.errore, /"UTENTI" \(o "GDO"\)/)
+})
